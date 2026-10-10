@@ -1,8 +1,12 @@
 import { test, expect } from '@playwright/test'
 
-// See here how to get started:
-// https://playwright.dev/docs/intro
-test('visits the app root url', async ({ page }) => {
+test('landing page loads', async ({ page }) => {
   await page.goto('/')
-  await expect(page.locator('h1')).toHaveText('You did it!')
+  await expect(page.getByTestId('landing-page')).toBeVisible()
+})
+
+test('navbar goes to the Activities page', async ({ page }) => {
+  await page.goto('/')
+  await page.getByTestId('nav-activities').click()
+  await expect(page.getByTestId('activities-page')).toBeVisible()
 })
