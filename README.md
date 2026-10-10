@@ -1,63 +1,87 @@
-# wad2do
+# WAD2Do
 
-This template should help get you started developing with Vue 3 in Vite.
+A web app for planning weekend outings in Singapore with friends. Users browse activities ranked for them, share them to a group, vote, mark when they're free, and get an itinerary built from the group's votes and availability.
 
-## Recommended IDE Setup
+IS216 Web Application Development II, group G7.
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+Built with Vue 3 (Vite, Vue Router), Bootstrap 5, Supabase (database, login and Realtime) and Playwright for end-to-end tests.
 
-## Recommended Browser Setup
+The full project specification, page owners and team guides are in the group's Google Doc, the **WAD2Do Handbook**.
 
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
+## Run it locally
 
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
+You need Node.js 24.15 or newer and pnpm. This project uses **pnpm only**. Never run `npm install`, because it creates a second lockfile.
 
 ```sh
-npm install
+npm install -g pnpm     # once per laptop, if you don't have pnpm yet
+pnpm install            # once, and again whenever someone adds a package
 ```
 
-### Compile and Hot-Reload for Development
+Create a file called `.env.local` in the project's top folder with the two Supabase values (ask kinyu for them; never commit this file):
+
+```
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+```
+
+Start the app:
 
 ```sh
-npm run dev
+pnpm run dev
 ```
 
-### Compile and Minify for Production
+Then open http://localhost:5173. The page reloads by itself when you save a file.
+
+## Run the tests
+
+The end-to-end tests are in the `e2e/` folder.
 
 ```sh
-npm run build
+pnpm exec playwright install   # once, downloads the test browsers
+pnpm run test:e2e              # starts the app and runs every test
 ```
 
-### Run End-to-End Tests with [Playwright](https://playwright.dev)
+Useful variations:
 
 ```sh
-# Install browsers for the first run
-npx playwright install
-
-# When testing on CI, must build the project first
-npm run build
-
-# Runs the end-to-end tests
-npm run test:e2e
-# Runs the tests only on Chromium
-npm run test:e2e -- --project=chromium
-# Runs the tests of a specific file
-npm run test:e2e -- tests/example.spec.ts
-# Runs the tests in debug mode
-npm run test:e2e -- --debug
+pnpm run test:e2e --project=chromium   # Chromium only (faster)
+pnpm run test:e2e e2e/vue.spec.js      # one test file
+pnpm run test:e2e --debug              # step through a test
 ```
 
-### Lint with [ESLint](https://eslint.org/)
+Tests find elements by their `data-testid` attribute, so add one to anything a test clicks or checks.
 
-```sh
-npm run lint
+## Other commands
+
+| Command | What it does |
+| --- | --- |
+| `pnpm run build` | Builds the production version into `dist/` |
+| `pnpm run preview` | Serves the built version at http://localhost:4173 |
+| `pnpm run lint` | Checks the code for mistakes (oxlint and ESLint) and fixes what it can |
+| `pnpm run format` | Formats everything in `src/` with Prettier |
+
+## Project structure
+
 ```
+src/
+  main.js              starts the app, loads Bootstrap and the router
+  App.vue              navbar + the current page
+  router/index.js      every page's URL
+  lib/supabase.js      the Supabase connection; import it with `import { supabase } from '@/lib/supabase'`
+  views/               one file per page (e.g. ActivitiesView.vue)
+  components/          reusable pieces (NavBar, ActivityCard)
+    group/             the three tabs inside a group page
+  assets/styles.css    shared styles
+e2e/                   Playwright tests
+vercel.json            makes page refreshes work after deploying to Vercel
+```
+
+## How we work
+
+- `main` is protected. Every change goes through a pull request approved by one teammate.
+- One branch per task, named after it (e.g. `activities-filters`).
+- Stick to your own files. Changes to shared files (`router/index.js`, `main.js`, `App.vue`, `lib/supabase.js`) go in small, separate pull requests; mention them in the group chat first.
+
+## Submission
+
+The briefing asks for a `README.txt` in the submitted zip. Before submitting, copy this file to `README.txt` and add the deployed URL and any test accounts.
