@@ -1,4 +1,47 @@
-﻿<template>
+﻿<script setup>
+import { ref, onMounted, onUnmounted } from 'vue'
+
+const picture = (id) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=850&q=85`
+
+// arrow function that creates the picture's src 
+
+const slides = [
+  { phrase: 'great plans', photos: [
+    { label: 'Marina Bay', alt: 'Singapore skyline and Marina Bay Sands at sunset', src: picture('photo-1525625293386-3f8f99389edd') },
+    { label: 'Coffee dates', alt: 'Coffee served in a cosy cafe', src: picture('photo-1501339847302-ac426a4a7cbb') },
+    { label: 'City evenings', alt: 'Singapore streets lit up after dark', src: picture('photo-1496939376851-89342e90adcd') },
+  ] },
+  { phrase: 'date ideas', photos: [
+    { label: 'Gardens by the Bay', alt: 'Supertrees at Gardens by the Bay in Singapore', src: picture('photo-1508964942454-1a56651d54ac') },
+    { label: 'Cafe catch-ups', alt: 'Fresh coffee for a relaxed cafe date', src: picture('photo-1442512595331-e89e73853f31') },
+    { label: 'Dinner together', alt: 'A warmly lit restaurant ready for dinner', src: picture('photo-1517248135467-4c7edcad34c4') },
+  ] },
+  { phrase: 'new experiences', photos: [
+    { label: 'Explore Singapore', alt: 'Singapore architecture and city views', src: picture('photo-1565967511849-76a60a516170') },
+    { label: 'Creative afternoons', alt: 'Hands shaping clay on a pottery wheel', src: picture('photo-1607556671927-78a6605e290b') },
+    { label: 'Try something new', alt: 'A spread of food to share with friends', src: picture('photo-1414235077428-338989a2e8c0') },
+  ] },
+]
+const features = [
+  { icon: 'search', title: 'Discover Activities', description: 'Find curated activities in Singapore based on your interests, budget, location and more.' },
+  { icon: 'friends', title: 'Plan With Friends', description: 'Create a group, suggest activities, vote, find a common time and build your itinerary.' },
+  { icon: 'calendar', title: 'Make It Happen', description: 'Turn ideas into a plan with times, locations, estimated costs and even weather alternatives.' },
+]
+const activeSlide = ref(0)
+let timer
+const reducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+function pause() { clearInterval(timer); timer = undefined }
+function resume() { pause(); if (!reducedMotion) timer = setInterval(() => { activeSlide.value = (activeSlide.value + 1) % slides.length }, 5000) }
+function selectSlide(index) { activeSlide.value = index }
+function onFocusOut(event) { if (!event.currentTarget.contains(event.relatedTarget)) resume() }
+onMounted(resume)
+onUnmounted(pause)
+</script>
+
+
+
+
+<template>
   <div class="landing" data-testid="landing-page">
     <div class="landing-frame">
       <header class="landing-nav">
@@ -6,6 +49,7 @@
         <nav aria-label="Account navigation">
           <RouterLink to="/login" class="pill small">Log in</RouterLink>
           <RouterLink to="/signup" class="pill small primary">Sign up <span aria-hidden="true">→</span></RouterLink>
+          <!-- aria-hidden is to add decorative element, screen readers wont read it aloud -->
         </nav>
       </header>
 
@@ -16,6 +60,7 @@
           <p class="intro">Discover things to do in Singapore, plan with friends,<br class="desktop-break" /> and make the most of your weekends (and weekdays).</p>
           <div class="hero-actions">
             <span class="action-spark" aria-hidden="true"><i></i><i></i><i></i></span>
+            <!-- creates the 3 lines on top left of sign up button -->
             <RouterLink to="/signup" class="pill primary">Sign up <span aria-hidden="true">→</span></RouterLink>
             <RouterLink to="/login" class="pill">Log in <span aria-hidden="true">→</span></RouterLink>
           </div>
@@ -50,47 +95,12 @@
           <path d="M0 65C65 110 125 20 205 55S310 95 370 74s82-10 128 5 84 25 113-4 82-7 124 7 75 7 113-15 102-31 152-14"/>
           <g transform="translate(640 0)"><path d="M0 93h292M16 91l6-45h10l-3 45m14 0 2-48h11l4 48m11 0-3-48h10l10 48M12 43l70-9 10 5-71 10Z M24 48l-5 42m30-44 1 45m23-46 9 46"/><path d="M94 91V72h8v19m5 0V61h8v30m5 0V68h9v23m5 0V55h9v36m5 0V66h9v25m-21-36v-7m-3 17h3m-26 9h3m18 4h3"/><circle cx="189" cy="65" r="27"/><path d="m189 65-8 27m8-27 8 27m-37-1h59m-30-53v-3m0 60v-3m-29-27h-3m64 0h-3m-49-20-2-2m43 44-2-2m-39 0-2 2m43-44-2 2M234 91l8-24-15-10h35l-15 10 8 24m-13-24h5m-20-10c10 9 25 9 35 0M266 91l6-18-10-7h25l-11 7 6 18m-10-18h4"/></g>
         </svg>
+        <!-- this draws out singapore skyline using cooordinates and shapes  -->
       </footer>
     </div>
   </div>
 </template>
 
-<script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-
-const picture = (id) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=850&q=85`
-const slides = [
-  { phrase: 'great plans', photos: [
-    { label: 'Marina Bay', alt: 'Singapore skyline and Marina Bay Sands at sunset', src: picture('photo-1525625293386-3f8f99389edd') },
-    { label: 'Coffee dates', alt: 'Coffee served in a cosy cafe', src: picture('photo-1501339847302-ac426a4a7cbb') },
-    { label: 'City evenings', alt: 'Singapore streets lit up after dark', src: picture('photo-1496939376851-89342e90adcd') },
-  ] },
-  { phrase: 'date ideas', photos: [
-    { label: 'Gardens by the Bay', alt: 'Supertrees at Gardens by the Bay in Singapore', src: picture('photo-1508964942454-1a56651d54ac') },
-    { label: 'Cafe catch-ups', alt: 'Fresh coffee for a relaxed cafe date', src: picture('photo-1442512595331-e89e73853f31') },
-    { label: 'Dinner together', alt: 'A warmly lit restaurant ready for dinner', src: picture('photo-1517248135467-4c7edcad34c4') },
-  ] },
-  { phrase: 'new experiences', photos: [
-    { label: 'Explore Singapore', alt: 'Singapore architecture and city views', src: picture('photo-1565967511849-76a60a516170') },
-    { label: 'Creative afternoons', alt: 'Hands shaping clay on a pottery wheel', src: picture('photo-1607556671927-78a6605e290b') },
-    { label: 'Try something new', alt: 'A spread of food to share with friends', src: picture('photo-1414235077428-338989a2e8c0') },
-  ] },
-]
-const features = [
-  { icon: 'search', title: 'Discover Activities', description: 'Find curated activities in Singapore based on your interests, budget, location and more.' },
-  { icon: 'friends', title: 'Plan With Friends', description: 'Create a group, suggest activities, vote, find a common time and build your itinerary.' },
-  { icon: 'calendar', title: 'Make It Happen', description: 'Turn ideas into a plan with times, locations, estimated costs and even weather alternatives.' },
-]
-const activeSlide = ref(0)
-let timer
-const reducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-function pause() { clearInterval(timer); timer = undefined }
-function resume() { pause(); if (!reducedMotion) timer = setInterval(() => { activeSlide.value = (activeSlide.value + 1) % slides.length }, 5000) }
-function selectSlide(index) { activeSlide.value = index }
-function onFocusOut(event) { if (!event.currentTarget.contains(event.relatedTarget)) resume() }
-onMounted(resume)
-onUnmounted(pause)
-</script>
 
 <style scoped>
 .landing { min-height: 100vh; padding: clamp(16px, 3vh, 32px) 28px; display: flex; align-items: center; background: #fafaf9; color: #111; font-family: Arial, Helvetica, sans-serif; }
