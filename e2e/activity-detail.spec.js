@@ -78,7 +78,20 @@ async function signInMockUser(page) {
 
 async function mockBackend(page, options = {}) {
   const records = options.records ?? [pottery, picnic]
-  const state = { saved: false, shares: [], failures: options.failures ?? 0, favouriteReads: 0 }
+  const state = {
+    saved: false,
+    shares: [],
+    failures: options.failures ?? 0,
+    favouriteReads: 0,
+    saveFailures: options.saveFailures ?? 0,
+    groupFailures: options.groupFailures ?? 0,
+    shareFailures: options.shareFailures ?? 0,
+  }
+  const failRequest = (route) =>
+    route.fulfill({
+      status: 500,
+      json: { message: 'Demo request failed', code: 'DEMO_FAILURE' },
+    })
 
   await page.route('**/images/detail-test.svg', (route) =>
     route.fulfill({
@@ -113,6 +126,10 @@ async function mockBackend(page, options = {}) {
     if (table === 'favourites') {
       if (method === 'POST') {
         expect(request.postDataJSON()).toEqual({ user_id: userId, activity_id: potteryId })
+        if (state.saveFailures > 0) {
+          state.saveFailures -= 1
+          return failRequest(route)
+        }
         state.saved = true
         return route.fulfill({ status: 201, headers, json: {} })
       }
@@ -133,13 +150,21 @@ async function mockBackend(page, options = {}) {
 
     if (table === 'group_members') {
       expect(url.searchParams.get('user_id')).toBe('eq.' + userId)
-      return route.fulfill({ headers, json: [{ group_id: groupId }] })
+      if (state.groupFailures > 0) {
+        state.groupFailures -= 1
+        return failRequest(route)
+      }
+      return route.fulfill({ headers, json: options.noGroups ? [] : [{ group_id: groupId }] })
     }
     if (table === 'groups') {
       expect(url.searchParams.get('id')).toContain(groupId)
       return route.fulfill({ headers, json: [{ id: groupId, name: 'Saturday Squad' }] })
     }
     if (table === 'group_activities') {
+      if (state.shareFailures > 0) {
+        state.shareFailures -= 1
+        return failRequest(route)
+      }
       state.shares.push(request.postDataJSON())
       return route.fulfill({ status: 201, headers, json: {} })
     }
@@ -156,6 +181,9 @@ test('card opens its details and Back restores the current search', async ({ pag
 
   await page.getByTestId('activity-search').fill('Pottery')
   await expect(page.getByTestId('activity-card')).toHaveCount(1)
+  await expect(page.getByTestId('activity-card')).toContainText('S$35.00 / person')
+  await expect(page.getByTestId('activity-card')).toContainText('2 h')
+  await expect(page.getByTestId('activity-card')).toContainText('Today: 10:00–18:00')
   await page.getByRole('link', { name: 'Pottery Workshop', exact: true }).click()
 
   await expect(page.getByTestId('activity-detail-name')).toHaveText('Pottery Workshop')
@@ -170,6 +198,9 @@ test('card opens its details and Back restores the current search', async ({ pag
   )
   await expect(page.getByTestId('detail-map')).toHaveAttribute('href', /query=Tiong%20Bahru/)
   await expect(page.getByTestId('detail-hours-row')).toHaveCount(7)
+  await expect(
+    page.getByTestId('detail-location').getByText('Tiong Bahru', { exact: true }),
+  ).toHaveCount(1)
 
   const today = page.getByTestId('detail-hours-row').filter({ hasText: 'Tuesday' })
   await expect(today).toHaveAttribute('aria-current', 'date')
@@ -194,6 +225,9 @@ test('direct visit handles missing metadata and has a safe Back destination', as
   await expect(page.getByTestId('detail-hours-unavailable')).toBeVisible()
   await expect(page.getByTestId('detail-rating')).toHaveCount(0)
   await expect(page.getByTestId('detail-website')).toHaveCount(0)
+  await expect(page.getByTestId('detail-tags').getByText('Outdoor', { exact: true })).toHaveCount(1)
+  await expect(page.getByTestId('detail-location')).toContainText('8 Marina Gardens Dr')
+  await expect(page.getByTestId('detail-location')).toContainText('Marina Bay')
 
   await page.getByTestId('activity-back').click()
   await expect(page.getByTestId('activities-page')).toBeVisible()
@@ -275,6 +309,52 @@ test('a delayed initial favourite read cannot undo a successful Save click', asy
   await oldResponse
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
   await expect(page.getByTestId('detail-save')).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('failed Save, group loading and Share can be retried without a false success', async ({
+  page,
+}) => {
+  await signInMockUser(page)
+  const state = await mockBackend(page, { saveFailures: 1, groupFailures: 1, shareFailures: 1 })
+  await page.goto('/activities/' + potteryId)
+
+  await page.getByTestId('detail-save').click()
+  await expect(page.getByTestId('detail-action-error')).toContainText("Couldn't update")
+  await expect(page.getByTestId('detail-save')).toHaveAttribute('aria-pressed', 'false')
+  expect(state.saved).toBe(false)
+  await page.getByTestId('detail-save').click()
+  await expect(page.getByTestId('detail-save')).toHaveAttribute('aria-pressed', 'true')
+
+  await page.getByTestId('detail-share').click()
+  const dialog = page.getByTestId('detail-share-dialog')
+  await expect(dialog).toContainText("Couldn't load your groups")
+  await dialog.getByRole('button', { name: 'Try again', exact: true }).click()
+  await page.getByTestId('detail-share-group').selectOption(groupId)
+  await page.getByTestId('detail-confirm-share').click()
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText("Couldn't share this activity")
+  expect(state.shares).toHaveLength(0)
+
+  await page.getByTestId('detail-confirm-share').click()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByTestId('detail-toast')).toContainText('Shared to Saturday Squad')
+  expect(state.shares).toHaveLength(1)
+})
+
+test('a user without groups can close the share menu and reach Create group', async ({ page }) => {
+  await signInMockUser(page)
+  await mockBackend(page, { noGroups: true })
+  await page.goto('/activities/' + potteryId)
+  await page.getByTestId('detail-share').click()
+  await expect(page.getByTestId('detail-no-groups')).toBeVisible()
+  await expect(page.getByTestId('detail-confirm-share')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('detail-share-dialog')).toBeHidden()
+
+  await page.getByTestId('detail-share').click()
+  await expect(page.getByTestId('detail-no-groups')).toBeVisible()
+  await page.getByRole('link', { name: 'Create a new group', exact: true }).click()
+  await expect(page).toHaveURL(/\/groups$/)
 })
 
 test('phone detail page fits the viewport and falls back from a broken photo', async ({ page }) => {

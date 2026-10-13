@@ -1,6 +1,13 @@
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { RouterLink } from 'vue-router'
+import {
+  formatPrice,
+  formatDuration,
+  getSetting,
+  getRating,
+  getWeeklyHours,
+} from '@/lib/activityDisplay'
 
 // Information supplied by ActivitiesView.
 const props = defineProps({
@@ -18,13 +25,9 @@ const props = defineProps({
   },
   hoursToday: {
     type: String,
-    default: 'Hours unavailable',
+    default: null,
   },
   showActions: {
-    type: Boolean,
-    default: true,
-  },
-  linkToDetails: {
     type: Boolean,
     default: true,
   },
@@ -33,42 +36,53 @@ const props = defineProps({
 // Events that ActivitiesView can listen for.
 const emit = defineEmits(['save', 'share'])
 
-// Convert the price into readable text.
-const priceLabel = computed(() => {
-  const price = props.activity.price_per_person
-
-  if (price == null) return 'Price unavailable'
-  if (Number(price) === 0) return 'Free'
-
-  return `S$${Number(price).toFixed(2)} / person`
-})
+// The card and detail page use the same display rules.
+const priceLabel = computed(() => formatPrice(props.activity.price_per_person))
+const duration = computed(() => formatDuration(props.activity.duration_min))
+const setting = computed(() => getSetting(props.activity.indoor))
+const ratingLabel = computed(() => getRating({ rating: props.rating ?? props.activity.rating }))
+const todayHours = computed(
+  () =>
+    props.hoursToday ??
+    getWeeklyHours(props.activity.opening_hours).rows.find((row) => row.isToday).hours,
+)
+const showSetting = computed(
+  () => props.activity.category?.trim().toLowerCase() !== setting.value.toLowerCase(),
+)
+const imageFailed = ref(false)
+watch(
+  () => props.activity.image_url,
+  () => {
+    imageFailed.value = false
+  },
+)
 </script>
 
 <template>
   <article class="activity-card card h-100" data-testid="activity-card">
     <div class="photo-container">
-      <component
-        :is="linkToDetails ? RouterLink : 'div'"
-        :to="linkToDetails ? `/activities/${activity.id}` : undefined"
-        :aria-label="linkToDetails ? `View ${activity.name}` : undefined"
+      <RouterLink
+        :to="`/activities/${activity.id}`"
+        :aria-label="`View ${activity.name}`"
         data-testid="activity-photo-link"
       >
         <img
-          v-if="activity.image_url"
+          v-if="activity.image_url && !imageFailed"
           :src="activity.image_url"
           :alt="activity.name"
           class="activity-photo"
           loading="lazy"
+          @error="imageFailed = true"
         />
 
         <div v-else class="photo-placeholder">
-          {{ activity.category }}
+          {{ activity.category || 'Activity' }}
         </div>
-      </component>
+      </RouterLink>
 
       <div class="photo-badges">
         <span class="badge rounded-pill bg-white text-dark">
-          {{ activity.category }}
+          {{ activity.category || 'Activity' }}
         </span>
 
         <span v-if="activity.source === 'community'" class="badge rounded-pill text-bg-dark">
@@ -93,32 +107,36 @@ const priceLabel = computed(() => {
     <div class="card-body d-flex flex-column">
       <div class="d-flex align-items-start gap-2">
         <h2 class="activity-name">
-          <component
-            :is="linkToDetails ? RouterLink : 'span'"
-            :to="linkToDetails ? `/activities/${activity.id}` : undefined"
-            data-testid="activity-name-link"
-          >
+          <RouterLink :to="`/activities/${activity.id}`" data-testid="activity-name-link">
             {{ activity.name }}
-          </component>
+          </RouterLink>
         </h2>
 
-        <span v-if="rating !== null" class="activity-rating">
-          <span aria-hidden="true">★</span> {{ rating }}
+        <span v-if="ratingLabel" class="activity-rating">
+          <span aria-hidden="true">★</span> {{ ratingLabel }}
         </span>
       </div>
 
-      <p class="fw-semibold mb-2">{{ priceLabel }}</p>
-
-      <p class="text-secondary small mb-1">
-        {{ activity.area }}
+      <p class="fw-semibold mb-2">
+        {{ priceLabel }}<span v-if="priceLabel.startsWith('S$')"> / person</span>
       </p>
 
-      <p class="text-secondary small mb-1">Today: {{ hoursToday }}</p>
+      <p class="text-secondary small mb-1">
+        {{ activity.area || 'Area unavailable' }}
+      </p>
+
+      <p class="text-secondary small mb-1">Today: {{ todayHours }}</p>
 
       <p class="text-secondary small mb-3">
-        <span aria-hidden="true">{{ activity.indoor ? '⌂' : '☀' }}</span>
-        {{ activity.indoor ? 'Indoor' : 'Outdoor' }}
-        · {{ activity.duration_min }} min
+        <span v-if="showSetting">
+          <span
+            v-if="activity.indoor !== null && activity.indoor !== undefined"
+            aria-hidden="true"
+            >{{ activity.indoor ? '⌂' : '☀' }}</span
+          >
+          {{ setting }} ·
+        </span>
+        {{ duration }}
       </p>
 
       <button

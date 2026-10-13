@@ -9,6 +9,8 @@ import {
   getWebsiteUrl,
   getMapUrl,
   getRating,
+  getSetting,
+  getLocation,
 } from '@/lib/activityDisplay'
 import { useActivityActions } from '@/composables/useActivityActions'
 
@@ -27,11 +29,13 @@ const hours = computed(() => getWeeklyHours(activity.value?.opening_hours))
 const websiteUrl = computed(() => getWebsiteUrl(activity.value))
 const mapUrl = computed(() => getMapUrl(activity.value))
 const rating = computed(() => getRating(activity.value))
-const setting = computed(() => {
-  if (activity.value?.indoor === true) return 'Indoor'
-  if (activity.value?.indoor === false) return 'Outdoor'
-  return 'Setting unavailable'
-})
+const setting = computed(() => getSetting(activity.value?.indoor))
+const location = computed(() => getLocation(activity.value))
+
+// A category such as Outdoor already describes the setting, so show one tag.
+const showSettingTag = computed(
+  () => activity.value?.category?.trim().toLowerCase() !== setting.value.toLowerCase(),
+)
 
 const {
   saved,
@@ -156,9 +160,9 @@ onUnmounted(() => {
       </div>
 
       <header class="mb-4">
-        <div class="d-flex flex-wrap gap-2 mb-3">
+        <div class="d-flex flex-wrap gap-2 mb-3" data-testid="detail-tags">
           <span class="detail-badge">{{ activity.category || 'Activity' }}</span>
-          <span class="detail-badge">{{ setting }}</span>
+          <span v-if="showSettingTag" class="detail-badge">{{ setting }}</span>
           <span v-if="activity.source === 'community'" class="detail-badge community-badge"
             >Community</span
           >
@@ -276,12 +280,16 @@ onUnmounted(() => {
             </ul>
           </section>
 
-          <section class="detail-section" aria-labelledby="location-title">
+          <section
+            class="detail-section"
+            aria-labelledby="location-title"
+            data-testid="detail-location"
+          >
             <h2 id="location-title" class="h5 fw-bold mb-3">Location</h2>
             <p class="mb-1" data-testid="detail-address">
-              {{ activity.address || 'Address unavailable' }}
+              {{ location.address || 'Location unavailable' }}
             </p>
-            <p class="text-secondary">{{ activity.area || 'Area unavailable' }}</p>
+            <p v-if="location.area" class="text-secondary">{{ location.area }}</p>
             <a
               v-if="mapUrl"
               :href="mapUrl"

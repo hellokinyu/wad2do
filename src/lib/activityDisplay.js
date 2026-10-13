@@ -14,6 +14,20 @@ export function formatDuration(value) {
   return [hours ? hours + ' h' : '', remaining ? remaining + ' min' : ''].filter(Boolean).join(' ')
 }
 
+export function getSetting(indoor) {
+  if (indoor === true) return 'Indoor'
+  if (indoor === false) return 'Outdoor'
+  return 'Setting unavailable'
+}
+
+// Show the address and area separately only when they contain different text.
+export function getLocation(activity) {
+  const address = activity?.address?.trim() || ''
+  const area = activity?.area?.trim() || ''
+  const different = address && area && address.toLowerCase() !== area.toLowerCase()
+  return { address: address || area, area: different ? area : '' }
+}
+
 function formatDayHours(value) {
   if (typeof value === 'string' && value.trim()) return value.trim()
   if (!value || typeof value !== 'object') return 'Hours unavailable'
@@ -88,7 +102,8 @@ export function getMapUrl(activity) {
     Number.isFinite(lng) &&
     Math.abs(lng) <= 180
 
-  const address = [activity.address, activity.area].filter(Boolean).join(', ')
+  const location = getLocation(activity)
+  const address = [location.address, location.area].filter(Boolean).join(', ')
   if (!hasCoordinates && !address) return null
   const query = hasCoordinates ? lat + ',' + lng : address + ', Singapore'
   return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(query)

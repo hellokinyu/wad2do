@@ -146,7 +146,7 @@ test('failed database request can be retried', async ({ page }) => {
   })
 
   await page.goto('/activities')
-  await expect(page.getByTestId('activities-error')).toContainText('Could not load demo activities')
+  await expect(page.getByTestId('activities-error')).toContainText("Couldn't load activities")
   await page.getByTestId('activities-retry').click()
 
   await expect(page.getByTestId('activity-card')).toHaveCount(4)

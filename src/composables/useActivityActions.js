@@ -16,7 +16,8 @@ export function useActivityActions(activity) {
   const selectedGroupId = ref('')
 
   let messageTimer
-  let selectionVersion = 0
+  // Request numbers stop an older response from changing the current screen.
+  let savedRequest = 0
   let groupRequest = 0
   let disposed = false
 
@@ -64,7 +65,7 @@ export function useActivityActions(activity) {
   watch(
     () => activity.value?.id,
     async (id) => {
-      const version = ++selectionVersion
+      const request = ++savedRequest
       saved.value = false
       actionError.value = ''
       needsLogin.value = false
@@ -76,22 +77,23 @@ export function useActivityActions(activity) {
 
       try {
         const user = await getUser()
-        if (!user || version !== selectionVersion) return
+        if (!user || request !== savedRequest) return
         const isSaved = await readSavedStatus(user.id, id)
-        if (version === selectionVersion) saved.value = isSaved
+        if (request === savedRequest) saved.value = isSaved
       } catch {
-        if (version === selectionVersion) {
+        if (request === savedRequest) {
           actionError.value = "Couldn't load your saved status. Try Save again."
         }
       }
     },
+    { immediate: true },
   )
 
   async function toggleSaved() {
     if (!activity.value || saving.value) return
     const id = activity.value.id
     // A delayed initial read must not overwrite the result of this click.
-    selectionVersion += 1
+    savedRequest += 1
     saving.value = true
     actionError.value = ''
     needsLogin.value = false
@@ -136,48 +138,45 @@ export function useActivityActions(activity) {
   async function openShare() {
     if (!activity.value || sharing.value) return
     const id = activity.value.id
+    const request = ++groupRequest
     actionError.value = ''
     needsLogin.value = false
 
     try {
       const user = await getUser(true)
-      if (!user || disposed || activity.value?.id !== id) return
+      if (!user || disposed || activity.value?.id !== id || request !== groupRequest) return
 
-      const request = ++groupRequest
       showShareDialog.value = true
       groupsLoading.value = true
       groupsError.value = ''
       groups.value = []
       selectedGroupId.value = ''
 
-      try {
-        const { data: memberships, error: membershipError } = await supabase
-          .from('group_members')
-          .select('group_id')
-          .eq('user_id', user.id)
+      const { data: memberships, error: membershipError } = await supabase
+        .from('group_members')
+        .select('group_id')
+        .eq('user_id', user.id)
 
-        if (membershipError) throw membershipError
-        const ids = (memberships ?? []).map((row) => row.group_id)
+      if (membershipError) throw membershipError
+      const ids = (memberships ?? []).map((row) => row.group_id)
 
-        if (ids.length) {
-          const { data, error } = await supabase
-            .from('groups')
-            .select('id, name')
-            .in('id', ids)
-            .order('name')
+      if (ids.length) {
+        const { data, error } = await supabase
+          .from('groups')
+          .select('id, name')
+          .in('id', ids)
+          .order('name')
 
-          if (error) throw error
-          if (request === groupRequest) groups.value = data ?? []
-        }
-      } catch {
-        if (request === groupRequest) {
-          groupsError.value = "Couldn't load your groups. Try again."
-        }
-      } finally {
-        if (request === groupRequest) groupsLoading.value = false
+        if (error) throw error
+        if (request === groupRequest) groups.value = data ?? []
       }
     } catch {
-      actionError.value = "Couldn't check your account. Please try again."
+      if (!disposed && request === groupRequest && activity.value?.id === id) {
+        if (showShareDialog.value) groupsError.value = "Couldn't load your groups. Try again."
+        else actionError.value = "Couldn't check your account. Please try again."
+      }
+    } finally {
+      if (request === groupRequest) groupsLoading.value = false
     }
   }
 
@@ -217,7 +216,7 @@ export function useActivityActions(activity) {
 
   onUnmounted(() => {
     disposed = true
-    selectionVersion += 1
+    savedRequest += 1
     groupRequest += 1
     clearTimeout(messageTimer)
   })

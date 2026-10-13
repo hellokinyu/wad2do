@@ -107,8 +107,8 @@ async function loadActivities() {
     }
 
     activities.value = records
-  } catch (error) {
-    errorMessage.value = error.message
+  } catch {
+    errorMessage.value = "Couldn't load activities. Please try again."
   } finally {
     loading.value = false
   }
@@ -228,7 +228,12 @@ onMounted(loadActivities)
       Loading activities…
     </div>
 
-    <div v-else-if="errorMessage" class="alert alert-danger" data-testid="activities-error">
+    <div
+      v-else-if="errorMessage"
+      class="alert alert-danger"
+      role="alert"
+      data-testid="activities-error"
+    >
       <p>{{ errorMessage }}</p>
       <button
         type="button"
