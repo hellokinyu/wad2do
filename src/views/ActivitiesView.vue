@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import ActivityCard from '@/components/ActivityCard.vue'
 
@@ -7,10 +8,35 @@ import ActivityCard from '@/components/ActivityCard.vue'
 const activities = ref([])
 const loading = ref(true)
 const errorMessage = ref('')
-const keyword = ref('')
-const selectedCategory = ref('')
-const selectedSetting = ref('')
+// Remember the current filters when opening a detail page and coming back.
+function readFilters() {
+  try {
+    return JSON.parse(sessionStorage.getItem('wad2do.activityFilters') || '{}') || {}
+  } catch {
+    return {}
+  }
+}
+
+const previousFilters = readFilters()
+const keyword = ref(String(previousFilters.keyword ?? ''))
+const selectedCategory = ref(String(previousFilters.category ?? ''))
+const selectedSetting = ref(String(previousFilters.setting ?? ''))
 const filtersOpen = ref(false)
+
+onBeforeRouteLeave(() => {
+  try {
+    sessionStorage.setItem(
+      'wad2do.activityFilters',
+      JSON.stringify({
+        keyword: keyword.value,
+        category: selectedCategory.value,
+        setting: selectedSetting.value,
+      }),
+    )
+  } catch {
+    // Browsing still works when browser storage is unavailable.
+  }
+})
 
 const categories = computed(() => {
   const values = activities.value.map((activity) => activity.category).filter(Boolean)
@@ -246,7 +272,7 @@ onMounted(loadActivities)
           :key="activity.id"
           class="col-12 col-md-6 col-lg-4"
         >
-          <ActivityCard :activity="activity" :show-actions="false" :link-to-details="false" />
+          <ActivityCard :activity="activity" :show-actions="false" />
         </div>
       </div>
     </template>
