@@ -20,6 +20,14 @@ const props = defineProps({
     type: String,
     default: 'Hours unavailable',
   },
+  showActions: {
+    type: Boolean,
+    default: true,
+  },
+  linkToDetails: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 // Events that ActivitiesView can listen for.
@@ -30,7 +38,7 @@ const priceLabel = computed(() => {
   const price = props.activity.price_per_person
 
   if (price == null) return 'Price unavailable'
-  if (price === 0) return 'Free'
+  if (Number(price) === 0) return 'Free'
 
   return `S$${Number(price).toFixed(2)} / person`
 })
@@ -39,9 +47,10 @@ const priceLabel = computed(() => {
 <template>
   <article class="activity-card card h-100" data-testid="activity-card">
     <div class="photo-container">
-      <RouterLink
-        :to="`/activities/${activity.id}`"
-        :aria-label="`View ${activity.name}`"
+      <component
+        :is="linkToDetails ? RouterLink : 'div'"
+        :to="linkToDetails ? `/activities/${activity.id}` : undefined"
+        :aria-label="linkToDetails ? `View ${activity.name}` : undefined"
         data-testid="activity-photo-link"
       >
         <img
@@ -55,9 +64,10 @@ const priceLabel = computed(() => {
         <div v-else class="photo-placeholder">
           {{ activity.category }}
         </div>
-      </RouterLink>
+      </component>
 
       <button
+        v-if="showActions"
         type="button"
         class="save-button"
         :class="{ saved: saved }"
@@ -76,22 +86,20 @@ const priceLabel = computed(() => {
           {{ activity.category }}
         </span>
 
-        <span
-          v-if="activity.source === 'community'"
-          class="badge rounded-pill text-bg-dark"
-        >
+        <span v-if="activity.source === 'community'" class="badge rounded-pill text-bg-dark">
           Community
         </span>
       </div>
 
       <div class="d-flex align-items-start gap-2">
         <h2 class="activity-name">
-          <RouterLink
-            :to="`/activities/${activity.id}`"
+          <component
+            :is="linkToDetails ? RouterLink : 'span'"
+            :to="linkToDetails ? `/activities/${activity.id}` : undefined"
             data-testid="activity-name-link"
           >
             {{ activity.name }}
-          </RouterLink>
+          </component>
         </h2>
 
         <span v-if="rating !== null" class="activity-rating">
@@ -105,9 +113,7 @@ const priceLabel = computed(() => {
         {{ activity.area }}
       </p>
 
-      <p class="text-secondary small mb-1">
-        Today: {{ hoursToday }}
-      </p>
+      <p class="text-secondary small mb-1">Today: {{ hoursToday }}</p>
 
       <p class="text-secondary small mb-3">
         <span aria-hidden="true">{{ activity.indoor ? '⌂' : '☀' }}</span>
@@ -116,6 +122,7 @@ const priceLabel = computed(() => {
       </p>
 
       <button
+        v-if="showActions"
         type="button"
         class="btn btn-outline-dark rounded-pill mt-auto"
         data-testid="activity-share"
