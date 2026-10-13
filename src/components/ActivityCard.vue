@@ -66,6 +66,16 @@ const priceLabel = computed(() => {
         </div>
       </component>
 
+      <div class="photo-badges">
+        <span class="badge rounded-pill bg-white text-dark">
+          {{ activity.category }}
+        </span>
+
+        <span v-if="activity.source === 'community'" class="badge rounded-pill text-bg-dark">
+          Community
+        </span>
+      </div>
+
       <button
         v-if="showActions"
         type="button"
@@ -81,16 +91,6 @@ const priceLabel = computed(() => {
     </div>
 
     <div class="card-body d-flex flex-column">
-      <div class="d-flex flex-wrap gap-2 mb-2">
-        <span class="badge rounded-pill text-bg-light">
-          {{ activity.category }}
-        </span>
-
-        <span v-if="activity.source === 'community'" class="badge rounded-pill text-bg-dark">
-          Community
-        </span>
-      </div>
-
       <div class="d-flex align-items-start gap-2">
         <h2 class="activity-name">
           <component
@@ -137,13 +137,34 @@ const priceLabel = computed(() => {
 <style scoped>
 .activity-card {
   overflow: hidden;
-  border: 1px solid #e5e5e5;
+  border: 1px solid #eee;
   border-radius: 18px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
+}
+
+.card-body {
+  padding: 16px;
 }
 
 .photo-container {
   position: relative;
   overflow: hidden;
+}
+
+.photo-badges {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.photo-badges .badge {
+  padding: 6px 10px;
+  font-weight: 500;
 }
 
 .activity-photo,
@@ -175,6 +196,7 @@ const priceLabel = computed(() => {
   margin-bottom: 8px;
   font-size: 1.2rem;
   font-weight: 700;
+  line-height: 1.3;
 }
 
 .activity-name a {
@@ -189,6 +211,7 @@ const priceLabel = computed(() => {
 .activity-rating {
   white-space: nowrap;
   color: #946200;
+  font-size: 0.875rem;
 }
 
 .save-button {

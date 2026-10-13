@@ -74,6 +74,24 @@ test('demo searches, combines filters and clears them', async ({ page }) => {
   await expect(page.getByTestId('activity-share')).toHaveCount(0)
   await expect(cards.getByRole('link')).toHaveCount(0)
 
+  await page.getByRole('button', { name: 'Outdoor', exact: true }).click()
+  await expect(cards).toHaveCount(2)
+  await expect(page.getByTestId('category-filter')).toHaveValue('Outdoor')
+  await expect(page.getByRole('button', { name: 'Outdoor', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+
+  await page.getByTestId('category-filter').selectOption('Workshops')
+  await expect(cards).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Workshops', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await page.getByTestId('category-chip-all').click()
+  await expect(cards).toHaveCount(4)
+  await expect(page.getByTestId('category-filter')).toHaveValue('')
+
   await page.getByTestId('activity-search').fill('  POTTERY  ')
   await expect(cards).toHaveCount(1)
   await expect(cards).toContainText('Pottery Workshop')
@@ -151,6 +169,11 @@ test('phone layout has one card per row and an accessible filter panel', async (
   expect(second.x).toBe(first.x)
   expect(second.y).toBeGreaterThan(first.y)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375)
+
+  await page.getByRole('button', { name: 'Outdoor', exact: true }).click()
+  await expect(cards).toHaveCount(2)
+  await page.getByTestId('category-chip-all').click()
+  await expect(cards).toHaveCount(4)
 
   await page.getByTestId('filters-toggle').click()
   await expect(page.getByTestId('filters-toggle')).toHaveAttribute('aria-expanded', 'true')

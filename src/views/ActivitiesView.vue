@@ -17,7 +17,7 @@ const categories = computed(() => {
   return [...new Set(values)].sort()
 })
 
-// Search logic 
+// Search logic
 function searchText(value) {
   return String(value ?? '')
     .normalize('NFD')
@@ -120,6 +120,32 @@ onMounted(loadActivities)
         @click="filtersOpen = !filtersOpen"
       >
         Filters
+      </button>
+    </div>
+
+    <div class="category-chips mb-4" role="group" aria-label="Quick category filters">
+      <button
+        type="button"
+        class="category-chip"
+        :class="{ active: selectedCategory === '' }"
+        :aria-pressed="selectedCategory === ''"
+        data-testid="category-chip-all"
+        @click="selectedCategory = ''"
+      >
+        All activities
+      </button>
+
+      <button
+        v-for="category in categories"
+        :key="category"
+        type="button"
+        class="category-chip"
+        :class="{ active: selectedCategory === category }"
+        :aria-pressed="selectedCategory === category"
+        data-testid="category-chip"
+        @click="selectedCategory = category"
+      >
+        {{ category }}
       </button>
     </div>
 
@@ -233,6 +259,39 @@ onMounted(loadActivities)
   border-radius: 12px;
 }
 
+.category-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 2px;
+}
+
+.category-chip {
+  flex-shrink: 0;
+  padding: 7px 16px;
+  border: 1px solid #e5e5e5;
+  border-radius: 999px;
+  background: white;
+  color: #111;
+  font-size: 0.875rem;
+  transition: background-color 0.2s ease;
+}
+
+.category-chip:hover {
+  background: #f3f3f3;
+}
+
+.category-chip.active {
+  background: #111;
+  border-color: #111;
+  color: white;
+}
+
+.category-chip:focus-visible {
+  outline: 2px solid #111;
+  outline-offset: 2px;
+}
+
 .filters-panel,
 .empty-results {
   border: 1px solid #e5e5e5;
@@ -252,6 +311,12 @@ onMounted(loadActivities)
 @media (max-width: 767.98px) {
   .filters-panel:not(.is-open) {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .category-chip {
+    transition: none;
   }
 }
 </style>
