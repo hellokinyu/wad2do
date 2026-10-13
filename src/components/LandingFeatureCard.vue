@@ -40,8 +40,12 @@ defineProps({
 
 <style scoped>
 .feature {
-  gap: 20px;
-  padding: 0 22px;
+  min-width: 0;
+  gap: clamp(14px, 1.5vw, 24px);
+  padding: 0 clamp(16px, 2vw, 36px);
+}
+.feature > div:last-child {
+  min-width: 0;
 }
 .feature:first-child {
   padding-left: 0;
@@ -68,14 +72,14 @@ defineProps({
   height: 30px;
 }
 .feature h2 {
-  font-size: 15px;
+  font-size: clamp(16px, 1.1vw, 20px);
   font-weight: 700;
   margin: 9px 0 8px;
 }
 .feature p {
   color: #777;
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: clamp(14px, 0.9vw, 16px);
+  line-height: 1.5;
   margin: 0;
 }
 
@@ -91,7 +95,7 @@ defineProps({
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .feature,
   .feature:first-child {
     padding: 0;
@@ -106,7 +110,7 @@ defineProps({
     margin-top: 2px;
   }
   .feature p {
-    max-width: 300px;
+    max-width: 60ch;
   }
 }
 
