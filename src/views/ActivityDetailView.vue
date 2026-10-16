@@ -290,16 +290,17 @@ onUnmounted(() => {
               {{ location.address || 'Location unavailable' }}
             </p>
             <p v-if="location.area" class="text-secondary">{{ location.area }}</p>
-            <a
-              v-if="mapUrl"
-              :href="mapUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="btn btn-outline-dark rounded-pill"
-              data-testid="detail-map"
-            >
-              Open location on map <span aria-hidden="true">↗</span>
-            </a>
+            <iframe
+            v-if="activity.map_embed_url"
+            :src="activity.map_embed_url"
+            :title="`Map showing ${activity.name}`"
+            width="100%"
+            height="320"
+            style="border: 0; border-radius: 12px"
+            loading="lazy"
+            referrerpolicy="strict-origin-when-cross-origin"
+            allowfullscreen
+            ></iframe>
           </section>
         </div>
       </div>
