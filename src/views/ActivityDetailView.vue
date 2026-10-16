@@ -7,7 +7,6 @@ import {
   formatDuration,
   getWeeklyHours,
   getWebsiteUrl,
-  getMapUrl,
   getRating,
   getSetting,
   getLocation,
@@ -27,7 +26,6 @@ const price = computed(() => formatPrice(activity.value?.price_per_person))
 const duration = computed(() => formatDuration(activity.value?.duration_min))
 const hours = computed(() => getWeeklyHours(activity.value?.opening_hours))
 const websiteUrl = computed(() => getWebsiteUrl(activity.value))
-const mapUrl = computed(() => getMapUrl(activity.value))
 const rating = computed(() => getRating(activity.value))
 const setting = computed(() => getSetting(activity.value?.indoor))
 const location = computed(() => getLocation(activity.value))
@@ -291,15 +289,16 @@ onUnmounted(() => {
             </p>
             <p v-if="location.area" class="text-secondary">{{ location.area }}</p>
             <iframe
-            v-if="activity.map_embed_url"
-            :src="activity.map_embed_url"
-            :title="`Map showing ${activity.name}`"
-            width="100%"
-            height="320"
-            style="border: 0; border-radius: 12px"
-            loading="lazy"
-            referrerpolicy="strict-origin-when-cross-origin"
-            allowfullscreen
+              v-if="activity.map_embed_url"
+              :src="activity.map_embed_url"
+              :title="`Map showing ${activity.name}`"
+              data-testid="detail-map"
+              width="100%"
+              height="320"
+              style="border: 0; border-radius: 12px"
+              loading="lazy"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen
             ></iframe>
           </section>
         </div>
