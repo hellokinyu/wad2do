@@ -19,6 +19,7 @@ const pottery = {
   address: 'Tiong Bahru',
   description: 'Shape a clay bowl in a hands-on pottery session.',
   image_url: '/images/detail-test.svg',
+  map_embed_url: 'https://www.google.com/maps/embed?pb=mock-pottery',
   source: 'community',
   rating: 4.7,
   website: 'https://example.com/pottery',
@@ -97,6 +98,14 @@ async function mockBackend(page, options = {}) {
     route.fulfill({
       contentType: 'image/svg+xml',
       body: '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400"><rect width="640" height="400" fill="#bca68d"/></svg>',
+    }),
+  )
+
+  // Keep iframe checks repeatable without relying on Google Maps or the network.
+  await page.route(pottery.map_embed_url, (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<!doctype html><title>Mock activity map</title><p>Pottery map preview</p>',
     }),
   )
 
@@ -196,7 +205,14 @@ test('card opens its details and Back restores the current search', async ({ pag
     'href',
     'https://example.com/pottery',
   )
-  await expect(page.getByTestId('detail-map')).toHaveAttribute('href', /query=Tiong%20Bahru/)
+  const map = page.getByTestId('detail-map')
+  await expect(map).toHaveAttribute('src', pottery.map_embed_url)
+  await expect(map).toHaveAttribute('title', 'Map showing Pottery Workshop')
+  await map.scrollIntoViewIfNeeded()
+  await expect(map).toBeVisible()
+  await expect(
+    page.frameLocator('[data-testid="detail-map"]').getByText('Pottery map preview'),
+  ).toBeVisible()
   await expect(page.getByTestId('detail-hours-row')).toHaveCount(7)
   await expect(
     page.getByTestId('detail-location').getByText('Tiong Bahru', { exact: true }),
@@ -225,6 +241,7 @@ test('direct visit handles missing metadata and has a safe Back destination', as
   await expect(page.getByTestId('detail-hours-unavailable')).toBeVisible()
   await expect(page.getByTestId('detail-rating')).toHaveCount(0)
   await expect(page.getByTestId('detail-website')).toHaveCount(0)
+  await expect(page.getByTestId('detail-map')).toHaveCount(0)
   await expect(page.getByTestId('detail-tags').getByText('Outdoor', { exact: true })).toHaveCount(1)
   await expect(page.getByTestId('detail-location')).toContainText('8 Marina Gardens Dr')
   await expect(page.getByTestId('detail-location')).toContainText('Marina Bay')

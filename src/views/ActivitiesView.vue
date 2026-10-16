@@ -204,7 +204,7 @@ onMounted(loadActivities)
             class="form-select"
             data-testid="setting-filter"
           >
-            <option value="">Indoor and outdoor</option>
+            <option value="">All</option>
             <option value="indoor">Indoor</option>
             <option value="outdoor">Outdoor</option>
           </select>
