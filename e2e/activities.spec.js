@@ -1,4 +1,9 @@
 import { test, expect } from '@playwright/test'
+import { signInMockUser } from './helpers/auth'
+
+test.beforeEach(async ({ page }) => {
+  await signInMockUser(page)
+})
 
 const activities = [
   {
