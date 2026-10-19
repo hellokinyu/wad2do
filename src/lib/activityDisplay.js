@@ -1,8 +1,14 @@
 // Display helpers only: these do not decide ranking or build itineraries.
-export function formatPrice(value) {
-  if (value == null || value === '') return 'Price unavailable'
+export function getPrice(value) {
+  if (typeof value !== 'number' && typeof value !== 'string') return null
+  if (typeof value === 'string' && !value.trim()) return null
   const price = Number(value)
-  if (!Number.isFinite(price) || price < 0) return 'Price unavailable'
+  return Number.isFinite(price) && price >= 0 ? price : null
+}
+
+export function formatPrice(value) {
+  const price = getPrice(value)
+  if (price === null) return 'Price unavailable'
   return price === 0 ? 'Free' : 'S$' + price.toFixed(2)
 }
 

@@ -180,6 +180,13 @@ onUnmounted(() => {
             <h2 id="facts-title" class="h5 fw-bold mb-4">At a glance</h2>
             <p class="text-secondary small mb-1">Price per person</p>
             <p class="price-label mb-4" data-testid="detail-price">{{ price }}</p>
+            <p
+              v-if="activity.price_note"
+              class="text-secondary small"
+              data-testid="detail-price-note"
+            >
+              {{ activity.price_note }}
+            </p>
             <dl class="facts-list">
               <div>
                 <dt>Typical duration</dt>

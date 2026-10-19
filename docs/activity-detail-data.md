@@ -2,6 +2,8 @@
 
 The detail page reads one activity from Supabase by its UUID. The page uses the handbook's monochrome style and AGENTS.md's content sections.
 
+Descriptions for all 38 curated activities in the supplied database export are ready in `supabase/fill-activity-descriptions.sql`. See [the description preview and instructions](activity-descriptions.md). The script fills only blank descriptions by UUID and exact name, creates no helper table, and has not been applied to the live database.
+
 Your downloaded photos are already in public/images. Use these exact paths in the corresponding activities.image_url fields:
 
 | Activity | image_url |
@@ -35,7 +37,9 @@ The official website button accepts a supplied website or website_url value with
 
 Save uses favourites(user_id, activity_id). Share lists the authenticated user's group_members and groups, then inserts group_activities(group_id, activity_id, shared_by). These tables need the team's unique constraints and row-level security policies. Signed-out visitors get a login prompt; the login page is still a teammate's placeholder in this checkout.
 
-Back returns to the previous route, or Activities for a direct visit. The Activities page remembers the search/category/setting in this browser tab so a detail-page round trip preserves the filter choices.
+Back returns to the previous route, or Activities for a direct visit. The Activities page remembers search, category, setting, area, price band and sorting in this browser tab so a detail-page round trip preserves the filter choices.
+
+Cards show the activity's `description` below the price when available. Optional `price_note` text appears below the price on the detail page only, explaining the selected experience, fees and concessions. See [Activity prices and areas](activity-prices.md) for the 34-location price research and `supabase/seed-activity-prices.sql`, which adds this nullable column and fills missing prices/areas.
 
 Code:
 - src/views/ActivityDetailView.vue — layout and record loading.

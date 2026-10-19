@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import ActivityCard from '@/components/ActivityCard.vue'
+import { getPrice } from '@/lib/activityDisplay'
 
 // Keep the original records so clearing filters can show every activity again.
 const activities = ref([])
@@ -21,6 +22,9 @@ const previousFilters = readFilters()
 const keyword = ref(String(previousFilters.keyword ?? ''))
 const selectedCategory = ref(String(previousFilters.category ?? ''))
 const selectedSetting = ref(String(previousFilters.setting ?? ''))
+const selectedArea = ref(String(previousFilters.area ?? ''))
+const selectedPrice = ref(String(previousFilters.price ?? ''))
+const sortBy = ref(String(previousFilters.sort ?? 'catalogue'))
 const filtersOpen = ref(false)
 
 onBeforeRouteLeave(() => {
@@ -31,6 +35,9 @@ onBeforeRouteLeave(() => {
         keyword: keyword.value,
         category: selectedCategory.value,
         setting: selectedSetting.value,
+        area: selectedArea.value,
+        price: selectedPrice.value,
+        sort: sortBy.value,
       }),
     )
   } catch {
@@ -43,6 +50,19 @@ const categories = computed(() => {
   return [...new Set(values)].sort()
 })
 
+const areas = computed(() => {
+  const values = activities.value.map((activity) => activity.area?.trim()).filter(Boolean)
+  return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'en-SG'))
+})
+
+const priceRanges = [
+  { value: 'free', label: 'Free', min: 0, max: 0 },
+  { value: 'under-20', label: 'Under S$20', min: 0, max: 20 },
+  { value: '20-50', label: 'S$20 to under S$50', min: 20, max: 50 },
+  { value: '50-100', label: 'S$50 to under S$100', min: 50, max: 100 },
+  { value: '100-plus', label: 'S$100 and above', min: 100, max: Infinity },
+]
+
 // Search logic
 function searchText(value) {
   return String(value ?? '')
@@ -54,30 +74,60 @@ function searchText(value) {
 const filteredActivities = computed(() => {
   const search = searchText(keyword.value.trim())
 
-  return activities.value.filter((activity) => {
+  const range = priceRanges.find((option) => option.value === selectedPrice.value)
+  const matches = activities.value.filter((activity) => {
     const text = searchText(
       [activity.name, activity.category, activity.area, activity.description].join(' '),
     )
 
     const matchesSearch = !search || text.includes(search)
     const matchesCategory = !selectedCategory.value || activity.category === selectedCategory.value
+    const matchesArea = !selectedArea.value || activity.area?.trim() === selectedArea.value
+    const price = getPrice(activity.price_per_person)
+    const matchesPrice =
+      !range ||
+      (price !== null &&
+        (range.value === 'free' ? price === 0 : price >= range.min && price < range.max))
     const matchesSetting =
       !selectedSetting.value ||
       (selectedSetting.value === 'indoor' && activity.indoor === true) ||
       (selectedSetting.value === 'outdoor' && activity.indoor === false)
 
-    return matchesSearch && matchesCategory && matchesSetting
+    return matchesSearch && matchesCategory && matchesSetting && matchesArea && matchesPrice
   })
+
+  if (sortBy.value === 'price-asc' || sortBy.value === 'price-desc') {
+    matches.sort((a, b) => {
+      const first = getPrice(a.price_per_person)
+      const second = getPrice(b.price_per_person)
+      if (first === null && second === null) return 0
+      if (first === null) return 1
+      if (second === null) return -1
+      return sortBy.value === 'price-asc' ? first - second : second - first
+    })
+  }
+
+  return matches
 })
 
 const hasFilters = computed(() =>
-  Boolean(keyword.value.trim() || selectedCategory.value || selectedSetting.value),
+  Boolean(
+    keyword.value.trim() ||
+    selectedCategory.value ||
+    selectedSetting.value ||
+    selectedArea.value ||
+    selectedPrice.value ||
+    sortBy.value !== 'catalogue',
+  ),
 )
 
 function clearFilters() {
   keyword.value = ''
   selectedCategory.value = ''
   selectedSetting.value = ''
+  selectedArea.value = ''
+  selectedPrice.value = ''
+  sortBy.value = 'catalogue'
 }
 
 async function loadActivities() {
@@ -182,7 +232,7 @@ onMounted(loadActivities)
       aria-label="Activity filters"
     >
       <div class="row g-3 align-items-end">
-        <div class="col-12 col-md-5">
+        <div class="col-12 col-md-4">
           <label for="category-filter" class="form-label">Category</label>
           <select
             id="category-filter"
@@ -196,7 +246,33 @@ onMounted(loadActivities)
             </option>
           </select>
         </div>
-        <div class="col-12 col-md-5">
+        <div class="col-12 col-md-4">
+          <label for="area-filter" class="form-label">Area</label>
+          <select
+            id="area-filter"
+            v-model="selectedArea"
+            class="form-select"
+            data-testid="area-filter"
+          >
+            <option value="">All areas</option>
+            <option v-for="area in areas" :key="area" :value="area">{{ area }}</option>
+          </select>
+        </div>
+        <div class="col-12 col-md-4">
+          <label for="price-filter" class="form-label">Price per person</label>
+          <select
+            id="price-filter"
+            v-model="selectedPrice"
+            class="form-select"
+            data-testid="price-filter"
+          >
+            <option value="">All prices</option>
+            <option v-for="range in priceRanges" :key="range.value" :value="range.value">
+              {{ range.label }}
+            </option>
+          </select>
+        </div>
+        <div class="col-12 col-md-4">
           <label for="setting-filter" class="form-label">Indoor / outdoor</label>
           <select
             id="setting-filter"
@@ -209,7 +285,15 @@ onMounted(loadActivities)
             <option value="outdoor">Outdoor</option>
           </select>
         </div>
-        <div class="col-12 col-md-2">
+        <div class="col-12 col-md-4">
+          <label for="sort-filter" class="form-label">Sort by</label>
+          <select id="sort-filter" v-model="sortBy" class="form-select" data-testid="sort-filter">
+            <option value="catalogue">Catalogue order</option>
+            <option value="price-asc">Price: low to high</option>
+            <option value="price-desc">Price: high to low</option>
+          </select>
+        </div>
+        <div class="col-12 col-md-4">
           <button
             type="button"
             class="btn btn-outline-secondary w-100"

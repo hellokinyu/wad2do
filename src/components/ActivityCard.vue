@@ -120,6 +120,13 @@ watch(
       <p class="fw-semibold mb-2">
         {{ priceLabel }}<span v-if="priceLabel.startsWith('S$')"> / person</span>
       </p>
+      <p
+        v-if="activity.description?.trim()"
+        class="text-secondary small mb-2"
+        data-testid="activity-description"
+      >
+        {{ activity.description }}
+      </p>
 
       <p class="text-secondary small mb-1">
         {{ activity.area || 'Area unavailable' }}
