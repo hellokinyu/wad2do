@@ -13,6 +13,7 @@ const pottery = {
   name: 'Pottery Workshop',
   category: 'Workshops',
   price_per_person: 35,
+  price_note: 'Workshop entry. Optional firing costs extra.',
   duration_min: 120,
   indoor: true,
   area: 'Tiong Bahru',
@@ -191,12 +192,15 @@ test('card opens its details and Back restores the current search', async ({ pag
   await page.getByTestId('activity-search').fill('Pottery')
   await expect(page.getByTestId('activity-card')).toHaveCount(1)
   await expect(page.getByTestId('activity-card')).toContainText('S$35.00 / person')
+  await expect(page.getByTestId('activity-description')).toHaveText(pottery.description)
+  await expect(page.getByTestId('activity-card')).not.toContainText(pottery.price_note)
   await expect(page.getByTestId('activity-card')).toContainText('2 h')
   await expect(page.getByTestId('activity-card')).toContainText('Today: 10:00–18:00')
   await page.getByRole('link', { name: 'Pottery Workshop', exact: true }).click()
 
   await expect(page.getByTestId('activity-detail-name')).toHaveText('Pottery Workshop')
   await expect(page.getByTestId('detail-price')).toHaveText('S$35.00')
+  await expect(page.getByTestId('detail-price-note')).toHaveText(pottery.price_note)
   await expect(page.getByTestId('detail-duration')).toHaveText('2 h')
   await expect(page.getByTestId('detail-description')).toContainText('Shape a clay bowl')
   await expect(page.getByTestId('detail-photo')).toBeVisible()
