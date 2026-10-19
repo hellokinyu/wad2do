@@ -1,218 +1,202 @@
 <template>
-  <div class="container py-4 py-md-5 sky-theme" data-testid="onboarding-page">
+  <div class="container py-4 py-md-5" data-testid="onboarding-page">
     <!-- Owner: Charmaine -->
     <div class="onboarding-box mx-auto">
       <div v-if="loading" class="text-center py-5">
-        <div class="spinner-border text-primary" role="status">
+        <div class="spinner-border text-dark" role="status">
           <span class="visually-hidden">Loading...</span>
         </div>
       </div>
 
-      <div v-else class="card onboarding-card rounded-4">
-        <div class="card-body p-4 p-md-5">
-          <div v-if="step < 5" class="mb-4">
-            <div class="d-flex justify-content-between small text-muted mb-2">
-              <span data-testid="onboarding-step-label">Step {{ step }} of 4</span>
-              <span class="fw-semibold">{{ stepNames[step - 1] }}</span>
+      <template v-else>
+        <div
+          v-if="step < 5"
+          class="step-bars mb-4"
+          role="progressbar"
+          aria-label="Onboarding progress"
+          :aria-valuenow="progressPercent"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          data-testid="onboarding-progress"
+        >
+          <span v-for="n in 4" :key="n" class="step-bar" :class="{ filled: n <= step }"></span>
+        </div>
+
+        <p v-if="step < 5" class="eyebrow mb-3">
+          <span data-testid="onboarding-step-label">Step {{ step }} of 4</span>
+          <span class="mx-2">·</span>
+          <span>{{ stepNames[step - 1] }}</span>
+        </p>
+
+        <section v-if="step === 1" data-testid="onboarding-step-interests">
+          <h1 class="display-5 fw-bold title mb-3">What do you <span class="hl">love</span> doing?</h1>
+          <p class="lead-text mb-4">Pick at least 3 and we'll line up hangouts that fit you.</p>
+          <div class="d-flex flex-wrap gap-2">
+            <template v-for="item in interestOptions" :key="item">
+              <input
+                type="checkbox"
+                class="btn-check"
+                :id="'interest-' + slug(item)"
+                :value="item"
+                v-model="interests"
+                :data-testid="'interest-' + slug(item)"
+              />
+              <label class="chip chip-lg" :for="'interest-' + slug(item)">{{ item }}</label>
+            </template>
+          </div>
+          <p class="hint mt-3 mb-0" :class="{ ready: interests.length >= 3 }" data-testid="interest-count">
+            {{ interestHint }}
+          </p>
+        </section>
+
+        <section v-if="step === 2" data-testid="onboarding-step-budget">
+          <h1 class="display-5 fw-bold title mb-3">What's your usual <span class="hl">budget?</span></h1>
+          <p class="lead-text mb-4">Per person, per hangout. No judgement.</p>
+          <div class="row g-3">
+            <div v-for="option in budgetOptions" :key="option.id" class="col-12 col-sm-6">
+              <input
+                type="radio"
+                class="btn-check"
+                name="budget"
+                :id="'budget-' + option.id"
+                :value="option.id"
+                v-model="budget"
+                :data-testid="'budget-' + option.id"
+              />
+              <label class="option-tile" :for="'budget-' + option.id">
+                <span class="tick" aria-hidden="true"></span>
+                <span class="d-block fs-3 fw-bold title">{{ option.label }}</span>
+                <span class="d-block tile-hint">{{ option.hint }}</span>
+              </label>
             </div>
-            <div
-              class="progress onboarding-progress"
-              role="progressbar"
-              aria-label="Onboarding progress"
-              :aria-valuenow="progressPercent"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              data-testid="onboarding-progress"
+          </div>
+        </section>
+
+        <section v-if="step === 3" data-testid="onboarding-step-area">
+          <h1 class="display-5 fw-bold title mb-3">Where do you usually <span class="hl">start?</span></h1>
+          <p class="lead-text mb-4">We'll show hangouts near you first.</p>
+          <input
+            type="text"
+            class="form-control field mb-3"
+            placeholder="Search areas, e.g. Tampines"
+            v-model="areaSearch"
+            data-testid="area-search"
+          />
+          <p class="hint mb-3">
+            <template v-if="homeArea">
+              Starting from <strong class="text-dark" data-testid="area-selected">{{ homeArea }}</strong>
+            </template>
+            <template v-else>Pick one area.</template>
+          </p>
+          <div class="d-flex flex-wrap gap-2">
+            <button
+              v-for="area in filteredAreas"
+              :key="area"
+              type="button"
+              class="chip"
+              :class="{ selected: homeArea === area }"
+              :data-testid="'area-option-' + slug(area)"
+              @click="pickArea(area)"
             >
-              <div class="progress-bar rounded-pill" :style="{ width: progressPercent + '%' }"></div>
+              {{ area }}
+            </button>
+          </div>
+          <p v-if="filteredAreas.length === 0" class="hint mb-0">No areas match "{{ areaSearch }}".</p>
+        </section>
+
+        <section v-if="step === 4" data-testid="onboarding-step-company">
+          <h1 class="display-5 fw-bold title mb-3">Who do you usually <span class="hl">hang out</span> with?</h1>
+          <p class="lead-text mb-4">Optional. Pick any that apply.</p>
+          <div class="d-flex flex-wrap gap-2">
+            <template v-for="item in companyOptions" :key="item">
+              <input
+                type="checkbox"
+                class="btn-check"
+                :id="'company-' + slug(item)"
+                :value="item"
+                v-model="company"
+                :data-testid="'company-' + slug(item)"
+              />
+              <label class="chip chip-lg" :for="'company-' + slug(item)">{{ item }}</label>
+            </template>
+          </div>
+
+          <div v-if="errorMessage" class="notice mt-4" role="alert" data-testid="onboarding-error">
+            <p class="fw-semibold mb-1">Something went wrong.</p>
+            <p class="mb-3">{{ errorMessage }}</p>
+            <button type="button" class="btn btn-line btn-sm" @click="saveProfile">Try again</button>
+          </div>
+        </section>
+
+        <section v-if="step === 5" data-testid="onboarding-step-done">
+          <p class="eyebrow mb-3">All done</p>
+          <h1 class="display-5 fw-bold title mb-3">You're all <span class="hl">set.</span></h1>
+          <p class="lead-text mb-4">Here's what we'll use to find your next hangout.</p>
+
+          <div class="panel mb-4">
+            <div class="summary-row">
+              <p class="eyebrow mb-2">Interests</p>
+              <div v-if="interests.length > 0" class="d-flex flex-wrap gap-2" data-testid="summary-interests">
+                <span v-for="item in interests" :key="item" class="tag">{{ item }}</span>
+              </div>
+              <p v-else class="mb-0" data-testid="summary-interests">Not set</p>
+            </div>
+            <div class="summary-row">
+              <p class="eyebrow mb-1">Budget</p>
+              <p class="fw-semibold mb-0" data-testid="summary-budget">{{ budgetLabel }}</p>
+            </div>
+            <div class="summary-row">
+              <p class="eyebrow mb-1">Home area</p>
+              <p class="fw-semibold mb-0" data-testid="summary-area">{{ homeArea || 'Not set' }}</p>
+            </div>
+            <div class="summary-row">
+              <p class="eyebrow mb-1">Hangs out with</p>
+              <p class="fw-semibold mb-0" data-testid="summary-company">{{ listOrNotSet(company) }}</p>
             </div>
           </div>
 
-          <section v-if="step === 1" data-testid="onboarding-step-interests">
-            <p class="text-primary fw-semibold small mb-1">Welcome to WAD2Do</p>
-            <h1 class="h3 mb-2">What do you love doing?</h1>
-            <p class="text-muted mb-4">Pick at least 3 and we'll plan your next hangout.</p>
-            <div class="d-flex flex-wrap gap-2">
-              <template v-for="item in interestOptions" :key="item">
-                <input
-                  type="checkbox"
-                  class="btn-check"
-                  :id="'interest-' + slug(item)"
-                  :value="item"
-                  v-model="interests"
-                  :data-testid="'interest-' + slug(item)"
-                />
-                <label class="btn btn-outline-primary rounded-pill px-3 py-2" :for="'interest-' + slug(item)">
-                  {{ item }}
-                </label>
-              </template>
-            </div>
-            <p
-              class="small mt-3 mb-0"
-              :class="interests.length >= 3 ? 'text-success' : 'text-muted'"
-              data-testid="interest-count"
-            >
-              {{ interestHint }}
-            </p>
-          </section>
-
-          <section v-if="step === 2" data-testid="onboarding-step-budget">
-            <h1 class="h3 mb-2">What's your usual hangout budget?</h1>
-            <p class="text-muted mb-4">Per person. No judgement.</p>
-            <div class="row g-3">
-              <div v-for="option in budgetOptions" :key="option.id" class="col-12 col-sm-6">
-                <input
-                  type="radio"
-                  class="btn-check"
-                  name="budget"
-                  :id="'budget-' + option.id"
-                  :value="option.id"
-                  v-model="budget"
-                  :data-testid="'budget-' + option.id"
-                />
-                <label class="btn btn-outline-primary w-100 h-100 text-start p-3 rounded-4" :for="'budget-' + option.id">
-                  <span class="d-block fs-5 fw-semibold">{{ option.label }}</span>
-                  <span class="d-block small opacity-75">{{ option.hint }}</span>
-                </label>
-              </div>
-            </div>
-          </section>
-
-          <section v-if="step === 3" data-testid="onboarding-step-area">
-            <h1 class="h3 mb-2">Where do you usually start from?</h1>
-            <p class="text-muted mb-4">We'll show hangouts near you first.</p>
-            <input
-              type="text"
-              class="form-control form-control-lg rounded-pill px-4 mb-3"
-              placeholder="Search areas, e.g. Tampines"
-              v-model="areaSearch"
-              data-testid="area-search"
-            />
-            <p v-if="homeArea" class="mb-2 small">
-              Selected:
-              <span class="badge rounded-pill text-bg-primary fs-6" data-testid="area-selected">{{ homeArea }}</span>
-            </p>
-            <div class="list-group area-list rounded-4">
-              <button
-                v-for="area in filteredAreas"
-                :key="area"
-                type="button"
-                class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                :class="{ active: homeArea === area }"
-                :data-testid="'area-option-' + slug(area)"
-                @click="pickArea(area)"
-              >
-                {{ area }}
-                <span v-if="homeArea === area" aria-hidden="true">✓</span>
-              </button>
-              <p v-if="filteredAreas.length === 0" class="text-muted p-3 mb-0">No areas match "{{ areaSearch }}".</p>
-            </div>
-          </section>
-
-          <section v-if="step === 4" data-testid="onboarding-step-company">
-            <h1 class="h3 mb-2">Who do you usually hang out with?</h1>
-            <p class="text-muted mb-4">Optional. Pick any!</p>
-            <div class="d-flex flex-wrap gap-2">
-              <template v-for="item in companyOptions" :key="item">
-                <input
-                  type="checkbox"
-                  class="btn-check"
-                  :id="'company-' + slug(item)"
-                  :value="item"
-                  v-model="company"
-                  :data-testid="'company-' + slug(item)"
-                />
-                <label class="btn btn-outline-primary rounded-pill px-4 py-2" :for="'company-' + slug(item)">
-                  {{ item }}
-                </label>
-              </template>
-            </div>
-
-            <div v-if="errorMessage" class="alert alert-danger mt-4 mb-0" role="alert" data-testid="onboarding-error">
-              <p class="mb-2">{{ errorMessage }}</p>
-              <button type="button" class="btn btn-outline-danger btn-sm" @click="saveProfile">Try again</button>
-            </div>
-          </section>
-
-          <section v-if="step === 5" class="text-center" data-testid="onboarding-step-done">
-            <div class="done-icon bg-primary text-white mx-auto mb-3" aria-hidden="true">✓</div>
-            <h1 class="h2 mb-2">You're all set!</h1>
-            <p class="text-muted mb-4">Here's your hangout profile.</p>
-
-            <ul class="list-group text-start mb-4 rounded-4">
-              <li class="list-group-item py-3">
-                <p class="small text-muted mb-1">Interests</p>
-                <div v-if="interests.length > 0" data-testid="summary-interests">
-                  <span
-                    v-for="item in interests"
-                    :key="item"
-                    class="badge rounded-pill text-bg-primary me-1 mb-1"
-                  >
-                    {{ item }}
-                  </span>
-                </div>
-                <p v-else class="mb-0" data-testid="summary-interests">Not set</p>
-              </li>
-              <li class="list-group-item py-3">
-                <p class="small text-muted mb-1">Budget per hangout</p>
-                <p class="mb-0" data-testid="summary-budget">{{ budgetLabel }}</p>
-              </li>
-              <li class="list-group-item py-3">
-                <p class="small text-muted mb-1">Home area</p>
-                <p class="mb-0" data-testid="summary-area">{{ homeArea || 'Not set' }}</p>
-              </li>
-              <li class="list-group-item py-3">
-                <p class="small text-muted mb-1">Hangs out with</p>
-                <p class="mb-0" data-testid="summary-company">{{ listOrNotSet(company) }}</p>
-              </li>
-            </ul>
-
-            <button
-              type="button"
-              class="btn btn-primary btn-lg rounded-pill w-100 mb-2"
-              data-testid="onboarding-explore"
-              @click="exploreActivities"
-            >
-              Find my hangouts
+          <div class="d-flex flex-wrap align-items-center gap-3">
+            <button type="button" class="btn btn-ink btn-lg" data-testid="onboarding-explore" @click="exploreActivities">
+              Find my hangouts →
             </button>
-            <p class="text-muted small mb-0">You can change these anytime in Profile.</p>
-          </section>
+            <span class="hint">You can change these anytime in Profile.</span>
+          </div>
+        </section>
 
-          <div v-if="step < 5" class="d-flex justify-content-between align-items-center mt-5">
+        <div v-if="step < 5" class="footer-bar d-flex justify-content-between align-items-center mt-5 pt-4">
+          <button
+            type="button"
+            class="btn btn-line"
+            :class="{ invisible: step === 1 }"
+            :disabled="saving"
+            data-testid="onboarding-back"
+            @click="goBack"
+          >
+            ← Back
+          </button>
+          <div class="d-flex align-items-center gap-3">
             <button
               type="button"
-              class="btn btn-outline-secondary rounded-pill px-3"
-              :class="{ invisible: step === 1 }"
+              class="btn btn-link skip-link"
               :disabled="saving"
-              data-testid="onboarding-back"
-              @click="goBack"
+              data-testid="onboarding-skip"
+              @click="skipStep"
             >
-              Back
+              Skip
             </button>
-            <div class="d-flex align-items-center gap-2">
-              <button
-                type="button"
-                class="btn btn-link text-secondary text-decoration-none"
-                :disabled="saving"
-                data-testid="onboarding-skip"
-                @click="skipStep"
-              >
-                Skip
-              </button>
-              <button
-                type="button"
-                class="btn btn-primary rounded-pill px-4"
-                :disabled="!canNext || saving"
-                data-testid="onboarding-next"
-                @click="goNext"
-              >
-                <span v-if="saving" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-                {{ step === 4 ? 'Finish' : 'Next' }}
-              </button>
-            </div>
+            <button
+              type="button"
+              class="btn btn-ink"
+              :disabled="!canNext || saving"
+              data-testid="onboarding-next"
+              @click="goNext"
+            >
+              <span v-if="saving" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+              {{ step === 4 ? 'Finish' : 'Next' }} →
+            </button>
           </div>
         </div>
-      </div>
+      </template>
     </div>
   </div>
 </template>
@@ -409,7 +393,7 @@ async function saveProfile() {
     step.value = 5
   } catch (err) {
     console.error('Onboarding save failed:', err)
-    errorMessage.value = "Couldn't save your answers. Please check you're logged in and try again."
+    errorMessage.value = "We couldn't save your answers. Please check you're logged in and try again."
   } finally {
     saving.value = false
   }
@@ -421,106 +405,235 @@ function exploreActivities() {
 </script>
 
 <style scoped>
-.sky-theme {
-  --sky: #6ec1f2;
-  --sky-strong: #3aa4e6;
-  --sky-text: #17608f;
-  --sky-soft: #e8f5fd;
-  --sky-line: #cde9f9;
-  --sky-ink: #0b3a5b;
-  --bs-link-color-rgb: 23, 96, 143;
-  --bs-link-hover-color-rgb: 11, 58, 91;
-}
-
-.sky-theme .text-primary {
-  color: var(--sky-text) !important;
-}
-
-.sky-theme .bg-primary,
-.sky-theme .text-bg-primary {
-  background-color: var(--sky) !important;
-  color: var(--sky-ink) !important;
-}
-
-.sky-theme .btn-primary {
-  --bs-btn-color: var(--sky-ink);
-  --bs-btn-bg: var(--sky);
-  --bs-btn-border-color: var(--sky);
-  --bs-btn-hover-color: var(--sky-ink);
-  --bs-btn-hover-bg: var(--sky-strong);
-  --bs-btn-hover-border-color: var(--sky-strong);
-  --bs-btn-active-color: var(--sky-ink);
-  --bs-btn-active-bg: var(--sky-strong);
-  --bs-btn-active-border-color: var(--sky-strong);
-  --bs-btn-disabled-color: var(--sky-ink);
-  --bs-btn-disabled-bg: var(--sky);
-  --bs-btn-disabled-border-color: var(--sky);
-  --bs-btn-focus-shadow-rgb: 110, 193, 242;
-}
-
-.sky-theme .btn-outline-primary {
-  --bs-btn-color: var(--sky-text);
-  --bs-btn-border-color: var(--sky);
-  --bs-btn-hover-color: var(--sky-ink);
-  --bs-btn-hover-bg: var(--sky);
-  --bs-btn-hover-border-color: var(--sky);
-  --bs-btn-active-color: var(--sky-ink);
-  --bs-btn-active-bg: var(--sky);
-  --bs-btn-active-border-color: var(--sky);
-  --bs-btn-disabled-color: var(--sky-text);
-  --bs-btn-disabled-border-color: var(--sky);
-  --bs-btn-focus-shadow-rgb: 110, 193, 242;
-}
-
-.sky-theme .btn-link {
-  --bs-btn-color: var(--sky-text);
-  --bs-btn-hover-color: var(--sky-ink);
-}
-
-.sky-theme .progress {
-  --bs-progress-bar-bg: var(--sky);
-}
-
-.sky-theme .list-group {
-  --bs-list-group-active-bg: var(--sky);
-  --bs-list-group-active-border-color: var(--sky);
-  --bs-list-group-active-color: var(--sky-ink);
-}
-
-.sky-theme .form-control:focus,
-.sky-theme .form-select:focus {
-  border-color: var(--sky);
-  box-shadow: 0 0 0 0.25rem rgba(110, 193, 242, 0.35);
-}
-
 .onboarding-box {
-  max-width: 640px;
+  max-width: 720px;
 }
 
-.onboarding-card {
-  background: linear-gradient(180deg, var(--sky-soft) 0, var(--bs-body-bg) 120px);
-  border: 1px solid var(--sky-line);
-  box-shadow: 0 0.25rem 1rem rgba(58, 164, 230, 0.12);
+.title {
+  color: #111;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
 }
 
-
-.onboarding-progress {
-  height: 10px;
-  border-radius: 999px;
+.hl {
+  background-color: #e6e6e1;
+  border-radius: 0.5rem;
+  padding: 0 0.2em;
 }
 
-.area-list {
-  max-height: 300px;
-  overflow-y: auto;
+.eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #6b6b6b;
 }
 
-.done-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
+.lead-text {
+  font-size: 1.1rem;
+  color: #555;
+}
+
+.hint {
+  color: #6b6b6b;
+}
+
+.hint.ready {
+  color: #111;
+  font-weight: 600;
+}
+
+.step-bars {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2rem;
+  gap: 6px;
+}
+
+.step-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background-color: #e6e6e1;
+  transition: background-color 0.3s ease;
+}
+
+.step-bar.filled {
+  background-color: #111;
+}
+
+.chip {
+  display: inline-block;
+  padding: 0.45rem 1rem;
+  border: 1px solid #dcdcdc;
+  border-radius: 999px;
+  background-color: #fff;
+  color: #111;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.chip-lg {
+  padding: 0.65rem 1.3rem;
+  font-size: 1.05rem;
+}
+
+.chip:hover {
+  background-color: #f2f2f0;
+  border-color: #bdbdbd;
+}
+
+.btn-check:checked + .chip,
+.chip.selected {
+  background-color: #111;
+  border-color: #111;
+  color: #fff;
+}
+
+.btn-check:focus-visible + .chip,
+.btn-check:focus-visible + .option-tile {
+  outline: 2px solid #111;
+  outline-offset: 2px;
+}
+
+.option-tile {
+  position: relative;
+  display: block;
+  height: 100%;
+  padding: 1.25rem 1.25rem 1.1rem;
+  border: 1px solid #dcdcdc;
+  border-radius: 1rem;
+  background-color: #fff;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.option-tile:hover {
+  border-color: #111;
+}
+
+.tile-hint {
+  color: #6b6b6b;
+  margin-top: 0.25rem;
+}
+
+.tick {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #c8c8c8;
+  border-radius: 50%;
+}
+
+.btn-check:checked + .option-tile {
+  background-color: #111;
+  border-color: #111;
+}
+
+.btn-check:checked + .option-tile .title {
+  color: #fff;
+}
+
+.btn-check:checked + .option-tile .tile-hint {
+  color: #cfcfcf;
+}
+
+.btn-check:checked + .option-tile .tick {
+  border-color: #fff;
+  background-color: #fff;
+  box-shadow: inset 0 0 0 4px #111;
+}
+
+.field {
+  padding: 0.75rem 1rem;
+  border: 1px solid #dcdcdc;
+  border-radius: 0.75rem;
+}
+
+.field:focus {
+  border-color: #111;
+  box-shadow: none;
+}
+
+.panel {
+  padding: 0.5rem 1.5rem;
+  border: 1px solid #e5e5e5;
+  border-radius: 1rem;
+  background-color: #f8f8f7;
+}
+
+.summary-row {
+  padding: 1rem 0;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.summary-row:last-child {
+  border-bottom: none;
+}
+
+.tag {
+  display: inline-block;
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  background-color: #111;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.notice {
+  padding: 1rem 1.25rem;
+  border: 1px solid #111;
+  border-radius: 1rem;
+  background-color: #f8f8f7;
+}
+
+.footer-bar {
+  border-top: 1px solid #e5e5e5;
+}
+
+.skip-link {
+  color: #6b6b6b;
+  text-decoration: none;
+}
+
+.skip-link:hover {
+  color: #111;
+}
+
+.btn-ink {
+  --bs-btn-color: #fff;
+  --bs-btn-bg: #111;
+  --bs-btn-border-color: #111;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #333;
+  --bs-btn-hover-border-color: #333;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #000;
+  --bs-btn-active-border-color: #000;
+  --bs-btn-disabled-color: #fff;
+  --bs-btn-disabled-bg: #111;
+  --bs-btn-disabled-border-color: #111;
+  --bs-btn-border-radius: 999px;
+  --bs-btn-padding-x: 1.4rem;
+  --bs-btn-padding-y: 0.6rem;
+  --bs-btn-font-weight: 600;
+}
+
+.btn-line {
+  --bs-btn-color: #111;
+  --bs-btn-bg: #fff;
+  --bs-btn-border-color: #111;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #111;
+  --bs-btn-hover-border-color: #111;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #000;
+  --bs-btn-active-border-color: #000;
+  --bs-btn-border-radius: 999px;
+  --bs-btn-padding-x: 1.2rem;
+  --bs-btn-padding-y: 0.6rem;
+  --bs-btn-font-weight: 600;
 }
 </style>
