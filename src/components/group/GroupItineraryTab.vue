@@ -142,6 +142,7 @@ function swapStop(index, alternative) {
     end: oldStop.end,
     reason: 'Indoor swap because of rain',
   }
+  recalculateTimes()
 }
 
 // The activity_ids of stops whose rainy-day option is switched on
@@ -186,12 +187,39 @@ function getStopWarnings(stop) {
   return warnings
 }
 
+// '10:30' -> 630 (minutes since midnight)
+function toMinutes(time) {
+  const [hours, minutes] = time.split(':')
+  return Number(hours) * 60 + Number(minutes)
+}
+
+// 630 -> '10:30'
+function toTime(totalMinutes) {
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0')
+}
+
 // ----- Edit mode -----
 const isEditing = ref(false)
 let savedCopy = null // the plan as it was before editing, for Discard
+const TRAVEL_MINUTES = 30 // fake travel time between stops. Later: OneMap.
+const dayStart = ref('10:00') // when the first stop begins
+
+// Give every stop a new start and end, in order, keeping each one's duration
+function recalculateTimes() {
+  let current = toMinutes(dayStart.value)
+  for (const stop of itinerary.value.stops) {
+    const duration = toMinutes(stop.end) - toMinutes(stop.start)
+    stop.start = toTime(current)
+    stop.end = toTime(current + duration)
+    current = current + duration + TRAVEL_MINUTES
+  }
+}
 
 function startEditing() {
   savedCopy = JSON.parse(JSON.stringify(itinerary.value))
+  dayStart.value = itinerary.value.stops[0]?.start || '10:00'
   isEditing.value = true
 }
 
@@ -207,6 +235,7 @@ function saveChanges() {
 
 function removeStop(index) {
   itinerary.value.stops.splice(index, 1) // remove 1 item at this position
+  recalculateTimes()
 }
 
 // direction is -1 (up) or +1 (down)
@@ -217,6 +246,7 @@ function moveStop(index, direction) {
   const temp = stops[index]
   stops[index] = stops[other]
   stops[other] = temp
+  recalculateTimes()
 }
 </script>
 
