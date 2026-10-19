@@ -309,6 +309,17 @@ function moveStop(index, direction) {
             Discard
           </button>
         </template>
+        <div v-if="isEditing" class="d-flex align-items-center gap-2 ms-auto">
+          <label for="day-start" class="form-label mb-0">Start at</label>
+          <input
+            id="day-start"
+            v-model="dayStart"
+            type="time"
+            class="form-control form-control-sm"
+            data-testid="itinerary-start-time"
+            @change="recalculateTimes"
+          />
+        </div>
       </div>
       <ol class="list-unstyled" data-testid="itinerary-timeline">
         <li
