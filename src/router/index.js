@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { watch } from 'vue'
+import { useAuth } from '@/composables/useAuth'
 
 import LandingView from '@/views/LandingView.vue'
 import SignUpView from '@/views/SignUpView.vue'
@@ -19,23 +21,49 @@ import GroupItineraryTab from '@/components/group/GroupItineraryTab.vue'
 
 const routes = [
   { path: '/', name: 'landing', component: LandingView },
-  { path: '/signup', name: 'signup', component: SignUpView },
-  { path: '/login', name: 'login', component: LoginView },
-  { path: '/onboarding', name: 'onboarding', component: OnboardingView },
+  { path: '/signup', name: 'signup', component: SignUpView, meta: { guestOnly: true } },
+  { path: '/login', name: 'login', component: LoginView, meta: { guestOnly: true } },
+  {
+    path: '/onboarding',
+    name: 'onboarding',
+    component: OnboardingView,
+    meta: { requiresAuth: true },
+  },
 
-  { path: '/activities', name: 'activities', component: ActivitiesView },
-  { path: '/activities/submit', name: 'submit-activity', component: SubmitActivityView },
-  { path: '/activities/:id', name: 'activity-detail', component: ActivityDetailView },
+  {
+    path: '/activities',
+    name: 'activities',
+    component: ActivitiesView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/activities/submit',
+    name: 'submit-activity',
+    component: SubmitActivityView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/activities/:id',
+    name: 'activity-detail',
+    component: ActivityDetailView,
+    meta: { requiresAuth: true },
+  },
 
-  { path: '/profile', name: 'profile', component: ProfileView },
-  { path: '/admin/submissions', name: 'admin-review', component: AdminReviewView },
+  { path: '/profile', name: 'profile', component: ProfileView, meta: { requiresAuth: true } },
+  {
+    path: '/admin/submissions',
+    name: 'admin-review',
+    component: AdminReviewView,
+    meta: { requiresAuth: true },
+  },
 
-  { path: '/groups', name: 'groups', component: GroupsView },
+  { path: '/groups', name: 'groups', component: GroupsView, meta: { requiresAuth: true } },
   {
     // One group. The three tabs are "child routes", so each tab has its own URL,
     // e.g. /groups/12/availability, and the back button works between tabs.
     path: '/groups/:id',
     component: GroupDetailView,
+    meta: { requiresAuth: true },
     children: [
       { path: '', redirect: { name: 'group-activities' } },
       { path: 'activities', name: 'group-activities', component: GroupActivitiesTab },
@@ -56,7 +84,24 @@ const router = createRouter({
   },
 })
 
-// TODO (Member 5 with Member 1): add a router.beforeEach guard so logged-out users
-// are sent to /login, and only admin accounts can open /admin/submissions.
+const { user, initializeAuth } = useAuth()
+
+router.beforeEach(async (to) => {
+  // Wait for the saved session before deciding whether to redirect after a refresh.
+  await initializeAuth()
+  if (to.meta.requiresAuth && !user.value) return { name: 'login' }
+  if (to.meta.guestOnly && user.value) return { name: 'landing' }
+})
+
+// Also leave a protected page when the user signs out in another tab.
+const stopWatching = watch(user, (currentUser) => {
+  const route = router.currentRoute.value
+  if (!currentUser && route.meta.requiresAuth) router.replace({ name: 'login' })
+  if (currentUser && route.meta.guestOnly) router.replace({ name: 'landing' })
+})
+
+if (import.meta.hot) import.meta.hot.dispose(stopWatching)
+
+// TODO: add an admin role check once the team's trusted role storage is verified.
 
 export default router

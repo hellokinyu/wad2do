@@ -12,6 +12,9 @@
     </div>
 
     <template v-else>
+      <div v-if="logoutError" class="alert alert-danger" role="alert" data-testid="logout-error">
+        {{ logoutError }}
+      </div>
       <div v-if="profileError" class="alert alert-danger" role="alert" data-testid="profile-error">
         <p class="mb-2">{{ profileError }}</p>
         <button type="button" class="btn btn-outline-danger btn-sm" @click="loadProfile">Try again</button>
@@ -30,6 +33,7 @@
                   type="button"
                   class="btn btn-link btn-sm p-0 text-decoration-none"
                   data-testid="profile-edit-name"
+                  :disabled="!!profileError"
                   @click="startEditName"
                 >
                   Edit name
@@ -65,8 +69,8 @@
             </div>
           </div>
 
-          <button type="button" class="btn btn-outline-danger rounded-pill px-3 align-self-md-start" data-testid="profile-logout" @click="logOut">
-            Log out
+          <button type="button" class="btn btn-outline-danger rounded-pill px-3 align-self-md-start" data-testid="profile-logout" :disabled="loggingOut" @click="logOut">
+            {{ loggingOut ? 'Logging out…' : 'Log out' }}
           </button>
         </div>
       </section>
@@ -154,7 +158,7 @@
             <button
               type="button"
               class="btn btn-primary rounded-pill px-4"
-              :disabled="!hasChanges || savingPrefs"
+              :disabled="!hasChanges || savingPrefs || !!profileError"
               data-testid="profile-save-prefs"
               @click="savePreferences"
             >
@@ -287,8 +291,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
+import { authErrorMessage, useAuth } from '@/composables/useAuth'
 
 const router = useRouter()
+const { user: authenticatedUser, authError } = useAuth()
 
 const interestOptions = [
   'Food',
@@ -364,6 +370,8 @@ const savingPrefs = ref(false)
 const prefsMessage = ref('')
 const prefsError = ref('')
 const profileError = ref('')
+const logoutError = ref('')
+const loggingOut = ref(false)
 
 const savedActivities = ref([])
 const savedError = ref('')
@@ -405,11 +413,16 @@ async function loadProfile() {
     .from('profiles')
     .select('display_name, interests, budget, home_area, company')
     .eq('id', userId.value)
-    .single()
+    .maybeSingle()
 
   if (error) {
     console.error('Could not load profile:', error)
     profileError.value = "Couldn't load your profile."
+    return
+  }
+
+  if (!data) {
+    profileError.value = 'Your profile is unavailable. Please contact the WAD2Do team before saving preferences.'
     return
   }
 
@@ -501,8 +514,24 @@ async function saveName() {
 }
 
 async function logOut() {
-  await supabase.auth.signOut()
-  router.push('/login')
+  if (loggingOut.value) return
+  loggingOut.value = true
+  logoutError.value = ''
+  authError.value = ''
+  try {
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
+    await router.replace('/login')
+  } catch (error) {
+    logoutError.value = authErrorMessage(error)
+    // Some Supabase versions clear the local session even when server logout fails.
+    if (!authenticatedUser.value) {
+      authError.value = 'You are logged out on this browser, but we could not confirm sign-out on the server. ' + logoutError.value
+      await router.replace('/login')
+    }
+  } finally {
+    loggingOut.value = false
+  }
 }
 
 function rememberSavedPrefs() {
