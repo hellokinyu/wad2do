@@ -18,7 +18,10 @@
     </div>
 
     <template v-else>
-      <div v-if="profileError" class="notice mb-4" role="alert" data-testid="profile-error">
+      <div v-if="logoutError" class="alert alert-danger" role="alert" data-testid="logout-error">
+        {{ logoutError }}
+      </div>
+      <div v-if="profileError" class="alert alert-danger" role="alert" data-testid="profile-error">
         <p class="mb-2">{{ profileError }}</p>
         <button type="button" class="btn btn-line btn-sm" @click="loadProfile">Try again</button>
       </div>
@@ -31,8 +34,20 @@
             <p class="eyebrow mb-2">Your profile</p>
 
             <div v-if="!editingName">
-              <h1 class="display-5 fw-bold title mb-1" data-testid="profile-name">{{ displayName || 'Add your name' }}</h1>
-              <p class="muted mb-0" data-testid="profile-email">{{ email }}</p>
+              <p class="small text-primary fw-semibold mb-0">Your profile</p>
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <h1 class="h3 mb-0" data-testid="profile-name">{{ displayName || 'Add your name' }}</h1>
+                <button
+                  type="button"
+                  class="btn btn-link btn-sm p-0 text-decoration-none"
+                  data-testid="profile-edit-name"
+                  :disabled="!!profileError"
+                  @click="startEditName"
+                >
+                  Edit name
+                </button>
+              </div>
+              <p class="text-muted mb-0" data-testid="profile-email">{{ email }}</p>
             </div>
 
             <div v-else class="name-edit">
@@ -63,14 +78,9 @@
             </div>
           </div>
 
-          <div v-if="!editingName" class="d-flex gap-2 align-self-md-start">
-            <button type="button" class="btn btn-line btn-sm" data-testid="profile-edit-name" @click="startEditName">
-              Edit name
-            </button>
-            <button type="button" class="btn btn-line btn-sm" data-testid="profile-logout" @click="logOut">
-              Log out
-            </button>
-          </div>
+          <button type="button" class="btn btn-outline-danger rounded-pill px-3 align-self-md-start" data-testid="profile-logout" :disabled="loggingOut" @click="logOut">
+            {{ loggingOut ? 'Logging out…' : 'Log out' }}
+          </button>
         </div>
       </section>
 
@@ -165,8 +175,8 @@
           <div class="d-flex flex-wrap align-items-center gap-3 mt-4 pt-4 panel-footer">
             <button
               type="button"
-              class="btn btn-ink"
-              :disabled="!hasChanges || savingPrefs"
+              class="btn btn-primary rounded-pill px-4"
+              :disabled="!hasChanges || savingPrefs || !!profileError"
               data-testid="profile-save-prefs"
               @click="savePreferences"
             >
@@ -291,8 +301,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
+import { authErrorMessage, useAuth } from '@/composables/useAuth'
 
 const router = useRouter()
+const { user: authenticatedUser, authError } = useAuth()
 
 const interestOptions = [
   'Food',
@@ -368,6 +380,8 @@ const savingPrefs = ref(false)
 const prefsMessage = ref('')
 const prefsError = ref('')
 const profileError = ref('')
+const logoutError = ref('')
+const loggingOut = ref(false)
 
 const savedActivities = ref([])
 const savedError = ref('')
@@ -409,11 +423,16 @@ async function loadProfile() {
     .from('profiles')
     .select('display_name, interests, budget, home_area, company')
     .eq('id', userId.value)
-    .single()
+    .maybeSingle()
 
   if (error) {
     console.error('Could not load profile:', error)
     profileError.value = "Couldn't load your profile."
+    return
+  }
+
+  if (!data) {
+    profileError.value = 'Your profile is unavailable. Please contact the WAD2Do team before saving preferences.'
     return
   }
 
@@ -505,8 +524,24 @@ async function saveName() {
 }
 
 async function logOut() {
-  await supabase.auth.signOut()
-  router.push('/login')
+  if (loggingOut.value) return
+  loggingOut.value = true
+  logoutError.value = ''
+  authError.value = ''
+  try {
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
+    await router.replace('/login')
+  } catch (error) {
+    logoutError.value = authErrorMessage(error)
+    // Some Supabase versions clear the local session even when server logout fails.
+    if (!authenticatedUser.value) {
+      authError.value = 'You are logged out on this browser, but we could not confirm sign-out on the server. ' + logoutError.value
+      await router.replace('/login')
+    }
+  } finally {
+    loggingOut.value = false
+  }
 }
 
 function rememberSavedPrefs() {
@@ -841,100 +876,5 @@ function statusClass(status) {
 .unsave-btn {
   position: relative;
   z-index: 2;
-}
-
-.submission-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  border: 1px solid #e5e5e5;
-  border-radius: 1rem;
-  overflow: hidden;
-}
-
-.submission-row {
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid #e5e5e5;
-  background-color: #fff;
-}
-
-.submission-row:last-child {
-  border-bottom: none;
-}
-
-.status {
-  flex-shrink: 0;
-  padding: 0.25rem 0.75rem;
-  border-radius: 999px;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.status-pending {
-  border: 1px solid #cfcfcf;
-  color: #6b6b6b;
-}
-
-.status-approved {
-  border: 1px solid #111;
-  background-color: #111;
-  color: #fff;
-}
-
-.status-rejected {
-  border: 1px solid #111;
-  color: #111;
-}
-
-.reason {
-  color: #555;
-}
-
-.notice {
-  padding: 1rem 1.25rem;
-  border: 1px solid #111;
-  border-radius: 1rem;
-  background-color: #f8f8f7;
-}
-
-.btn-ink {
-  --bs-btn-color: #fff;
-  --bs-btn-bg: #111;
-  --bs-btn-border-color: #111;
-  --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: #333;
-  --bs-btn-hover-border-color: #333;
-  --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: #000;
-  --bs-btn-active-border-color: #000;
-  --bs-btn-disabled-color: #fff;
-  --bs-btn-disabled-bg: #111;
-  --bs-btn-disabled-border-color: #111;
-  --bs-btn-border-radius: 999px;
-  --bs-btn-padding-x: 1.4rem;
-  --bs-btn-padding-y: 0.6rem;
-  --bs-btn-font-weight: 600;
-}
-
-.btn-line {
-  --bs-btn-color: #111;
-  --bs-btn-bg: #fff;
-  --bs-btn-border-color: #111;
-  --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: #111;
-  --bs-btn-hover-border-color: #111;
-  --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: #000;
-  --bs-btn-active-border-color: #000;
-  --bs-btn-border-radius: 999px;
-  --bs-btn-padding-x: 1.2rem;
-  --bs-btn-padding-y: 0.6rem;
-  --bs-btn-font-weight: 600;
-}
-
-.btn-line.btn-sm {
-  --bs-btn-padding-x: 0.9rem;
-  --bs-btn-padding-y: 0.35rem;
-  --bs-btn-font-size: 0.875rem;
 }
 </style>

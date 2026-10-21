@@ -32,6 +32,9 @@ pnpm run dev
 
 Then open http://localhost:5173. The page reloads by itself when you save a file.
 
+See [Authentication setup](docs/authentication.md) for email confirmation redirect
+URLs, session behavior, changed files, and the profile creation checks still needed.
+
 ## Run the tests
 
 The end-to-end tests are in the `e2e/` folder.

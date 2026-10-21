@@ -16,11 +16,20 @@
           <li class="nav-item">
             <RouterLink class="nav-link" active-class="active" to="/groups" data-testid="nav-groups">Groups</RouterLink>
           </li>
-          <li class="nav-item">
+          <li v-if="user" class="nav-item">
             <RouterLink class="nav-link" active-class="active" to="/profile" data-testid="nav-profile">Profile</RouterLink>
+          </li>
+          <li v-else class="nav-item">
+            <RouterLink class="nav-link" active-class="active" to="/login" data-testid="nav-login">Log in</RouterLink>
           </li>
         </ul>
       </div>
     </div>
   </nav>
 </template>
+
+<script setup>
+import { useAuth } from '@/composables/useAuth'
+
+const { user } = useAuth()
+</script>
