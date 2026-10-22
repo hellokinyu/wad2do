@@ -170,9 +170,20 @@ onMounted(loadActivities)
 
 <template>
   <div class="container activities-page py-4 py-md-5" data-testid="activities-page">
-    <header class="mb-4">
-      <h1 class="fw-bold">What are we doing today?</h1>
-      <p class="text-secondary mb-0">Discover activities around Singapore.</p>
+    <header
+      class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4"
+    >
+      <div>
+        <h1 class="fw-bold">What are we doing today?</h1>
+        <p class="text-secondary mb-0">Discover activities around Singapore.</p>
+      </div>
+      <RouterLink
+        to="/activities/submit"
+        class="btn btn-outline-dark rounded-pill px-4"
+        data-testid="submit-activity-button"
+      >
+        + Submit an activity
+      </RouterLink>
     </header>
 
     <div class="search-bar d-flex gap-2 mb-3">
