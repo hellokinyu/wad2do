@@ -575,6 +575,8 @@ async function savePreferences() {
       company: company.value,
     })
     .eq('id', userId.value)
+    .select('id')
+    .single()
 
   savingPrefs.value = false
 
