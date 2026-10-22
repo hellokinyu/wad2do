@@ -400,7 +400,7 @@ onMounted(loadActivities)
     </div>
 
     <div
-      v-if="loading || profileLoading"
+      v-if="loading || (sortBy === 'best-match' && profileLoading)"
       class="py-5 text-center"
       role="status"
       data-testid="activities-loading"

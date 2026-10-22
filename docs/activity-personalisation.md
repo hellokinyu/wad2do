@@ -31,7 +31,7 @@ Area matching ignores case and surrounding spaces, but uses the same label: Juro
 ## Loading and sorting
 
 - Activities uses shared auth state and reads only `interests`, `budget` and `home_area` from the profile with the signed-in user's ID. Profile RLS remains responsible for database access control.
-- Preferences and activities load independently. Results wait for both requests to avoid flashing an unranked list first.
+- Preferences and activities load independently. Best match waits for both requests to avoid flashing an unranked list first. Price and catalogue sorts show loaded activities without waiting for preferences; a later profile response does not override the selected sort.
 - Best match is the default when there is no valid saved sort. Saved sorting/filter choices survive a detail-page visit.
 - Filters run first. Best match ranks their results; catalogue order and either price sort override personalisation. Clear filters restores Best match.
 - Above the grid, a live sort summary shows Best match with a saved-preferences explanation, the chosen price sort, or catalogue order. Missing, empty or failed preferences show catalogue order without claiming personalisation.

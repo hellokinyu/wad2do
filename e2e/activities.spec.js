@@ -348,6 +348,51 @@ test('Best match reads only the signed-in profile and still respects filters and
   await expect(page.getByTestId('activities-sort-description')).toHaveCount(0)
 })
 
+test('price and catalogue sorts display results while preferences are still loading', async ({
+  page,
+}) => {
+  await mockActivities(page)
+  let captureProfileRequest
+  const pendingProfileRequest = new Promise((resolve) => {
+    captureProfileRequest = resolve
+  })
+  await page.route('**/rest/v1/profiles?*', (route) => captureProfileRequest(route))
+  const catalogueLoaded = page.waitForResponse('**/rest/v1/activities?*')
+  await page.goto('/activities')
+  const profileRequest = await pendingProfileRequest
+  await catalogueLoaded
+
+  const names = page.getByTestId('activity-name-link')
+  await expect(page.getByTestId('activities-loading')).toBeVisible()
+  await expect(names).toHaveCount(0)
+
+  for (const [sort, indices, summary] of [
+    ['price-asc', [2, 1, 0, 3], 'Sorted by Price: low to high'],
+    ['price-desc', [3, 0, 1, 2], 'Sorted by Price: high to low'],
+    ['catalogue', [0, 1, 2, 3], 'Showing catalogue order'],
+  ]) {
+    await page.getByTestId('sort-filter').selectOption(sort)
+    await expect(page.getByTestId('activities-loading')).toHaveCount(0)
+    await expect(names).toHaveText(indices.map((index) => activities[index].name))
+    await expect(page.getByTestId('activities-sort-summary')).toHaveText(summary)
+  }
+
+  await page.getByTestId('sort-filter').selectOption('best-match')
+  await expect(page.getByTestId('activities-loading')).toBeVisible()
+  await expect(names).toHaveCount(0)
+  await page.getByTestId('sort-filter').selectOption('price-desc')
+  await profileRequest.fulfill({
+    json: [{ interests: ['Outdoors'], budget: 'under-20', home_area: 'East Coast Park' }],
+  })
+  await expect(names).toHaveText([3, 0, 1, 2].map((index) => activities[index].name))
+  await expect(page.getByTestId('activities-sort-summary')).toHaveText(
+    'Sorted by Price: high to low',
+  )
+  await page.getByTestId('sort-filter').selectOption('best-match')
+  await expect(names).toHaveText([2, 1, 0, 3].map((index) => activities[index].name))
+  await expect(page.getByTestId('activities-sort-summary')).toContainText('Sorted by Best match')
+})
+
 test('empty saved preferences show catalogue order without claiming personalisation', async ({
   page,
 }) => {
