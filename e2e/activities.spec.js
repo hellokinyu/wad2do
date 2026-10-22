@@ -403,7 +403,7 @@ test('saving Profile preferences changes Best match on return and survives a det
   await page.route('**/rest/v1/profiles?*', (route) => {
     if (route.request().method() === 'PATCH') {
       profile = { ...profile, ...route.request().postDataJSON() }
-      return route.fulfill({ status: 204 })
+      return route.fulfill({ json: { id: mockUser.id } })
     }
     return route.fulfill({ json: [profile] })
   })
@@ -431,4 +431,61 @@ test('saving Profile preferences changes Best match on return and survives a det
   await page.goBack()
   await expect(page.getByTestId('sort-filter')).toHaveValue('best-match')
   await expect(names.first()).toHaveText(activities[2].name)
+})
+
+test('a zero-row preference update preserves the draft and only confirms a successful retry', async ({
+  page,
+}) => {
+  const attempts = []
+  let profile = { display_name: 'Demo', interests: ['Cafes'], company: [] }
+  await page.route('**/rest/v1/profiles?*', (route) => {
+    const request = route.request()
+    if (request.method() === 'PATCH') {
+      const url = new URL(request.url())
+      attempts.push({
+        id: url.searchParams.get('id'),
+        select: url.searchParams.get('select'),
+        accept: request.headers().accept,
+      })
+      if (attempts.length === 1) {
+        return route.fulfill({
+          status: 406,
+          json: {
+            code: 'PGRST116',
+            message: 'Cannot coerce the result to a single JSON object',
+            details: 'The result contains 0 rows',
+          },
+        })
+      }
+      profile = { ...profile, ...request.postDataJSON() }
+      return route.fulfill({ json: { id: mockUser.id } })
+    }
+    return route.fulfill({ json: [profile] })
+  })
+  await page.route('**/rest/v1/favourites?*', (route) => route.fulfill({ json: [] }))
+  await page.route('**/rest/v1/submissions?*', (route) => route.fulfill({ json: [] }))
+  await page.goto('/profile')
+  await page.locator('label[for="pref-interest-outdoors"]').click()
+  await page.getByTestId('profile-save-prefs').click()
+  await expect(page.getByTestId('profile-prefs-error')).toHaveText(
+    "Couldn't save your preferences.",
+  )
+  await expect(page.getByTestId('profile-prefs-saved')).toHaveCount(0)
+  await expect(page.getByTestId('pref-interest-outdoors')).toBeChecked()
+  await expect(page.getByTestId('profile-unsaved')).toBeVisible()
+  await expect(page.getByTestId('profile-save-prefs')).toBeEnabled()
+  const confirmedUpdate = {
+    id: 'eq.' + mockUser.id,
+    select: 'id',
+    accept: 'application/vnd.pgrst.object+json',
+  }
+  expect(attempts).toEqual([confirmedUpdate])
+
+  await page.getByTestId('profile-save-prefs').click()
+  await expect(page.getByTestId('profile-prefs-saved')).toHaveText('✓ Preferences saved')
+  await expect(page.getByTestId('profile-prefs-error')).toHaveCount(0)
+  await expect(page.getByTestId('profile-unsaved')).toHaveCount(0)
+  await expect(page.getByTestId('profile-save-prefs')).toBeDisabled()
+  expect(profile.interests).toEqual(['Cafes', 'Outdoors'])
+  expect(attempts).toEqual([confirmedUpdate, confirmedUpdate])
 })

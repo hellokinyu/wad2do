@@ -36,6 +36,7 @@ Area matching ignores case and surrounding spaces, but uses the same label: Juro
 - Filters run first. Best match ranks their results; catalogue order and either price sort override personalisation. Clear filters restores Best match.
 - Above the grid, a live sort summary shows Best match with a saved-preferences explanation, the chosen price sort, or catalogue order. Missing, empty or failed preferences show catalogue order without claiming personalisation.
 - Returning from Profile remounts Activities and reads the latest saved preferences. Changing signed-in accounts also reloads preferences; an older account's response cannot replace the current profile.
+- Profile confirms one updated row before showing a save confirmation. A zero-row update shows an error, keeps the draft unsaved and allows a retry.
 - No profile or empty preferences preserve catalogue order. A failed profile request shows a warning and retry button while browsing remains available in catalogue order for Best match.
 
 ## Expected examples
