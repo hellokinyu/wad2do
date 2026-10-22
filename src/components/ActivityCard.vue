@@ -1,13 +1,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import {
-  formatPrice,
-  formatDuration,
-  getSetting,
-  getRating,
-  getWeeklyHours,
-} from '@/lib/activityDisplay'
+import { formatPrice, formatDuration, getSetting } from '@/lib/activityDisplay'
 
 // Information supplied by ActivitiesView.
 const props = defineProps({
@@ -18,14 +12,6 @@ const props = defineProps({
   saved: {
     type: Boolean,
     default: false,
-  },
-  rating: {
-    type: Number,
-    default: null,
-  },
-  hoursToday: {
-    type: String,
-    default: null,
   },
   showActions: {
     type: Boolean,
@@ -40,12 +26,6 @@ const emit = defineEmits(['save', 'share'])
 const priceLabel = computed(() => formatPrice(props.activity.price_per_person))
 const duration = computed(() => formatDuration(props.activity.duration_min))
 const setting = computed(() => getSetting(props.activity.indoor))
-const ratingLabel = computed(() => getRating({ rating: props.rating ?? props.activity.rating }))
-const todayHours = computed(
-  () =>
-    props.hoursToday ??
-    getWeeklyHours(props.activity.opening_hours).rows.find((row) => row.isToday).hours,
-)
 const showSetting = computed(
   () => props.activity.category?.trim().toLowerCase() !== setting.value.toLowerCase(),
 )
@@ -111,10 +91,6 @@ watch(
             {{ activity.name }}
           </RouterLink>
         </h2>
-
-        <span v-if="ratingLabel" class="activity-rating">
-          <span aria-hidden="true">★</span> {{ ratingLabel }}
-        </span>
       </div>
 
       <p class="fw-semibold mb-2">
@@ -131,8 +107,6 @@ watch(
       <p class="text-secondary small mb-1">
         {{ activity.area || 'Area unavailable' }}
       </p>
-
-      <p class="text-secondary small mb-1">Today: {{ todayHours }}</p>
 
       <p class="text-secondary small mb-3">
         <span v-if="showSetting">
@@ -231,12 +205,6 @@ watch(
 
 .activity-name a:hover {
   text-decoration: underline;
-}
-
-.activity-rating {
-  white-space: nowrap;
-  color: #946200;
-  font-size: 0.875rem;
 }
 
 .save-button {

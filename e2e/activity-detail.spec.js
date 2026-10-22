@@ -165,7 +165,8 @@ test('card opens its details and Back restores the current search', async ({ pag
   await expect(page.getByTestId('activity-description')).toHaveText(pottery.description)
   await expect(page.getByTestId('activity-card')).not.toContainText(pottery.price_note)
   await expect(page.getByTestId('activity-card')).toContainText('2 h')
-  await expect(page.getByTestId('activity-card')).toContainText('Today: 10:00–18:00')
+  await expect(page.getByTestId('activity-card')).not.toContainText('Today:')
+  await expect(page.getByTestId('activity-card')).not.toContainText('4.7')
   await page.getByRole('link', { name: 'Pottery Workshop', exact: true }).click()
 
   await expect(page.getByTestId('activity-detail-name')).toHaveText('Pottery Workshop')
