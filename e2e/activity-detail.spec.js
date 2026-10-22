@@ -88,6 +88,8 @@ async function mockBackend(page, options = {}) {
     const method = request.method()
     const headers = { 'access-control-allow-origin': '*' }
 
+    if (table === 'profiles') return route.fulfill({ headers, json: [] })
+
     if (table === 'activities') {
       if (id && state.failures > 0) {
         state.failures -= 1

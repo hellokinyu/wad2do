@@ -9,6 +9,7 @@ test('landing page loads', async ({ page }) => {
 
 test('navbar goes to the Activities page', async ({ page }) => {
   await signInMockUser(page)
+  await page.route('**/rest/v1/profiles?*', (route) => route.fulfill({ json: [] }))
   await page.route('**/rest/v1/activities*', (route) => route.fulfill({ json: [] }))
   // The landing page hides the app navbar; navigate from a page that shows it.
   await page.goto('/activities')

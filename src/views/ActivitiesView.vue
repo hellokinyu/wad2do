@@ -1,9 +1,16 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import ActivityCard from '@/components/ActivityCard.vue'
 import { getPrice } from '@/lib/activityDisplay'
+import { rankActivities } from '@/lib/activityRanking'
+import { useAuth } from '@/composables/useAuth'
+
+const { user } = useAuth()
+const profile = ref(null)
+const profileLoading = ref(true)
+const profileError = ref('')
 
 // Keep the original records so clearing filters can show every activity again.
 const activities = ref([])
@@ -24,7 +31,10 @@ const selectedCategory = ref(String(previousFilters.category ?? ''))
 const selectedSetting = ref(String(previousFilters.setting ?? ''))
 const selectedArea = ref(String(previousFilters.area ?? ''))
 const selectedPrice = ref(String(previousFilters.price ?? ''))
-const sortBy = ref(String(previousFilters.sort ?? 'catalogue'))
+const allowedSorts = ['best-match', 'catalogue', 'price-asc', 'price-desc']
+const sortBy = ref(
+  allowedSorts.includes(previousFilters.sort) ? previousFilters.sort : 'best-match',
+)
 const filtersOpen = ref(false)
 
 onBeforeRouteLeave(() => {
@@ -63,6 +73,26 @@ const priceRanges = [
   { value: '100-plus', label: 'S$100 and above', min: 100, max: Infinity },
 ]
 
+const hasRankingPreferences = computed(() =>
+  Boolean(
+    (Array.isArray(profile.value?.interests) && profile.value.interests.length) ||
+    priceRanges.some((range) => range.value !== 'free' && range.value === profile.value?.budget) ||
+    profile.value?.home_area?.trim(),
+  ),
+)
+
+const sortSummary = computed(() => {
+  if (sortBy.value === 'best-match' && !hasRankingPreferences.value) {
+    return 'Showing catalogue order'
+  }
+  return {
+    'best-match': 'Sorted by Best match',
+    catalogue: 'Showing catalogue order',
+    'price-asc': 'Sorted by Price: low to high',
+    'price-desc': 'Sorted by Price: high to low',
+  }[sortBy.value]
+})
+
 // Search logic
 function searchText(value) {
   return String(value ?? '')
@@ -96,6 +126,10 @@ const filteredActivities = computed(() => {
     return matchesSearch && matchesCategory && matchesSetting && matchesArea && matchesPrice
   })
 
+  if (sortBy.value === 'best-match' && profile.value) {
+    return rankActivities(matches, profile.value)
+  }
+
   if (sortBy.value === 'price-asc' || sortBy.value === 'price-desc') {
     matches.sort((a, b) => {
       const first = getPrice(a.price_per_person)
@@ -117,7 +151,7 @@ const hasFilters = computed(() =>
     selectedSetting.value ||
     selectedArea.value ||
     selectedPrice.value ||
-    sortBy.value !== 'catalogue',
+    sortBy.value !== 'best-match',
   ),
 )
 
@@ -127,8 +161,36 @@ function clearFilters() {
   selectedSetting.value = ''
   selectedArea.value = ''
   selectedPrice.value = ''
-  sortBy.value = 'catalogue'
+  sortBy.value = 'best-match'
 }
+
+async function loadProfile() {
+  const userId = user.value?.id
+  profile.value = null
+  profileError.value = ''
+  profileLoading.value = true
+
+  try {
+    if (!userId) return
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('interests, budget, home_area')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (user.value?.id !== userId) return
+    if (error) throw error
+    profile.value = data
+  } catch {
+    if (user.value?.id === userId) {
+      profileError.value = "Couldn't load your preferences. Best match is using catalogue order."
+    }
+  } finally {
+    if (user.value?.id === userId) profileLoading.value = false
+  }
+}
+
+watch(() => user.value?.id, loadProfile, { immediate: true })
 
 async function loadActivities() {
   loading.value = true
@@ -299,6 +361,7 @@ onMounted(loadActivities)
         <div class="col-12 col-md-4">
           <label for="sort-filter" class="form-label">Sort by</label>
           <select id="sort-filter" v-model="sortBy" class="form-select" data-testid="sort-filter">
+            <option value="best-match">Best match</option>
             <option value="catalogue">Catalogue order</option>
             <option value="price-asc">Price: low to high</option>
             <option value="price-desc">Price: high to low</option>
@@ -318,7 +381,30 @@ onMounted(loadActivities)
       </div>
     </section>
 
-    <div v-if="loading" class="py-5 text-center" role="status" data-testid="activities-loading">
+    <div
+      v-if="profileError"
+      class="alert alert-warning"
+      role="alert"
+      data-testid="preferences-error"
+    >
+      <p>{{ profileError }}</p>
+      <button
+        type="button"
+        class="btn btn-outline-dark"
+        data-testid="preferences-retry"
+        :disabled="profileLoading"
+        @click="loadProfile"
+      >
+        Try again
+      </button>
+    </div>
+
+    <div
+      v-if="loading || profileLoading"
+      class="py-5 text-center"
+      role="status"
+      data-testid="activities-loading"
+    >
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
       Loading activities…
     </div>
@@ -345,6 +431,16 @@ onMounted(loadActivities)
     </p>
 
     <template v-else>
+      <div class="mb-3" role="status" data-testid="activities-sort-summary">
+        <p class="fw-semibold mb-0">{{ sortSummary }}</p>
+        <p
+          v-if="sortBy === 'best-match' && hasRankingPreferences"
+          class="text-secondary small mb-0"
+          data-testid="activities-sort-description"
+        >
+          Based on your saved interests, budget and home area.
+        </p>
+      </div>
       <p class="text-secondary mb-3" role="status" data-testid="activities-count">
         Showing {{ filteredActivities.length }} of {{ activities.length }} activities
       </p>
