@@ -1,5 +1,6 @@
 import { ref, watch, onUnmounted } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { readSavedStatus, setActivitySaved } from '@/lib/activityFavourites'
 
 // The page passes its activity ref; all writes use the authenticated user's ID.
 export function useActivityActions(activity) {
@@ -42,18 +43,6 @@ export function useActivityActions(activity) {
     return user
   }
 
-  async function readSavedStatus(userId, activityId) {
-    const { data, error } = await supabase
-      .from('favourites')
-      .select('activity_id')
-      .eq('user_id', userId)
-      .eq('activity_id', activityId)
-      .maybeSingle()
-
-    if (error) throw error
-    return Boolean(data)
-  }
-
   function closeShare() {
     if (sharing.value) return
     groupRequest += 1
@@ -92,6 +81,7 @@ export function useActivityActions(activity) {
   async function toggleSaved() {
     if (!activity.value || saving.value) return
     const id = activity.value.id
+    const shouldSave = !saved.value
     // A delayed initial read must not overwrite the result of this click.
     savedRequest += 1
     saving.value = true
@@ -102,29 +92,11 @@ export function useActivityActions(activity) {
       const user = await getUser(true)
       if (!user) return
 
-      // Check the database first, including changes made from another tab.
-      const isSaved = await readSavedStatus(user.id, id)
-      if (isSaved) {
-        const { data, error } = await supabase
-          .from('favourites')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('activity_id', id)
-          .select('activity_id')
-
-        if (error) throw error
-        if (!data?.length) throw new Error('No favourite was removed')
-      } else {
-        const { error } = await supabase
-          .from('favourites')
-          .insert({ user_id: user.id, activity_id: id })
-
-        if (error && error.code !== '23505') throw error
-      }
+      const isSaved = await setActivitySaved(user.id, id, shouldSave)
 
       if (!disposed && activity.value?.id === id) {
-        saved.value = !isSaved
-        announce(isSaved ? 'Removed from saved activities.' : 'Activity saved.')
+        saved.value = isSaved
+        announce(isSaved ? 'Activity saved.' : 'Removed from saved activities.')
       }
     } catch {
       if (!disposed && activity.value?.id === id) {

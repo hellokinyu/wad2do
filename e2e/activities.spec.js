@@ -4,6 +4,7 @@ import { mockUser, signInMockUser } from './helpers/auth'
 test.beforeEach(async ({ page }) => {
   await signInMockUser(page)
   await page.route('**/rest/v1/profiles?*', (route) => route.fulfill({ json: [] }))
+  await page.route('**/rest/v1/favourites?*', (route) => route.fulfill({ json: [] }))
 })
 
 const activities = [
@@ -78,7 +79,7 @@ test('demo searches, combines filters and clears them', async ({ page }) => {
   await expect(cards).toHaveCount(4)
   await expect(page.getByTestId('activities-sort-summary')).toHaveText('Showing catalogue order')
   await expect(page.getByTestId('activities-sort-description')).toHaveCount(0)
-  await expect(page.getByTestId('activity-save')).toHaveCount(0)
+  await expect(page.getByTestId('activity-save')).toHaveCount(4)
   await expect(page.getByTestId('activity-share')).toHaveCount(0)
   await expect(cards.getByRole('link')).toHaveCount(8)
 
@@ -123,7 +124,7 @@ test('demo searches, combines filters and clears them', async ({ page }) => {
   await page.getByTestId('activity-search').fill('marina')
   await expect(cards).toHaveCount(1)
   await expect(cards).toContainText('Free')
-  await expect(page.getByTestId('activities-count')).toHaveText('Showing 1 of 4 activities')
+  await expect(page.getByTestId('activities-count')).toHaveText('Showing 1–1 of 1 activities')
 
   await page.getByTestId('clear-filters').click()
   await page.getByTestId('activity-search').fill('cafe')
@@ -294,11 +295,102 @@ test('search includes activities in later database batches', async ({ page }) =>
 
   await mockActivities(page, catalogue)
   await page.goto('/activities')
-  await expect(page.getByTestId('activities-count')).toHaveText('Showing 201 of 201 activities')
+  await expect(page.getByTestId('activities-count')).toHaveText('Showing 1–20 of 201 activities')
 
   await page.getByTestId('activity-search').fill('Last batch')
   await expect(page.getByTestId('activity-card')).toHaveCount(1)
   await expect(page.getByTestId('activity-card')).toContainText('Last batch workshop')
+  await expect(page.getByTestId('activities-pagination')).toHaveCount(0)
+})
+
+const paginatedCatalogue = Array.from({ length: 45 }, (_, index) => ({
+  ...activities[3],
+  id: 'page-' + index,
+  name: 'Workshop ' + index,
+  price_per_person: 45 - index,
+}))
+
+for (const count of [40, 45]) {
+  test(`pagination shows 20 per page with ${count} activities on a phone`, async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 })
+    const records = paginatedCatalogue.slice(0, count)
+    await mockActivities(page, records)
+    await page.goto('/activities')
+
+    const names = page.getByTestId('activity-name-link')
+    const pagination = page.getByRole('navigation', { name: 'Activity pages' })
+    await expect(names).toHaveText(records.slice(0, 20).map((activity) => activity.name))
+    await expect(pagination.getByRole('button', { name: 'Previous' })).toBeDisabled()
+    await expect(pagination.getByRole('button', { name: 'Page 1', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    await pagination.getByRole('button', { name: 'Next' }).click()
+    await expect(names).toHaveText(records.slice(20, 40).map((activity) => activity.name))
+    await expect(page.getByTestId('activities-count')).toBeFocused()
+    await expect(page.getByTestId('activities-count')).toHaveText(
+      `Showing 21–40 of ${count} activities`,
+    )
+    const lastPage = Math.ceil(count / 20)
+    const lastStart = (lastPage - 1) * 20
+    await pagination.getByRole('button', { name: `Page ${lastPage}`, exact: true }).click()
+    await expect(names).toHaveText(records.slice(lastStart).map((activity) => activity.name))
+    await expect(page.getByTestId('activities-count')).toHaveText(
+      `Showing ${lastStart + 1}–${count} of ${count} activities`,
+    )
+    await expect(pagination.getByRole('button', { name: 'Next' })).toBeDisabled()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(375)
+    await pagination.getByRole('button', { name: 'Previous' }).click()
+    await expect(names).toHaveText(
+      records.slice(lastStart - 20, lastStart).map((activity) => activity.name),
+    )
+    await pagination.getByRole('button', { name: 'Page 1', exact: true }).click()
+    await expect(names.first()).toHaveText(records[0].name)
+  })
+}
+
+test('pagination survives a detail visit and resets for search, filters and sorting', async ({
+  page,
+}) => {
+  await mockActivities(page, paginatedCatalogue)
+  await page.route('**/rest/v1/activities?*id=eq.*', (route) =>
+    route.fulfill({ json: paginatedCatalogue[20] }),
+  )
+  await page.goto('/activities')
+  const pagination = page.getByRole('navigation', { name: 'Activity pages' })
+  const names = page.getByTestId('activity-name-link')
+  await pagination.getByRole('button', { name: 'Page 2', exact: true }).click()
+  await names.first().click()
+  await expect(page).toHaveURL('/activities/page-20')
+  await page.goBack()
+  await expect(names.first()).toHaveText('Workshop 20')
+  await expect(page.getByTestId('activities-count')).toHaveText('Showing 21–40 of 45 activities')
+
+  await page.getByTestId('sort-filter').selectOption('price-asc')
+  await expect(names).toHaveText(
+    paginatedCatalogue
+      .slice()
+      .reverse()
+      .slice(0, 20)
+      .map((activity) => activity.name),
+  )
+  await pagination.getByRole('button', { name: 'Next' }).click()
+  await page.getByTestId('price-filter').selectOption('under-20')
+  await expect(names).toHaveCount(19)
+  await expect(pagination).toHaveCount(0)
+  await expect(page.getByTestId('activities-count')).toHaveText('Showing 1–19 of 19 activities')
+
+  await page.getByTestId('clear-filters').click()
+  await pagination.getByRole('button', { name: 'Page 3', exact: true }).click()
+  await page.getByTestId('activity-search').fill('Workshop 0')
+  await expect(names).toHaveText(['Workshop 0'])
+  await expect(pagination).toHaveCount(0)
+  await page.getByTestId('activity-search').fill('no match')
+  await expect(page.getByTestId('activities-no-results')).toBeVisible()
+  await expect(page.getByTestId('activities-count')).toHaveText('Showing 0–0 of 0 activities')
+  await page.getByTestId('empty-clear-filters').click()
+  await expect(names.first()).toHaveText('Workshop 0')
+  await expect(pagination.getByRole('button', { name: 'Previous' })).toBeDisabled()
 })
 
 test('Best match reads only the signed-in profile and still respects filters and other sorts', async ({
