@@ -523,9 +523,9 @@ async function extendDateRange() {
 async function onPlan() {
   planning.value = true
   try {
-    // TODO: call your Plan function here (votes + chosen slot + budget + OneMap travel time)
-    // and save the result to the itineraries table.
-    await new Promise((resolve) => setTimeout(resolve, 500)) // placeholder, remove later
+    // Delete the group's old plan, so the Itinerary tab builds a fresh one for the new time
+    const { error } = await supabase.from('itineraries').delete().eq('group_id', groupId.value)
+    if (error) throw error
     router.push('/groups/' + groupId.value + '/itinerary') // open the Itinerary tab
   } catch (err) {
     errorMsg.value = "Couldn't build the plan"
