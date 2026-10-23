@@ -6,13 +6,8 @@ import { supabase } from '@/lib/supabase'
 const itinerary = ref(null)
 const budget = computed(() => group.value?.budget_per_person ?? 0)
 // Fake group votes for now. Later: group_activities joined with activities.
-const votedActivities = ref([
-  { activity_id: 'a1', name: 'Gardens by the Bay', image_url: '', cost: 12, indoor: false, closes: '21:00', duration_min: 120, votes: 5 },
-  { activity_id: 'a2', name: 'Lau Pa Sat', image_url: '', cost: 15, indoor: true, closes: '22:00', duration_min: 60, votes: 4 },
-  { activity_id: 'a3', name: 'ArtScience Museum', image_url: '', cost: 15, indoor: true, closes: '19:00', duration_min: 120, votes: 3 },
-  { activity_id: 'a4', name: 'National Gallery', image_url: '', cost: 20, indoor: true, closes: '19:00', duration_min: 90, votes: 2 },
-  { activity_id: 'a5', name: 'East Coast Park cycling', image_url: '', cost: 8, indoor: false, closes: '23:00', duration_min: 120, votes: 2 },
-])
+// The group's voted activities (loaded from Supabase by loadVotes)
+const votedActivities = ref([])
 
 // Add up the cost of every stop
 const totalCost = computed(() => {
@@ -151,7 +146,6 @@ const displayStops = computed(() => {
   })
 })
 
-
 // Returns a list of warning messages for one stop
 function getStopWarnings(stop) {
   const warnings = []
@@ -220,10 +214,17 @@ async function saveChanges() {
       reason: s.reason,
     }))
 
-    const { error } = await supabase.from('itineraries').upsert(
-      { group_id: groupId, stops: stopsToSave, total_cost: totalCost.value, updated_by: userData.user.id },
-      { onConflict: 'group_id' },
-    )
+    const { error } = await supabase
+      .from('itineraries')
+      .upsert(
+        {
+          group_id: groupId,
+          stops: stopsToSave,
+          total_cost: totalCost.value,
+          updated_by: userData.user.id,
+        },
+        { onConflict: 'group_id' },
+      )
     if (error) throw error
     isEditing.value = false // only leave edit mode if it worked
   } catch (error) {
@@ -296,6 +297,49 @@ function useSavedPlan(saved) {
   itinerary.value = { date, total_cost: saved.total_cost, stops }
 }
 
+// The closing time on the plan's day, as 'HH:MM'. date is '2026-10-24'.
+function getClosesOn(openingHours, date) {
+  const day = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' }) // 'Sat'
+  const hours = openingHours?.[day]
+  if (!hours) return '23:59' // no info: assume it's open
+  if (hours.closed) return '00:00' // closed all day, so it never fits
+  if (hours.close) return hours.close
+  return '23:59' // open 24 hours
+}
+
+// Load this group's votes, add them up per activity, and keep the ones with more ups than downs
+async function loadVotes() {
+  const { data, error } = await supabase
+    .from('votes')
+    .select(
+      'activity_id, value, activities(name, image_url, price_per_person, indoor, opening_hours, duration_min)',
+    )
+    .eq('group_id', groupId)
+  if (error) throw error
+
+  const date = group.value?.chosen_start ? toSgKey(group.value.chosen_start).slice(0, 10) : ''
+  const byActivity = {} // activity_id -> the activity, with its vote total
+  for (const vote of data) {
+    if (!byActivity[vote.activity_id]) {
+      const a = vote.activities
+      if (!a) continue
+      byActivity[vote.activity_id] = {
+        activity_id: vote.activity_id,
+        name: a.name,
+        image_url: a.image_url || '',
+        cost: a.price_per_person ?? 0,
+        indoor: a.indoor,
+        closes: getClosesOn(a.opening_hours, date),
+        duration_min: a.duration_min || 60,
+        votes: 0,
+      }
+    }
+    byActivity[vote.activity_id].votes += vote.value
+  }
+
+  votedActivities.value = Object.values(byActivity).filter((a) => a.votes > 0)
+}
+
 // Fill the chosen time with the most-voted activities that fit the time, opening hours and budget
 function buildPlan() {
   if (!group.value?.chosen_start) {
@@ -311,7 +355,7 @@ function buildPlan() {
   let current = toMinutes(start.slice(11))
   let spent = 0
 
-    for (const activity of sorted) {
+  for (const activity of sorted) {
     const finish = current + activity.duration_min
     if (finish > endMinutes) continue // runs past the chosen end time
     if (toTime(finish) > activity.closes) continue // place closes before we'd finish
@@ -340,6 +384,7 @@ async function loadPage() {
   errorMessage.value = ''
   try {
     await loadGroup()
+    await loadVotes()
     const saved = await loadSavedPlan()
     if (saved) {
       useSavedPlan(saved) // the group already has a plan: show it
@@ -362,7 +407,9 @@ onMounted(loadPage)
   <div data-testid="group-itinerary-tab">
     <h2 class="h4">Itinerary</h2>
     <p v-if="loading" class="text-muted">Loading plan...</p>
-    <p v-else-if="errorMessage" class="text-danger" data-testid="itinerary-error">{{ errorMessage }}</p>
+    <p v-else-if="errorMessage" class="text-danger" data-testid="itinerary-error">
+      {{ errorMessage }}
+    </p>
 
     <!-- No plan yet -->
     <div v-else-if="!itinerary" class="alert alert-secondary" data-testid="itinerary-empty">
@@ -408,7 +455,12 @@ onMounted(loadPage)
           Edit
         </button>
         <template v-else>
-          <button class="btn btn-primary" :disabled="saving" data-testid="itinerary-save" @click="saveChanges">
+          <button
+            class="btn btn-primary"
+            :disabled="saving"
+            data-testid="itinerary-save"
+            @click="saveChanges"
+          >
             {{ saving ? 'Saving...' : 'Save changes' }}
           </button>
           <button
@@ -532,7 +584,7 @@ onMounted(loadPage)
           </div>
         </li>
       </ol>
-        <div v-if="notInPlan.length" class="mt-4" data-testid="itinerary-not-in-plan">
+      <div v-if="notInPlan.length" class="mt-4" data-testid="itinerary-not-in-plan">
         <h3 class="h6">Also voted for, but not in the plan</h3>
         <ul class="list-group">
           <li
