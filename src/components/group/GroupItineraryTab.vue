@@ -266,6 +266,36 @@ function addStop(activity) {
   recalculateTimes()
 }
 
+// Throw away the current plan and build a new one from the chosen time.
+// It starts edit mode first, so Discard can still bring back the saved plan.
+function replan() {
+  startEditing()
+  buildPlan()
+  if (!itinerary.value) return
+  dayStart.value = itinerary.value.stops[0]?.start || dayStart.value
+}
+
+// Load this group's saved plan, or null if nobody has saved one yet
+async function loadSavedPlan() {
+  const { data, error } = await supabase
+    .from('itineraries')
+    .select('stops, total_cost')
+    .eq('group_id', groupId)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+// Turn saved stops back into full stops by adding each activity's details (name, photo...)
+function useSavedPlan(saved) {
+  const stops = saved.stops.map((s) => {
+    const activity = votedActivities.value.find((a) => a.activity_id === s.activity_id) || {}
+    return { ...activity, ...s }
+  })
+  const date = group.value?.chosen_start ? toSgKey(group.value.chosen_start).slice(0, 10) : ''
+  itinerary.value = { date, total_cost: saved.total_cost, stops }
+}
+
 // Fill the chosen time with the most-voted activities that fit the time, opening hours and budget
 function buildPlan() {
   if (!group.value?.chosen_start) {
@@ -310,7 +340,12 @@ async function loadPage() {
   errorMessage.value = ''
   try {
     await loadGroup()
-    buildPlan()
+    const saved = await loadSavedPlan()
+    if (saved) {
+      useSavedPlan(saved) // the group already has a plan: show it
+    } else {
+      buildPlan() // no plan yet: make one from the chosen time
+    }
     loadWeather()
   } catch (error) {
     console.log(error)
@@ -382,6 +417,9 @@ onMounted(loadPage)
             @click="discardChanges"
           >
             Discard
+          </button>
+          <button class="btn btn-outline-warning" data-testid="itinerary-replan" @click="replan">
+            Re-plan
           </button>
         </template>
         <div v-if="isEditing" class="d-flex align-items-center gap-2 ms-auto">
