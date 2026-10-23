@@ -528,6 +528,7 @@ async function onPlan() {
     if (error) throw error
     router.push('/groups/' + groupId.value + '/itinerary') // open the Itinerary tab
   } catch (err) {
+    console.log(err)
     errorMsg.value = "Couldn't build the plan"
   } finally {
     planning.value = false
