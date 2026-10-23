@@ -1,5 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { supabase } from '@/lib/supabase'
 
 // Fake data for now. Later this will come from the itineraries table.
 // Each stop has the same fields we'll save: activity_id, start, end, cost, reason
@@ -100,6 +102,29 @@ const endTime = computed(() => {
 
 const isOverBudget = computed(() => totalCost.value > budget.value)
 
+// ----- The group (real data from Supabase) -----
+const route = useRoute()
+const groupId = route.params.id // the :id in /groups/:id/itinerary
+
+const group = ref(null) // { chosen_start, chosen_end, budget_per_person }
+const loading = ref(true)
+const errorMessage = ref('')
+
+async function loadGroup() {
+  const { data, error } = await supabase
+    .from('groups')
+    .select('chosen_start, chosen_end, budget_per_person')
+    .eq('id', groupId)
+    .maybeSingle()
+  if (error) throw error
+  group.value = data
+}
+
+// Supabase timestamp (UTC) -> '2026-10-25T10:00' in Singapore time (UTC+8)
+function toSgKey(timestamp) {
+  return new Date(new Date(timestamp).getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 16)
+}
+
 // ----- Weather -----
 const weather = ref(null) // the forecast for the plan's date, or null if we don't have one
 const weatherLoading = ref(true)
@@ -176,7 +201,6 @@ const displayStops = computed(() => {
   })
 })
 
-onMounted(loadWeather)
 
 // Returns a list of warning messages for one stop
 function getStopWarnings(stop) {
@@ -248,14 +272,34 @@ function moveStop(index, direction) {
   stops[other] = temp
   recalculateTimes()
 }
+// Runs when the tab opens: the group first, then the weather (which needs the date)
+async function loadPage() {
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    await loadGroup()
+    console.log('group:', group.value)
+    console.log('chosen start in SG time:', group.value?.chosen_start && toSgKey(group.value.chosen_start))
+    loadWeather()
+  } catch (error) {
+    console.log(error)
+    errorMessage.value = "Couldn't load the plan. Please try again."
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadPage)
 </script>
 
 <template>
   <div data-testid="group-itinerary-tab">
     <h2 class="h4">Itinerary</h2>
+    <p v-if="loading" class="text-muted">Loading plan...</p>
+    <p v-else-if="errorMessage" class="text-danger" data-testid="itinerary-error">{{ errorMessage }}</p>
 
     <!-- No plan yet -->
-    <div v-if="!itinerary" class="alert alert-secondary" data-testid="itinerary-empty">
+    <div v-else-if="!itinerary" class="alert alert-secondary" data-testid="itinerary-empty">
       No plan yet. Pick a time on the Availability tab, then press Plan.
     </div>
 
