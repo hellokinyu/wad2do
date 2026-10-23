@@ -10,6 +10,7 @@ import ActivitiesView from '@/views/ActivitiesView.vue'
 import ActivityDetailView from '@/views/ActivityDetailView.vue'
 import SubmitActivityView from '@/views/SubmitActivityView.vue'
 import AdminReviewView from '@/views/AdminReviewView.vue'
+import AdminAccessView from '@/views/AdminAccessView.vue'
 import ProfileView from '@/views/ProfileView.vue'
 import GroupsView from '@/views/GroupsView.vue'
 import GroupDetailView from '@/views/GroupDetailView.vue'
@@ -54,6 +55,12 @@ const routes = [
     path: '/admin/submissions',
     name: 'admin-review',
     component: AdminReviewView,
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/admin/access',
+    name: 'admin-access',
+    component: AdminAccessView,
     meta: { requiresAuth: true },
   },
 
@@ -84,13 +91,15 @@ const router = createRouter({
   },
 })
 
-const { user, initializeAuth } = useAuth()
+const { user, isAdmin, initializeAuth, loadAdminStatus } = useAuth()
 
 router.beforeEach(async (to) => {
   // Wait for the saved session before deciding whether to redirect after a refresh.
   await initializeAuth()
   if (to.meta.requiresAuth && !user.value) return { name: 'login' }
   if (to.meta.guestOnly && user.value) return { name: 'landing' }
+  if (to.name !== 'admin-access') await loadAdminStatus()
+  if (to.meta.requiresAdmin && !isAdmin.value) return { name: 'admin-access' }
 })
 
 // Also leave a protected page when the user signs out in another tab.
@@ -101,7 +110,5 @@ const stopWatching = watch(user, (currentUser) => {
 })
 
 if (import.meta.hot) import.meta.hot.dispose(stopWatching)
-
-// TODO: add an admin role check once the team's trusted role storage is verified.
 
 export default router

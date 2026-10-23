@@ -56,11 +56,10 @@ other open protected tabs. Login/signup redirect authenticated visitors home.
 If Supabase clears the local session while returning a server logout error, the
 login page displays that error so it is not lost during the redirect.
 
-The admin route currently checks authentication only. The repository does not
-define a trusted admin role field, so an admin role restriction has not been
-invented. Confirm the team's role storage before implementing admin authorization.
-Frontend route guards control navigation; database authorization remains the job
-of the project's existing RLS policies.
+The admin route also checks `profiles.is_admin`, and the navbar shows Admin only
+for admin accounts. Roles are checked on navigation. Frontend guards control
+navigation; database permissions and review functions must also be installed
+using the [admin setup instructions](admin-review.md).
 
 ## Profile creation
 
@@ -131,9 +130,8 @@ allowed to UPDATE their profile to save preferences.
 
 Existing automated tests mock Supabase, so they do not verify live email delivery,
 redirect allowlists, the profile trigger, password rules, or RLS configuration.
-The E2E files and Playwright configuration were left unchanged for their owner.
-The signup test's redirect assertion currently expects `/login`; it needs to be
-updated to `/onboarding` to match the new signup flow.
+Signup tests expect confirmation links to return to `/onboarding`. Profile tests
+allow the additional read-only admin role check during navigation.
 
 References: [Signup](https://supabase.com/docs/reference/javascript/auth-signup),
 [auth events](https://supabase.com/docs/reference/javascript/auth-onauthstatechange),
