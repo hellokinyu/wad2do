@@ -1,7 +1,7 @@
 <template>
   <!-- Root element: the starter file's data-testid is kept for Playwright -->
   <div data-testid="group-availability-tab">
-    <h2 class="h4">Availability</h2>
+    <h2 class="h4">Availability 🗓️</h2>
 
     <!-- LOADING: spinner controlled by the `loading` variable with v-if (handbook "Shared on every page") -->
     <div v-if="loading" class="text-center py-5" data-testid="avail-loading">
@@ -91,16 +91,26 @@
               :class="{
                 'slot-free': mode === 'mine' && mySlots[makeKey(day, t)],
                 'slot-picked': mode === 'heatmap' && isInPick(makeKey(day, t)),
+                'slot-all': mode === 'heatmap' && isEveryoneFree(day, t),
               }"
               :style="cellStyle(day, t)"
               :data-testid="'slot-' + makeKey(day, t)"
               @mousedown.prevent="onCellDown(day, t)"
               @mouseenter="onCellEnter(day, t)"
-            ></div>
+            >
+              {{ slotSticker(day, t) }}
+            </div>
           </div>
         </div>
       </div>
       <p v-if="saving" class="text-muted small mt-1">Saving...</p>
+
+      <!-- LEGEND: explains the heatmap colours -->
+      <div v-if="mode === 'heatmap'" class="small text-muted d-flex align-items-center gap-2 mt-2">
+        <span>Nobody free</span>
+        <span class="legend-bar"></span>
+        <span>Everyone free 🎉</span>
+      </div>
 
       <!-- HEATMAP: hover/tap info, e.g. "4 of 5 free" and who is missing -->
       <div v-if="mode === 'heatmap'">
@@ -170,21 +180,21 @@ const errorMsg = ref('')
 const saving = ref(false)
 const planning = ref(false)
 
-const userId = ref(null)          // current logged-in user
-const group = ref({})             // start_date, end_date, chosen_start, chosen_end
-const members = ref([])           // [{ id, name }]
-const allSlots = ref([])          // everyone's saved slots: [{ user_id, key }]
-const mySlots = ref({})           // my slots as an object: { "2026-10-17T14:00": true }
+const userId = ref(null) // current logged-in user
+const group = ref({}) // start_date, end_date, chosen_start, chosen_end
+const members = ref([]) // [{ id, name }]
+const allSlots = ref([]) // everyone's saved slots: [{ user_id, key }]
+const mySlots = ref({}) // my slots as an object: { "2026-10-17T14:00": true }
 
-const mode = ref('mine')          // 'mine' | 'heatmap'
-const selectedDay = ref(null)     // which day is shown on phones
-const hoveredKey = ref(null)      // slot being hovered/tapped in the heatmap
-const pickStart = ref(null)       // first slot picked on the heatmap
-const pickEnd = ref(null)         // second slot picked on the heatmap
+const mode = ref('mine') // 'mine' | 'heatmap'
+const selectedDay = ref(null) // which day is shown on phones
+const hoveredKey = ref(null) // slot being hovered/tapped in the heatmap
+const pickStart = ref(null) // first slot picked on the heatmap
+const pickEnd = ref(null) // second slot picked on the heatmap
 
 // dragging state for "tap or drag to mark free slots"
 const isDragging = ref(false)
-const paintValue = ref(true)      // true = marking free, false = unmarking
+const paintValue = ref(true) // true = marking free, false = unmarking
 
 // ---------- slot keys and time helpers ----------
 // A slot is identified by a string like "2026-10-17T14:00" (Singapore time).
@@ -216,7 +226,10 @@ function formatTime(t) {
 }
 function formatDay(day) {
   return new Date(day + 'T00:00:00Z').toLocaleDateString('en-SG', {
-    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
   })
 }
 // "Sat 18 Oct, 2:00pm to 8:00pm" from two timestamps
@@ -224,11 +237,21 @@ function formatRange(startTs, endTs) {
   const s = new Date(startTs)
   const e = new Date(endTs)
   const day = s.toLocaleDateString('en-SG', {
-    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Singapore',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'Asia/Singapore',
   })
   const t = (d) =>
-    d.toLocaleTimeString('en-SG', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Singapore' })
-      .replace(' ', '').toLowerCase()
+    d
+      .toLocaleTimeString('en-SG', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: 'Asia/Singapore',
+      })
+      .replace(' ', '')
+      .toLowerCase()
   return day + ', ' + t(s) + ' to ' + t(e)
 }
 
@@ -267,11 +290,26 @@ const freeBySlot = computed(() => {
 function freeCount(day, t) {
   return (freeBySlot.value[makeKey(day, t)] || []).length
 }
-// Darker green = more members free
+// Darker colour = more members free. Slots with at least 1 person get a minimum tint (0.2)
+// so a single free person is still visible, instead of looking empty.
 function cellStyle(day, t) {
   if (mode.value !== 'heatmap') return {}
-  const ratio = freeCount(day, t) / (members.value.length || 1)
-  return { backgroundColor: 'rgba(25, 135, 84, ' + ratio + ')' }
+  const n = freeCount(day, t)
+  if (n === 0) return {}
+  const ratio = n / (members.value.length || 1)
+  return { backgroundColor: 'rgba(25, 135, 84, ' + (0.2 + 0.8 * ratio) + ')' }
+}
+// True when ALL members are free at this slot (used for the glow and the party sticker)
+function isEveryoneFree(day, t) {
+  return members.value.length > 0 && freeCount(day, t) === members.value.length
+}
+// Which emoji sticker (if any) to show inside a slot
+function slotSticker(day, t) {
+  if (mode.value !== 'heatmap') return ''
+  if (isEveryoneFree(day, t)) return '🎉'
+  // when nobody fully overlaps, mark the best slot with a star
+  if (noOverlap.value && bestSlot.value && bestSlot.value.day === day && bestSlot.value.time === t) return '⭐'
+  return ''
 }
 // Info for the hovered slot: "4 of 5 free" + who is missing
 const inspect = computed(() => {
@@ -300,7 +338,9 @@ const bestSlot = computed(() => {
   return best
 })
 // True when everyone has answered but no slot has ALL members free
-const noOverlap = computed(() => allResponded.value && (!bestSlot.value || bestSlot.value.count < members.value.length))
+const noOverlap = computed(
+  () => allResponded.value && (!bestSlot.value || bestSlot.value.count < members.value.length)
+)
 
 // ---------- computed: labels ----------
 const chosenLabel = computed(() =>
@@ -336,11 +376,15 @@ async function loadAll() {
 
     // 2. the members and their display names
     const { data: gm, error: e2 } = await supabase
-      .from('group_members').select('user_id').eq('group_id', groupId.value)
+      .from('group_members')
+      .select('user_id')
+      .eq('group_id', groupId.value)
     if (e2) throw e2
     const ids = gm.map((m) => m.user_id)
     const { data: profs, error: e3 } = await supabase
-      .from('profiles').select('id, display_name').in('id', ids)
+      .from('profiles')
+      .select('id, display_name')
+      .in('id', ids)
     if (e3) throw e3
     members.value = ids.map((id) => {
       const p = profs.find((x) => x.id === id)
@@ -349,7 +393,9 @@ async function loadAll() {
 
     // 3. everyone's saved availability
     const { data: av, error: e4 } = await supabase
-      .from('availability').select('user_id, slot_start').eq('group_id', groupId.value)
+      .from('availability')
+      .select('user_id, slot_start')
+      .eq('group_id', groupId.value)
     if (e4) throw e4
     allSlots.value = av.map((r) => ({ user_id: r.user_id, key: fromDb(r.slot_start) }))
 
@@ -373,10 +419,10 @@ function onCellDown(day, t) {
   const key = makeKey(day, t)
   if (mode.value === 'mine') {
     isDragging.value = true
-    paintValue.value = !mySlots.value[key]   // first cell decides: mark or unmark
+    paintValue.value = !mySlots.value[key] // first cell decides: mark or unmark
     paint(key)
   } else {
-    hoveredKey.value = key                   // heatmap: show info + pick a range
+    hoveredKey.value = key // heatmap: show info + pick a range
     pickCell(key)
   }
 }
@@ -403,14 +449,21 @@ async function saveMySlots() {
   saving.value = true
   const keys = Object.keys(mySlots.value)
   const { error: delErr } = await supabase
-    .from('availability').delete().eq('group_id', groupId.value).eq('user_id', userId.value)
+    .from('availability')
+    .delete()
+    .eq('group_id', groupId.value)
+    .eq('user_id', userId.value)
   if (delErr) {
     errorMsg.value = "Couldn't save your availability"
     saving.value = false
     return
   }
   if (keys.length > 0) {
-    const rows = keys.map((k) => ({ group_id: groupId.value, user_id: userId.value, slot_start: toDb(k) }))
+    const rows = keys.map((k) => ({
+      group_id: groupId.value,
+      user_id: userId.value,
+      slot_start: toDb(k),
+    }))
     const { error: insErr } = await supabase.from('availability').insert(rows)
     if (insErr) errorMsg.value = "Couldn't save your availability"
   }
@@ -440,9 +493,11 @@ function pickCell(key) {
 async function confirmSlot() {
   const endKey = pickEnd.value || pickStart.value
   const chosen_start = toDb(pickStart.value)
-  const chosen_end = toDb(nextSlotKey(endKey))   // end of the last selected 30-min slot
+  const chosen_end = toDb(nextSlotKey(endKey)) // end of the last selected 30-min slot
   const { error } = await supabase
-    .from('groups').update({ chosen_start, chosen_end }).eq('id', groupId.value)
+    .from('groups')
+    .update({ chosen_start, chosen_end })
+    .eq('id', groupId.value)
   if (error) {
     errorMsg.value = "Couldn't save the chosen time"
     return
@@ -483,54 +538,115 @@ onMounted(loadAll)
 </script>
 
 <style scoped>
-/* Scroll sideways if the group has many days */
+/* Scroll sideways if the group has many days; the grid also fades in when it appears */
 .grid-scroll {
   overflow-x: auto;
   user-select: none;
+  animation: fade-in 0.4s ease;
 }
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
 /* CSS Grid: one narrow time column + one column per day (--cols is set from the template) */
 .avail-grid {
   display: grid;
   grid-template-columns: 3.5rem repeat(var(--cols), minmax(5rem, 1fr));
 }
+
 /* Phones: time column + the single selected day */
 @media (max-width: 767.98px) {
   .avail-grid {
     grid-template-columns: 3.5rem 1fr;
   }
 }
+
 .time-col,
 .day-col {
   display: flex;
   flex-direction: column;
 }
+
 .head-cell {
   height: 2rem;
   text-align: center;
   font-size: 0.8rem;
   font-weight: 600;
 }
-.time-cell,
-.slot {
-  height: 1.4rem;
-}
+
 .time-cell {
+  height: 1.5rem;
   font-size: 0.7rem;
   text-align: right;
   padding-right: 0.3rem;
 }
+
+/* Rounded, soft cells that smoothly change colour */
 .slot {
-  border: 1px solid #dee2e6;
+  height: 1.5rem;
+  margin: 1px;
+  border: 1px solid #eef0f2;
+  border-radius: 6px;
   background-color: #fff;
+  display: flex; /* centres the emoji sticker */
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  line-height: 1;
   cursor: pointer;
+  transition: background-color 0.25s ease, transform 0.1s ease, box-shadow 0.1s ease;
 }
-/* My availability: marked-as-free slots */
+/* Hover: the slot lifts up a little */
+.slot:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  position: relative;
+  z-index: 1;
+}
+
+/* Marking a slot free: it "pops" in */
 .slot-free {
   background-color: #198754;
+  animation: pop 0.25s ease;
 }
-/* Heatmap: slots in the range being picked */
+@keyframes pop {
+  0%   { transform: scale(0.6); }
+  60%  { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+/* Everyone free: gentle golden glow that pulses */
+.slot-all {
+  animation: glow 1.8s ease-in-out infinite;
+}
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
+  50%      { box-shadow: 0 0 8px 2px rgba(255, 193, 7, 0.9); }
+}
+
+/* The range being picked */
 .slot-picked {
   outline: 2px solid #0d6efd;
   outline-offset: -2px;
+}
+
+/* Legend colour bar (same green as the heatmap, light to dark) */
+.legend-bar {
+  width: 8rem;
+  height: 0.6rem;
+  border-radius: 99px;
+  background: linear-gradient(to right, rgba(25, 135, 84, 0.2), rgba(25, 135, 84, 1));
+}
+
+/* Accessibility: turn animations off for people who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .slot,
+  .slot-free,
+  .slot-all,
+  .grid-scroll {
+    animation: none;
+    transition: none;
+  }
 }
 </style>
