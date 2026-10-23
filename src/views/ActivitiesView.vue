@@ -1,15 +1,102 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import ActivityCard from '@/components/ActivityCard.vue'
 import { getPrice } from '@/lib/activityDisplay'
+import { rankActivities } from '@/lib/activityRanking'
+import { useAuth } from '@/composables/useAuth'
+import { setActivitySaved } from '@/lib/activityFavourites'
+
+const { user } = useAuth()
+const profile = ref(null)
+const profileLoading = ref(true)
+const profileError = ref('')
+const savedIds = ref(new Set())
+const savingIds = ref(new Set())
+const favouritesLoading = ref(true)
+const favouritesError = ref('')
+const saveError = ref('')
+const saveMessage = ref('')
+let favouritesRequest = 0
+let saveMessageTimer
+
+async function loadFavourites() {
+  const userId = user.value?.id
+  const request = ++favouritesRequest
+  savedIds.value = new Set()
+  savingIds.value = new Set()
+  favouritesLoading.value = true
+  favouritesError.value = ''
+  saveError.value = ''
+  saveMessage.value = ''
+  clearTimeout(saveMessageTimer)
+
+  try {
+    if (!userId) return
+    const { data, error } = await supabase
+      .from('favourites')
+      .select('activity_id')
+      .eq('user_id', userId)
+
+    if (error) throw error
+    if (request === favouritesRequest) {
+      savedIds.value = new Set((data ?? []).map((row) => row.activity_id))
+    }
+  } catch {
+    if (request === favouritesRequest) {
+      favouritesError.value = "Couldn't load your saved activities. Try again to enable saving."
+    }
+  } finally {
+    if (request === favouritesRequest) favouritesLoading.value = false
+  }
+}
+
+watch(() => user.value?.id, loadFavourites, { immediate: true })
+
+async function toggleSaved(activityId) {
+  if (favouritesLoading.value || favouritesError.value || savingIds.value.has(activityId)) return
+  const userId = user.value?.id
+  const request = favouritesRequest
+  const shouldSave = !savedIds.value.has(activityId)
+  savingIds.value.add(activityId)
+  saveError.value = ''
+  saveMessage.value = ''
+  clearTimeout(saveMessageTimer)
+
+  try {
+    const { data, error } = await supabase.auth.getUser()
+    if (error) throw error
+    if (!userId || data.user?.id !== userId) throw new Error('Your login has changed')
+    const isSaved = await setActivitySaved(userId, activityId, shouldSave)
+    if (request !== favouritesRequest) return
+
+    if (isSaved) savedIds.value.add(activityId)
+    else savedIds.value.delete(activityId)
+    saveMessage.value = isSaved ? 'Activity saved.' : 'Removed from saved activities.'
+    clearTimeout(saveMessageTimer)
+    saveMessageTimer = setTimeout(() => {
+      saveMessage.value = ''
+    }, 3000)
+  } catch {
+    if (request === favouritesRequest) {
+      saveError.value = "Couldn't update your saved activities. Please try again."
+    }
+  } finally {
+    if (request === favouritesRequest) savingIds.value.delete(activityId)
+  }
+}
+
+onUnmounted(() => {
+  favouritesRequest += 1
+  clearTimeout(saveMessageTimer)
+})
 
 // Keep the original records so clearing filters can show every activity again.
 const activities = ref([])
 const loading = ref(true)
 const errorMessage = ref('')
-// Remember the current filters when opening a detail page and coming back.
+// Remember the current filters and page when opening a detail page and coming back.
 function readFilters() {
   try {
     return JSON.parse(sessionStorage.getItem('wad2do.activityFilters') || '{}') || {}
@@ -24,8 +111,20 @@ const selectedCategory = ref(String(previousFilters.category ?? ''))
 const selectedSetting = ref(String(previousFilters.setting ?? ''))
 const selectedArea = ref(String(previousFilters.area ?? ''))
 const selectedPrice = ref(String(previousFilters.price ?? ''))
-const sortBy = ref(String(previousFilters.sort ?? 'catalogue'))
+const allowedSorts = ['best-match', 'catalogue', 'price-asc', 'price-desc']
+const sortBy = ref(
+  allowedSorts.includes(previousFilters.sort) ? previousFilters.sort : 'best-match',
+)
 const filtersOpen = ref(false)
+const pageSize = 20
+const requestedPage = ref(
+  Number.isSafeInteger(previousFilters.page) && previousFilters.page > 0 ? previousFilters.page : 1,
+)
+const resultsSummary = ref(null)
+
+watch([keyword, selectedCategory, selectedSetting, selectedArea, selectedPrice, sortBy], () => {
+  requestedPage.value = 1
+})
 
 onBeforeRouteLeave(() => {
   try {
@@ -38,6 +137,7 @@ onBeforeRouteLeave(() => {
         area: selectedArea.value,
         price: selectedPrice.value,
         sort: sortBy.value,
+        page: currentPage.value,
       }),
     )
   } catch {
@@ -62,6 +162,26 @@ const priceRanges = [
   { value: '50-100', label: 'S$50 to under S$100', min: 50, max: 100 },
   { value: '100-plus', label: 'S$100 and above', min: 100, max: Infinity },
 ]
+
+const hasRankingPreferences = computed(() =>
+  Boolean(
+    (Array.isArray(profile.value?.interests) && profile.value.interests.length) ||
+    priceRanges.some((range) => range.value !== 'free' && range.value === profile.value?.budget) ||
+    profile.value?.home_area?.trim(),
+  ),
+)
+
+const sortSummary = computed(() => {
+  if (sortBy.value === 'best-match' && !hasRankingPreferences.value) {
+    return 'Showing catalogue order'
+  }
+  return {
+    'best-match': 'Sorted by Best match',
+    catalogue: 'Showing catalogue order',
+    'price-asc': 'Sorted by Price: low to high',
+    'price-desc': 'Sorted by Price: high to low',
+  }[sortBy.value]
+})
 
 // Search logic
 function searchText(value) {
@@ -96,6 +216,10 @@ const filteredActivities = computed(() => {
     return matchesSearch && matchesCategory && matchesSetting && matchesArea && matchesPrice
   })
 
+  if (sortBy.value === 'best-match' && profile.value) {
+    return rankActivities(matches, profile.value)
+  }
+
   if (sortBy.value === 'price-asc' || sortBy.value === 'price-desc') {
     matches.sort((a, b) => {
       const first = getPrice(a.price_per_person)
@@ -110,6 +234,24 @@ const filteredActivities = computed(() => {
   return matches
 })
 
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredActivities.value.length / pageSize)))
+const currentPage = computed(() => Math.min(requestedPage.value, pageCount.value))
+const pageStart = computed(() => (currentPage.value - 1) * pageSize)
+const pagedActivities = computed(() =>
+  filteredActivities.value.slice(pageStart.value, pageStart.value + pageSize),
+)
+const visiblePages = computed(() => {
+  const start = Math.max(1, Math.min(currentPage.value - 2, pageCount.value - 4))
+  return Array.from({ length: Math.min(5, pageCount.value) }, (_, index) => start + index)
+})
+
+async function changePage(page) {
+  requestedPage.value = page
+  await nextTick()
+  resultsSummary.value?.focus()
+  resultsSummary.value?.scrollIntoView({ block: 'start' })
+}
+
 const hasFilters = computed(() =>
   Boolean(
     keyword.value.trim() ||
@@ -117,7 +259,7 @@ const hasFilters = computed(() =>
     selectedSetting.value ||
     selectedArea.value ||
     selectedPrice.value ||
-    sortBy.value !== 'catalogue',
+    sortBy.value !== 'best-match',
   ),
 )
 
@@ -127,8 +269,36 @@ function clearFilters() {
   selectedSetting.value = ''
   selectedArea.value = ''
   selectedPrice.value = ''
-  sortBy.value = 'catalogue'
+  sortBy.value = 'best-match'
 }
+
+async function loadProfile() {
+  const userId = user.value?.id
+  profile.value = null
+  profileError.value = ''
+  profileLoading.value = true
+
+  try {
+    if (!userId) return
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('interests, budget, home_area')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (user.value?.id !== userId) return
+    if (error) throw error
+    profile.value = data
+  } catch {
+    if (user.value?.id === userId) {
+      profileError.value = "Couldn't load your preferences. Best match is using catalogue order."
+    }
+  } finally {
+    if (user.value?.id === userId) profileLoading.value = false
+  }
+}
+
+watch(() => user.value?.id, loadProfile, { immediate: true })
 
 async function loadActivities() {
   loading.value = true
@@ -170,9 +340,20 @@ onMounted(loadActivities)
 
 <template>
   <div class="container activities-page py-4 py-md-5" data-testid="activities-page">
-    <header class="mb-4">
-      <h1 class="fw-bold">What are we doing today?</h1>
-      <p class="text-secondary mb-0">Discover activities around Singapore.</p>
+    <header
+      class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4"
+    >
+      <div>
+        <h1 class="fw-bold">What are we doing today?</h1>
+        <p class="text-secondary mb-0">Discover activities around Singapore.</p>
+      </div>
+      <RouterLink
+        to="/activities/submit"
+        class="btn btn-outline-dark rounded-pill px-4"
+        data-testid="submit-activity-button"
+      >
+        + Submit an activity
+      </RouterLink>
     </header>
 
     <div class="search-bar d-flex gap-2 mb-3">
@@ -288,6 +469,7 @@ onMounted(loadActivities)
         <div class="col-12 col-md-4">
           <label for="sort-filter" class="form-label">Sort by</label>
           <select id="sort-filter" v-model="sortBy" class="form-select" data-testid="sort-filter">
+            <option value="best-match">Best match</option>
             <option value="catalogue">Catalogue order</option>
             <option value="price-asc">Price: low to high</option>
             <option value="price-desc">Price: high to low</option>
@@ -307,7 +489,58 @@ onMounted(loadActivities)
       </div>
     </section>
 
-    <div v-if="loading" class="py-5 text-center" role="status" data-testid="activities-loading">
+    <div
+      v-if="favouritesError"
+      class="alert alert-warning"
+      role="alert"
+      data-testid="favourites-error"
+    >
+      <p>{{ favouritesError }}</p>
+      <button
+        type="button"
+        class="btn btn-outline-dark"
+        :disabled="favouritesLoading"
+        data-testid="favourites-retry"
+        @click="loadFavourites"
+      >
+        Try again
+      </button>
+    </div>
+
+    <div
+      v-if="saveError || saveMessage"
+      class="save-feedback alert mb-0"
+      :class="saveError ? 'alert-danger' : 'alert-success'"
+      :role="saveError ? 'alert' : 'status'"
+      data-testid="activity-save-feedback"
+    >
+      {{ saveError || saveMessage }}
+    </div>
+
+    <div
+      v-if="profileError"
+      class="alert alert-warning"
+      role="alert"
+      data-testid="preferences-error"
+    >
+      <p>{{ profileError }}</p>
+      <button
+        type="button"
+        class="btn btn-outline-dark"
+        data-testid="preferences-retry"
+        :disabled="profileLoading"
+        @click="loadProfile"
+      >
+        Try again
+      </button>
+    </div>
+
+    <div
+      v-if="loading || (sortBy === 'best-match' && profileLoading)"
+      class="py-5 text-center"
+      role="status"
+      data-testid="activities-loading"
+    >
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
       Loading activities…
     </div>
@@ -334,8 +567,27 @@ onMounted(loadActivities)
     </p>
 
     <template v-else>
-      <p class="text-secondary mb-3" role="status" data-testid="activities-count">
-        Showing {{ filteredActivities.length }} of {{ activities.length }} activities
+      <div class="mb-3" role="status" data-testid="activities-sort-summary">
+        <p class="fw-semibold mb-0">{{ sortSummary }}</p>
+        <p
+          v-if="sortBy === 'best-match' && hasRankingPreferences"
+          class="text-secondary small mb-0"
+          data-testid="activities-sort-description"
+        >
+          Based on your saved interests, budget and home area.
+        </p>
+      </div>
+      <p
+        ref="resultsSummary"
+        class="text-secondary mb-3"
+        role="status"
+        tabindex="-1"
+        data-testid="activities-count"
+      >
+        Showing {{ filteredActivities.length ? pageStart + 1 : 0 }}–{{
+          pageStart + pagedActivities.length
+        }}
+        of {{ filteredActivities.length }} activities
       </p>
 
       <div
@@ -357,18 +609,82 @@ onMounted(loadActivities)
 
       <div v-else class="row g-4" data-testid="activities-grid">
         <div
-          v-for="activity in filteredActivities"
+          v-for="activity in pagedActivities"
           :key="activity.id"
           class="col-12 col-md-6 col-lg-4"
         >
-          <ActivityCard :activity="activity" :show-actions="false" />
+          <ActivityCard
+            :activity="activity"
+            :saved="savedIds.has(activity.id)"
+            :saving="savingIds.has(activity.id)"
+            :save-disabled="favouritesLoading || Boolean(favouritesError)"
+            :show-share="false"
+            @save="toggleSaved"
+          />
         </div>
       </div>
+
+      <nav
+        v-if="pageCount > 1"
+        class="mt-4"
+        aria-label="Activity pages"
+        data-testid="activities-pagination"
+      >
+        <ul class="pagination justify-content-center flex-wrap gap-1 mb-0">
+          <li class="page-item">
+            <button
+              type="button"
+              class="page-link text-dark"
+              :disabled="currentPage === 1"
+              @click="changePage(currentPage - 1)"
+            >
+              Previous
+            </button>
+          </li>
+          <li v-for="page in visiblePages" :key="page" class="page-item">
+            <button
+              type="button"
+              class="page-link"
+              :class="page === currentPage ? 'bg-dark border-dark text-white' : 'text-dark'"
+              :aria-label="`Page ${page}`"
+              :aria-current="page === currentPage ? 'page' : undefined"
+              @click="changePage(page)"
+            >
+              {{ page }}
+            </button>
+          </li>
+          <li class="page-item">
+            <button
+              type="button"
+              class="page-link text-dark"
+              :disabled="currentPage === pageCount"
+              @click="changePage(currentPage + 1)"
+            >
+              Next
+            </button>
+          </li>
+        </ul>
+        <p class="text-center text-secondary small mt-2 mb-0">
+          Page {{ currentPage }} of {{ pageCount }}
+        </p>
+      </nav>
     </template>
   </div>
 </template>
 
 <style scoped>
+.save-feedback {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  max-width: calc(100% - 2rem);
+  z-index: 1080;
+}
+
+.page-link:disabled {
+  opacity: 0.45;
+}
+
 .search-bar .form-control {
   min-height: 48px;
   border-radius: 12px;
@@ -424,6 +740,11 @@ onMounted(loadActivities)
 }
 
 @media (max-width: 767.98px) {
+  .save-feedback {
+    left: 1rem;
+    text-align: center;
+  }
+
   .filters-panel:not(.is-open) {
     display: none;
   }

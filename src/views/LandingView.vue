@@ -2,6 +2,9 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import LandingActionLink from '@/components/LandingActionLink.vue'
 import LandingFeatureCard from '@/components/LandingFeatureCard.vue'
+import { useAuth } from '@/composables/useAuth'
+
+const { user } = useAuth()
 
 // Build the image URL from its Unsplash photo ID.
 const picture = (id) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=850&q=85`
@@ -147,8 +150,14 @@ onUnmounted(pause)
         </p>
         <!-- Each reusable link handles its own hover microinteraction. -->
         <div class="hero-actions d-flex flex-wrap">
-          <LandingActionLink to="/signup" primary>Sign up</LandingActionLink>
-          <LandingActionLink to="/login">Log in</LandingActionLink>
+          <template v-if="user">
+            <LandingActionLink to="/activities" primary>Explore activities</LandingActionLink>
+            <LandingActionLink to="/groups">Your groups</LandingActionLink>
+          </template>
+          <template v-else>
+            <LandingActionLink to="/signup" primary>Sign up</LandingActionLink>
+            <LandingActionLink to="/login">Log in</LandingActionLink>
+          </template>
         </div>
       </div>
 
