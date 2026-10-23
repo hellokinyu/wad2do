@@ -4,6 +4,7 @@ import { mockUser, signInMockUser } from './helpers/auth'
 test.beforeEach(async ({ page }) => {
   await signInMockUser(page)
   await page.route('**/rest/v1/profiles?*', (route) => route.fulfill({ json: [] }))
+  await page.route('**/rest/v1/favourites?*', (route) => route.fulfill({ json: [] }))
 })
 
 const activities = [
@@ -78,7 +79,7 @@ test('demo searches, combines filters and clears them', async ({ page }) => {
   await expect(cards).toHaveCount(4)
   await expect(page.getByTestId('activities-sort-summary')).toHaveText('Showing catalogue order')
   await expect(page.getByTestId('activities-sort-description')).toHaveCount(0)
-  await expect(page.getByTestId('activity-save')).toHaveCount(0)
+  await expect(page.getByTestId('activity-save')).toHaveCount(4)
   await expect(page.getByTestId('activity-share')).toHaveCount(0)
   await expect(cards.getByRole('link')).toHaveCount(8)
 

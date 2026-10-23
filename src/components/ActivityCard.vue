@@ -13,7 +13,15 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
-  showActions: {
+  saving: {
+    type: Boolean,
+    default: false,
+  },
+  saveDisabled: {
+    type: Boolean,
+    default: false,
+  },
+  showShare: {
     type: Boolean,
     default: true,
   },
@@ -71,16 +79,23 @@ watch(
       </div>
 
       <button
-        v-if="showActions"
         type="button"
         class="save-button"
         :class="{ saved: saved }"
         :aria-pressed="saved"
-        :aria-label="saved ? 'Remove from saved activities' : 'Save activity'"
+        :aria-label="
+          saved ? `Remove ${activity.name} from saved activities` : `Save ${activity.name}`
+        "
+        :aria-busy="saving"
+        :disabled="saveDisabled || saving"
         data-testid="activity-save"
         @click="emit('save', activity.id)"
       >
-        {{ saved ? '♥' : '♡' }}
+        <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" focusable="false">
+          <path
+            d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"
+          />
+        </svg>
       </button>
     </div>
 
@@ -121,7 +136,7 @@ watch(
       </p>
 
       <button
-        v-if="showActions"
+        v-if="showShare"
         type="button"
         class="btn btn-outline-dark rounded-pill mt-auto"
         data-testid="activity-share"
@@ -211,36 +226,51 @@ watch(
   position: absolute;
   top: 12px;
   right: 12px;
-  width: 40px;
-  height: 40px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 9px;
   border: none;
   border-radius: 50%;
-  background: white;
-  font-size: 1.5rem;
-  opacity: 0;
-  transition: opacity 0.2s ease;
+  background: transparent;
+  color: white;
 }
 
-.activity-card:hover .save-button,
-.activity-card:focus-within .save-button,
-.save-button.saved {
-  opacity: 1;
+.save-button svg {
+  fill: none;
+  stroke: white;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 80%));
+}
+
+.save-button:hover,
+.save-button:focus-visible {
+  background: rgb(0 0 0 / 16%);
 }
 
 .save-button.saved {
   color: #dc3545;
 }
 
-/* Phones cannot rely on hovering to reveal the button. */
-@media (hover: none) {
-  .save-button {
-    opacity: 1;
-  }
+.save-button.saved svg {
+  fill: currentColor;
+}
+
+.save-button:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgb(0 0 0 / 60%);
+}
+
+.save-button:disabled {
+  cursor: wait;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .activity-photo,
-  .save-button {
+  .activity-photo {
     transition: none;
   }
 

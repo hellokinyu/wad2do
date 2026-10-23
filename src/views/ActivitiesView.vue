@@ -1,16 +1,96 @@
 <script setup>
-import { ref, computed, nextTick, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import ActivityCard from '@/components/ActivityCard.vue'
 import { getPrice } from '@/lib/activityDisplay'
 import { rankActivities } from '@/lib/activityRanking'
 import { useAuth } from '@/composables/useAuth'
+import { setActivitySaved } from '@/lib/activityFavourites'
 
 const { user } = useAuth()
 const profile = ref(null)
 const profileLoading = ref(true)
 const profileError = ref('')
+const savedIds = ref(new Set())
+const savingIds = ref(new Set())
+const favouritesLoading = ref(true)
+const favouritesError = ref('')
+const saveError = ref('')
+const saveMessage = ref('')
+let favouritesRequest = 0
+let saveMessageTimer
+
+async function loadFavourites() {
+  const userId = user.value?.id
+  const request = ++favouritesRequest
+  savedIds.value = new Set()
+  savingIds.value = new Set()
+  favouritesLoading.value = true
+  favouritesError.value = ''
+  saveError.value = ''
+  saveMessage.value = ''
+  clearTimeout(saveMessageTimer)
+
+  try {
+    if (!userId) return
+    const { data, error } = await supabase
+      .from('favourites')
+      .select('activity_id')
+      .eq('user_id', userId)
+
+    if (error) throw error
+    if (request === favouritesRequest) {
+      savedIds.value = new Set((data ?? []).map((row) => row.activity_id))
+    }
+  } catch {
+    if (request === favouritesRequest) {
+      favouritesError.value = "Couldn't load your saved activities. Try again to enable saving."
+    }
+  } finally {
+    if (request === favouritesRequest) favouritesLoading.value = false
+  }
+}
+
+watch(() => user.value?.id, loadFavourites, { immediate: true })
+
+async function toggleSaved(activityId) {
+  if (favouritesLoading.value || favouritesError.value || savingIds.value.has(activityId)) return
+  const userId = user.value?.id
+  const request = favouritesRequest
+  const shouldSave = !savedIds.value.has(activityId)
+  savingIds.value.add(activityId)
+  saveError.value = ''
+  saveMessage.value = ''
+  clearTimeout(saveMessageTimer)
+
+  try {
+    const { data, error } = await supabase.auth.getUser()
+    if (error) throw error
+    if (!userId || data.user?.id !== userId) throw new Error('Your login has changed')
+    const isSaved = await setActivitySaved(userId, activityId, shouldSave)
+    if (request !== favouritesRequest) return
+
+    if (isSaved) savedIds.value.add(activityId)
+    else savedIds.value.delete(activityId)
+    saveMessage.value = isSaved ? 'Activity saved.' : 'Removed from saved activities.'
+    clearTimeout(saveMessageTimer)
+    saveMessageTimer = setTimeout(() => {
+      saveMessage.value = ''
+    }, 3000)
+  } catch {
+    if (request === favouritesRequest) {
+      saveError.value = "Couldn't update your saved activities. Please try again."
+    }
+  } finally {
+    if (request === favouritesRequest) savingIds.value.delete(activityId)
+  }
+}
+
+onUnmounted(() => {
+  favouritesRequest += 1
+  clearTimeout(saveMessageTimer)
+})
 
 // Keep the original records so clearing filters can show every activity again.
 const activities = ref([])
@@ -410,6 +490,34 @@ onMounted(loadActivities)
     </section>
 
     <div
+      v-if="favouritesError"
+      class="alert alert-warning"
+      role="alert"
+      data-testid="favourites-error"
+    >
+      <p>{{ favouritesError }}</p>
+      <button
+        type="button"
+        class="btn btn-outline-dark"
+        :disabled="favouritesLoading"
+        data-testid="favourites-retry"
+        @click="loadFavourites"
+      >
+        Try again
+      </button>
+    </div>
+
+    <div
+      v-if="saveError || saveMessage"
+      class="save-feedback alert mb-0"
+      :class="saveError ? 'alert-danger' : 'alert-success'"
+      :role="saveError ? 'alert' : 'status'"
+      data-testid="activity-save-feedback"
+    >
+      {{ saveError || saveMessage }}
+    </div>
+
+    <div
       v-if="profileError"
       class="alert alert-warning"
       role="alert"
@@ -505,7 +613,14 @@ onMounted(loadActivities)
           :key="activity.id"
           class="col-12 col-md-6 col-lg-4"
         >
-          <ActivityCard :activity="activity" :show-actions="false" />
+          <ActivityCard
+            :activity="activity"
+            :saved="savedIds.has(activity.id)"
+            :saving="savingIds.has(activity.id)"
+            :save-disabled="favouritesLoading || Boolean(favouritesError)"
+            :show-share="false"
+            @save="toggleSaved"
+          />
         </div>
       </div>
 
@@ -558,6 +673,14 @@ onMounted(loadActivities)
 </template>
 
 <style scoped>
+.save-feedback {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  max-width: calc(100% - 2rem);
+  z-index: 1080;
+}
+
 .page-link:disabled {
   opacity: 0.45;
 }
@@ -617,6 +740,11 @@ onMounted(loadActivities)
 }
 
 @media (max-width: 767.98px) {
+  .save-feedback {
+    left: 1rem;
+    text-align: center;
+  }
+
   .filters-panel:not(.is-open) {
     display: none;
   }
