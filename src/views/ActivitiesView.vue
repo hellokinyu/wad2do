@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import ActivityCard from '@/components/ActivityCard.vue'
@@ -16,7 +16,7 @@ const profileError = ref('')
 const activities = ref([])
 const loading = ref(true)
 const errorMessage = ref('')
-// Remember the current filters when opening a detail page and coming back.
+// Remember the current filters and page when opening a detail page and coming back.
 function readFilters() {
   try {
     return JSON.parse(sessionStorage.getItem('wad2do.activityFilters') || '{}') || {}
@@ -36,6 +36,15 @@ const sortBy = ref(
   allowedSorts.includes(previousFilters.sort) ? previousFilters.sort : 'best-match',
 )
 const filtersOpen = ref(false)
+const pageSize = 20
+const requestedPage = ref(
+  Number.isSafeInteger(previousFilters.page) && previousFilters.page > 0 ? previousFilters.page : 1,
+)
+const resultsSummary = ref(null)
+
+watch([keyword, selectedCategory, selectedSetting, selectedArea, selectedPrice, sortBy], () => {
+  requestedPage.value = 1
+})
 
 onBeforeRouteLeave(() => {
   try {
@@ -48,6 +57,7 @@ onBeforeRouteLeave(() => {
         area: selectedArea.value,
         price: selectedPrice.value,
         sort: sortBy.value,
+        page: currentPage.value,
       }),
     )
   } catch {
@@ -143,6 +153,24 @@ const filteredActivities = computed(() => {
 
   return matches
 })
+
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredActivities.value.length / pageSize)))
+const currentPage = computed(() => Math.min(requestedPage.value, pageCount.value))
+const pageStart = computed(() => (currentPage.value - 1) * pageSize)
+const pagedActivities = computed(() =>
+  filteredActivities.value.slice(pageStart.value, pageStart.value + pageSize),
+)
+const visiblePages = computed(() => {
+  const start = Math.max(1, Math.min(currentPage.value - 2, pageCount.value - 4))
+  return Array.from({ length: Math.min(5, pageCount.value) }, (_, index) => start + index)
+})
+
+async function changePage(page) {
+  requestedPage.value = page
+  await nextTick()
+  resultsSummary.value?.focus()
+  resultsSummary.value?.scrollIntoView({ block: 'start' })
+}
 
 const hasFilters = computed(() =>
   Boolean(
@@ -441,8 +469,17 @@ onMounted(loadActivities)
           Based on your saved interests, budget and home area.
         </p>
       </div>
-      <p class="text-secondary mb-3" role="status" data-testid="activities-count">
-        Showing {{ filteredActivities.length }} of {{ activities.length }} activities
+      <p
+        ref="resultsSummary"
+        class="text-secondary mb-3"
+        role="status"
+        tabindex="-1"
+        data-testid="activities-count"
+      >
+        Showing {{ filteredActivities.length ? pageStart + 1 : 0 }}–{{
+          pageStart + pagedActivities.length
+        }}
+        of {{ filteredActivities.length }} activities
       </p>
 
       <div
@@ -464,18 +501,67 @@ onMounted(loadActivities)
 
       <div v-else class="row g-4" data-testid="activities-grid">
         <div
-          v-for="activity in filteredActivities"
+          v-for="activity in pagedActivities"
           :key="activity.id"
           class="col-12 col-md-6 col-lg-4"
         >
           <ActivityCard :activity="activity" :show-actions="false" />
         </div>
       </div>
+
+      <nav
+        v-if="pageCount > 1"
+        class="mt-4"
+        aria-label="Activity pages"
+        data-testid="activities-pagination"
+      >
+        <ul class="pagination justify-content-center flex-wrap gap-1 mb-0">
+          <li class="page-item">
+            <button
+              type="button"
+              class="page-link text-dark"
+              :disabled="currentPage === 1"
+              @click="changePage(currentPage - 1)"
+            >
+              Previous
+            </button>
+          </li>
+          <li v-for="page in visiblePages" :key="page" class="page-item">
+            <button
+              type="button"
+              class="page-link"
+              :class="page === currentPage ? 'bg-dark border-dark text-white' : 'text-dark'"
+              :aria-label="`Page ${page}`"
+              :aria-current="page === currentPage ? 'page' : undefined"
+              @click="changePage(page)"
+            >
+              {{ page }}
+            </button>
+          </li>
+          <li class="page-item">
+            <button
+              type="button"
+              class="page-link text-dark"
+              :disabled="currentPage === pageCount"
+              @click="changePage(currentPage + 1)"
+            >
+              Next
+            </button>
+          </li>
+        </ul>
+        <p class="text-center text-secondary small mt-2 mb-0">
+          Page {{ currentPage }} of {{ pageCount }}
+        </p>
+      </nav>
     </template>
   </div>
 </template>
 
 <style scoped>
+.page-link:disabled {
+  opacity: 0.45;
+}
+
 .search-bar .form-control {
   min-height: 48px;
   border-radius: 12px;
