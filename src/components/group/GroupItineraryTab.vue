@@ -3,78 +3,15 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 
-// Fake data for now. Later this will come from the itineraries table.
-// Each stop has the same fields we'll save: activity_id, start, end, cost, reason
-// (plus name and image so we can display it).
-const itinerary = ref({
-  date: '2026-10-22',
-  total_cost: 42,
-  stops: [
-    {
-      activity_id: 'a1',
-      name: 'Gardens by the Bay',
-      image_url: '',
-      start: '10:00',
-      end: '12:00',
-      cost: 12,
-      reason: 'Most votes in the group',
-      indoor: false,
-      closes: '11:00',
-    },
-    {
-      activity_id: 'a2',
-      name: 'Lau Pa Sat',
-      image_url: '',
-      start: '12:30',
-      end: '13:30',
-      cost: 15,
-      reason: 'Lunch close to the last stop',
-      indoor: true,
-      closes: '22:00',
-    },
-    {
-      activity_id: 'a3',
-      name: 'ArtScience Museum',
-      image_url: '',
-      start: '14:00',
-      end: '16:00',
-      cost: 15,
-      reason: 'Indoor option everyone liked',
-      indoor: true,
-      closes: '19:00',
-    },
-  ],
-})
-
-// Fake budget for now. Later it comes from the group (budget_per_person).
-const budget = ref(50)
-
+const itinerary = ref(null)
+const budget = computed(() => group.value?.budget_per_person ?? 0)
 // Fake group votes for now. Later: group_activities joined with activities.
 const votedActivities = ref([
-  {
-    activity_id: 'a4',
-    name: 'National Gallery',
-    image_url: '',
-    cost: 20,
-    indoor: true,
-    closes: '19:00',
-  },
-  {
-    activity_id: 'a5',
-    name: 'East Coast Park cycling',
-    image_url: '',
-    cost: 8,
-    indoor: false,
-    closes: '23:00',
-  },
-  {
-    activity_id: 'a3',
-    name: 'ArtScience Museum',
-    image_url: '',
-    cost: 15,
-    indoor: true,
-    closes: '19:00',
-  },
+  { activity_id: 'a1', name: 'Gardens by the Bay', image_url: '', cost: 12, indoor: false, closes: '21:00', duration_min: 120, votes: 5 },
+  { activity_id: 'a2', name: 'Lau Pa Sat', image_url: '', cost: 15, indoor: true, closes: '22:00', duration_min: 60, votes: 4 },
+  { activity_id: 'a3', name: 'ArtScience Museum', image_url: '', cost: 15, indoor: true, closes: '19:00', duration_min: 120, votes: 3 },
+  { activity_id: 'a4', name: 'National Gallery', image_url: '', cost: 20, indoor: true, closes: '19:00', duration_min: 90, votes: 2 },
+  { activity_id: 'a5', name: 'East Coast Park cycling', image_url: '', cost: 8, indoor: false, closes: '23:00', duration_min: 120, votes: 2 },
 ])
 
 // Add up the cost of every stop
@@ -101,6 +38,19 @@ const endTime = computed(() => {
 })
 
 const isOverBudget = computed(() => totalCost.value > budget.value)
+// Voted activities that aren't in the plan right now
+const notInPlan = computed(() => {
+  if (!itinerary.value) return []
+  const usedIds = itinerary.value.stops.map((s) => s.activity_id)
+  return votedActivities.value.filter((a) => !usedIds.includes(a.activity_id))
+})
+
+// A short reason why an activity isn't in the plan
+function whyNotInPlan(activity) {
+  const extra = totalCost.value + activity.cost - budget.value
+  if (extra > 0) return 'Over budget by $' + extra
+  return "Doesn't fit the time or opening hours"
+}
 
 // ----- The group (real data from Supabase) -----
 const route = useRoute()
@@ -272,14 +222,68 @@ function moveStop(index, direction) {
   stops[other] = temp
   recalculateTimes()
 }
+
+// Add a voted activity to the end of the plan, even if it goes over budget
+function addStop(activity) {
+  itinerary.value.stops.push({
+    activity_id: activity.activity_id,
+    name: activity.name,
+    image_url: activity.image_url,
+    start: '00:00',
+    end: toTime(activity.duration_min), // so the duration is right
+    cost: activity.cost,
+    reason: 'Added by the group',
+    indoor: activity.indoor,
+    closes: activity.closes,
+  })
+  recalculateTimes()
+}
+
+// Fill the chosen time with the most-voted activities that fit the time, opening hours and budget
+function buildPlan() {
+  if (!group.value?.chosen_start) {
+    itinerary.value = null // no time picked yet -> empty state
+    return
+  }
+  const start = toSgKey(group.value.chosen_start) // '2026-10-24T10:00'
+  const end = toSgKey(group.value.chosen_end)
+  const endMinutes = toMinutes(end.slice(11)) // '16:00' -> 960
+
+  const sorted = [...votedActivities.value].sort((a, b) => b.votes - a.votes)
+  const stops = []
+  let current = toMinutes(start.slice(11))
+  let spent = 0
+
+    for (const activity of sorted) {
+    const finish = current + activity.duration_min
+    if (finish > endMinutes) continue // runs past the chosen end time
+    if (toTime(finish) > activity.closes) continue // place closes before we'd finish
+    if (spent + activity.cost > budget.value) continue // over budget
+    stops.push({
+      activity_id: activity.activity_id,
+      name: activity.name,
+      image_url: activity.image_url,
+      start: toTime(current),
+      end: toTime(finish),
+      cost: activity.cost,
+      reason: activity.votes + ' votes in the group',
+      indoor: activity.indoor,
+      closes: activity.closes,
+    })
+    spent += activity.cost
+    current = finish + TRAVEL_MINUTES
+  }
+
+  itinerary.value = { date: start.slice(0, 10), total_cost: spent, stops }
+}
+
 // Runs when the tab opens: the group first, then the weather (which needs the date)
 async function loadPage() {
   loading.value = true
   errorMessage.value = ''
   try {
     await loadGroup()
-    console.log('group:', group.value)
-    console.log('chosen start in SG time:', group.value?.chosen_start && toSgKey(group.value.chosen_start))
+    buildPlan()
     loadWeather()
   } catch (error) {
     console.log(error)
@@ -461,6 +465,27 @@ onMounted(loadPage)
           </div>
         </li>
       </ol>
+        <div v-if="notInPlan.length" class="mt-4" data-testid="itinerary-not-in-plan">
+        <h3 class="h6">Also voted for, but not in the plan</h3>
+        <ul class="list-group">
+          <li
+            v-for="activity in notInPlan"
+            :key="activity.activity_id"
+            class="list-group-item d-flex align-items-center gap-2"
+          >
+            <span class="flex-grow-1">{{ activity.name }} (${{ activity.cost }})</span>
+            <span class="badge text-bg-light">{{ whyNotInPlan(activity) }}</span>
+            <button
+              v-if="isEditing"
+              class="btn btn-sm btn-outline-primary"
+              data-testid="itinerary-add-stop"
+              @click="addStop(activity)"
+            >
+              Add anyway
+            </button>
+          </li>
+        </ul>
+      </div>
     </div>
   </div>
 </template>
