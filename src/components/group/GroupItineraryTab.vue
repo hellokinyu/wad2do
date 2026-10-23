@@ -202,9 +202,36 @@ function discardChanges() {
   isEditing.value = false
 }
 
-function saveChanges() {
-  // Later: write to Supabase. For now, just keep the changes.
-  isEditing.value = false
+const saving = ref(false)
+const saveError = ref('')
+
+// Save the plan for this group (creates the row the first time, updates it after)
+async function saveChanges() {
+  saving.value = true
+  saveError.value = ''
+  try {
+    const { data: userData } = await supabase.auth.getUser()
+    // Only save the fields from the brief. Name, photo etc. come from the activity.
+    const stopsToSave = itinerary.value.stops.map((s) => ({
+      activity_id: s.activity_id,
+      start: s.start,
+      end: s.end,
+      cost: s.cost,
+      reason: s.reason,
+    }))
+
+    const { error } = await supabase.from('itineraries').upsert(
+      { group_id: groupId, stops: stopsToSave, total_cost: totalCost.value, updated_by: userData.user.id },
+      { onConflict: 'group_id' },
+    )
+    if (error) throw error
+    isEditing.value = false // only leave edit mode if it worked
+  } catch (error) {
+    console.log(error)
+    saveError.value = "Couldn't save the plan. Please try again."
+  } finally {
+    saving.value = false
+  }
 }
 
 function removeStop(index) {
@@ -346,8 +373,8 @@ onMounted(loadPage)
           Edit
         </button>
         <template v-else>
-          <button class="btn btn-primary" data-testid="itinerary-save" @click="saveChanges">
-            Save changes
+          <button class="btn btn-primary" :disabled="saving" data-testid="itinerary-save" @click="saveChanges">
+            {{ saving ? 'Saving...' : 'Save changes' }}
           </button>
           <button
             class="btn btn-outline-secondary"
@@ -369,6 +396,8 @@ onMounted(loadPage)
           />
         </div>
       </div>
+      <p v-if="saveError" class="text-danger" data-testid="itinerary-save-error">{{ saveError }}</p>
+
       <ol class="list-unstyled" data-testid="itinerary-timeline">
         <li
           v-for="(stop, index) in displayStops"
