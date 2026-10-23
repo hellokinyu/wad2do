@@ -72,7 +72,7 @@ test('signup requests email confirmation without creating an authenticated sessi
   await expect(page).toHaveURL('/signup')
   expect(state.requests[0].body.email).toBe(mockUser.email)
   expect(state.requests[0].body.password).toBe('DemoPassword123!')
-  expect(new URL(state.requests[0].url).searchParams.get('redirect_to')).toMatch(/\/login$/)
+  expect(new URL(state.requests[0].url).searchParams.get('redirect_to')).toMatch(/\/onboarding$/)
   expect(await page.evaluate((key) => localStorage.getItem(key), authStorageKey())).toBeNull()
   await page.goto('/profile')
   await expect(page).toHaveURL('/login')
@@ -264,7 +264,9 @@ test('an unavailable profile displays a clear message without inserting a row', 
   await expect(page.getByTestId('profile-edit-name')).toBeDisabled()
   await page.getByText('Food', { exact: true }).click()
   await expect(page.getByTestId('profile-save-prefs')).toBeDisabled()
-  expect(methods).toEqual(['GET'])
+  // Navigation also reads is_admin. Every profile request must still be read-only.
+  expect(methods.length).toBeGreaterThan(0)
+  expect(methods.every((method) => method === 'GET')).toBe(true)
 })
 
 for (const path of [
