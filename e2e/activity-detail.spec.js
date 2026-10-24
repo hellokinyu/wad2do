@@ -47,6 +47,18 @@ const picnic = {
   address: '8 Marina Gardens Dr',
   source: 'curated',
 }
+const googlePottery = { ...pottery, google_place_id: 'test-pottery-place-id' }
+const googleDetails = {
+  rating: 4.6,
+  userRatingCount: 6511,
+  currentOpeningHours: {
+    weekdayDescriptions: ['Monday: Closed', 'Tuesday: 11:00–17:00'],
+  },
+  regularOpeningHours: {
+    weekdayDescriptions: ['Monday: 10:00–18:00', 'Tuesday: 10:00–18:00'],
+  },
+  attributions: [{ provider: 'Example provider', providerUri: 'https://example.com/provider' }],
+}
 
 async function mockBackend(page, options = {}) {
   const records = options.records ?? [pottery, picnic]
@@ -58,6 +70,8 @@ async function mockBackend(page, options = {}) {
     saveFailures: options.saveFailures ?? 0,
     groupFailures: options.groupFailures ?? 0,
     shareFailures: options.shareFailures ?? 0,
+    googleRequests: [],
+    googleFailures: options.googleFailures ?? 0,
   }
   const failRequest = (route) =>
     route.fulfill({
@@ -80,6 +94,21 @@ async function mockBackend(page, options = {}) {
     }),
   )
 
+  await page.route('**/functions/v1/google-place-details', async (route) => {
+    state.googleRequests.push(route.request().postDataJSON())
+    expect(route.request().headers().authorization).toMatch(/^Bearer /)
+    if (options.stallGoogle && state.googleRequests.length === 1) return
+    if (options.googleGate) {
+      options.onGoogleRequest()
+      await options.googleGate
+    }
+    if (state.googleFailures > 0) {
+      state.googleFailures -= 1
+      return route.fulfill({ status: 502, json: { error: 'Google Places request failed' } })
+    }
+    return route.fulfill({ json: options.googleDetails ?? googleDetails })
+  })
+
   await page.route('**/rest/v1/**', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
@@ -91,6 +120,7 @@ async function mockBackend(page, options = {}) {
     if (table === 'profiles') return route.fulfill({ headers, json: [] })
 
     if (table === 'activities') {
+      expect(method).toBe('GET')
       if (id && state.failures > 0) {
         state.failures -= 1
         return route.fulfill({
@@ -209,7 +239,7 @@ test('card opens its details and Back restores the current search', async ({ pag
 })
 
 test('direct visit handles missing metadata and has a safe Back destination', async ({ page }) => {
-  await mockBackend(page)
+  const state = await mockBackend(page)
   await page.goto('/activities/' + picnicId)
 
   await expect(page.getByTestId('detail-price')).toHaveText('Free')
@@ -217,14 +247,224 @@ test('direct visit handles missing metadata and has a safe Back destination', as
   await expect(page.getByTestId('detail-description')).toContainText("hasn't been added")
   await expect(page.getByTestId('detail-hours-unavailable')).toBeVisible()
   await expect(page.getByTestId('detail-rating')).toHaveCount(0)
+  await expect(page.getByTestId('detail-rating-source')).toHaveCount(0)
   await expect(page.getByTestId('detail-website')).toHaveCount(0)
   await expect(page.getByTestId('detail-map')).toHaveCount(0)
   await expect(page.getByTestId('detail-tags').getByText('Outdoor', { exact: true })).toHaveCount(1)
   await expect(page.getByTestId('detail-location')).toContainText('8 Marina Gardens Dr')
   await expect(page.getByTestId('detail-location')).toContainText('Marina Bay')
+  expect(state.googleRequests).toHaveLength(0)
 
   await page.getByTestId('activity-back').click()
   await expect(page.getByTestId('activities-page')).toBeVisible()
+})
+
+test('Google details replace stored ratings and hours, with review count and attribution', async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date('2026-10-13T12:00:00+08:00'))
+  const state = await mockBackend(page, { records: [googlePottery] })
+  await page.goto('/activities/' + potteryId)
+
+  await expect(page.getByTestId('detail-rating')).toContainText('4.6')
+  await expect(page.getByTestId('detail-rating')).toContainText('Google Maps')
+  await expect(page.getByTestId('detail-review-count')).toHaveText('6,511 reviews')
+  await expect(page.getByTestId('detail-hours-source')).toHaveText('Google Maps')
+  const today = page.getByTestId('detail-hours-row').filter({ hasText: 'Tuesday' })
+  await expect(today).toContainText('11:00–17:00')
+  await expect(today).toHaveAttribute('aria-current', 'date')
+  await expect(page.getByTestId('detail-google-attribution').getByRole('link')).toHaveAttribute(
+    'href',
+    'https://example.com/provider',
+  )
+  expect(state.googleRequests).toEqual([{ activityId: potteryId }])
+  expect(
+    await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage })),
+  ).not.toContain('weekdayDescriptions')
+  await page.screenshot({ path: test.info().outputPath('google-details.png'), fullPage: true })
+})
+
+test('abbreviated Google weekdays override saved hours, including overnight and closed days', async ({
+  page,
+}) => {
+  await mockBackend(page, {
+    records: [googlePottery],
+    googleDetails: {
+      currentOpeningHours: {
+        weekdayDescriptions: [
+          'Mon: 09:00–19:00',
+          'tue: Closed',
+          'WED: Open 24 hours',
+          'Thu: 10:00–20:00',
+          'Fri: 10:00–21:00',
+          'Sat: 10:00–22:00',
+          'Sun: 18:00–06:00',
+        ],
+      },
+    },
+  })
+  await page.goto('/activities/' + potteryId)
+
+  await expect(page.getByTestId('detail-hours-source')).toHaveText('Google Maps')
+  for (const [day, hours] of [
+    ['Monday', '09:00–19:00'],
+    ['Tuesday', 'Closed'],
+    ['Wednesday', 'Open 24 hours'],
+    ['Thursday', '10:00–20:00'],
+    ['Friday', '10:00–21:00'],
+    ['Saturday', '10:00–22:00'],
+    ['Sunday', '18:00–06:00'],
+  ]) {
+    await expect(page.getByTestId('detail-hours-row').filter({ hasText: day })).toContainText(hours)
+  }
+  await expect(page.getByText('Showing saved activity hours.')).toHaveCount(0)
+})
+
+test('Google hours fall back to regular hours and missing ratings stay unavailable', async ({
+  page,
+}) => {
+  await mockBackend(page, {
+    records: [googlePottery],
+    googleDetails: { regularOpeningHours: googleDetails.regularOpeningHours },
+  })
+  await page.goto('/activities/' + potteryId)
+
+  await expect(page.getByTestId('detail-hours-source')).toBeVisible()
+  await expect(page.getByTestId('detail-hours-row').filter({ hasText: 'Monday' })).toContainText(
+    '10:00–18:00',
+  )
+  await expect(page.getByTestId('detail-rating')).toHaveCount(0)
+  await expect(page.getByTestId('detail-review-count')).toHaveCount(0)
+})
+
+test('a Google review count has attribution even without a rating or Google hours', async ({
+  page,
+}) => {
+  await mockBackend(page, {
+    records: [googlePottery],
+    googleDetails: { userRatingCount: 0 },
+  })
+  await page.goto('/activities/' + potteryId)
+
+  const reviews = page.getByTestId('detail-review-count')
+  await expect(reviews).toHaveText('0 reviews')
+  await expect(page.getByTestId('detail-rating')).toHaveCount(0)
+  await expect(page.getByTestId('detail-hours-source')).toHaveCount(0)
+  const source = reviews.locator('..').getByTestId('detail-rating-source')
+  await expect(source).toHaveText('Google Maps')
+  await expect(source).toHaveAttribute('translate', 'no')
+})
+
+test('missing Google hours keep saved activity hours and unsafe attribution links stay text', async ({
+  page,
+}) => {
+  await mockBackend(page, {
+    records: [googlePottery],
+    googleDetails: {
+      rating: 4.2,
+      userRatingCount: 0,
+      attributions: [{ provider: 'Example provider', providerUri: 'javascript:alert(1)' }],
+    },
+  })
+  await page.goto('/activities/' + potteryId)
+
+  await expect(page.getByTestId('detail-rating')).toContainText('4.2')
+  await expect(page.getByTestId('detail-review-count')).toHaveText('0 reviews')
+  await expect(page.getByTestId('detail-hours-source')).toHaveCount(0)
+  await expect(page.getByText('Showing saved activity hours.')).toBeVisible()
+  await expect(page.getByTestId('detail-hours-row').filter({ hasText: 'Monday' })).toContainText(
+    'Closed',
+  )
+  await expect(page.getByTestId('detail-google-attribution')).toHaveText('Example provider')
+  await expect(page.getByTestId('detail-google-attribution').getByRole('link')).toHaveCount(0)
+})
+
+test('Google loading leaves the activity usable and failed requests can be retried', async ({
+  page,
+}) => {
+  let releaseGoogle
+  let startedGoogle
+  const googleGate = new Promise((resolve) => {
+    releaseGoogle = resolve
+  })
+  const googleStarted = new Promise((resolve) => {
+    startedGoogle = resolve
+  })
+  const state = await mockBackend(page, {
+    records: [googlePottery],
+    googleFailures: 1,
+    googleGate,
+    onGoogleRequest: startedGoogle,
+  })
+  await page.goto('/activities/' + potteryId)
+  await googleStarted
+
+  await expect(page.getByTestId('detail-google-loading')).toBeVisible()
+  await expect(page.getByTestId('activity-detail-name')).toHaveText(pottery.name)
+  await expect(page.getByTestId('detail-share')).toBeEnabled()
+  await expect(page.getByTestId('detail-rating')).toHaveCount(0)
+  releaseGoogle()
+
+  await expect(page.getByTestId('detail-google-error')).toBeVisible()
+  await expect(page.getByTestId('detail-error')).toHaveCount(0)
+  await expect(page.getByTestId('detail-hours-row').filter({ hasText: 'Monday' })).toContainText(
+    'Closed',
+  )
+  await page.getByTestId('detail-google-retry').click()
+  await expect(page.getByTestId('detail-rating')).toContainText('4.6')
+  await expect(page.getByTestId('detail-google-error')).toHaveCount(0)
+  expect(state.googleRequests).toEqual([{ activityId: potteryId }, { activityId: potteryId }])
+})
+
+test('a stalled Google request times out and can be retried without reloading the activity', async ({
+  page,
+}) => {
+  await page.clock.install()
+  const state = await mockBackend(page, { records: [googlePottery], stallGoogle: true })
+  await page.goto('/activities/' + potteryId)
+
+  await expect(page.getByTestId('detail-google-loading')).toBeVisible()
+  await expect.poll(() => state.googleRequests.length).toBe(1)
+  await page.clock.fastForward(15000)
+
+  await expect(page.getByTestId('detail-google-error')).toBeVisible()
+  await expect(page.getByTestId('detail-google-loading')).toHaveCount(0)
+  await expect(page.getByTestId('detail-error')).toHaveCount(0)
+  await expect(page.getByTestId('detail-share')).toBeEnabled()
+  await expect(page.getByText('Showing saved activity hours.')).toBeVisible()
+  await page.getByTestId('detail-google-retry').click()
+  await expect(page.getByTestId('detail-rating')).toContainText('4.6')
+  await expect(page.getByTestId('detail-google-error')).toHaveCount(0)
+  expect(state.googleRequests).toEqual([{ activityId: potteryId }, { activityId: potteryId }])
+})
+
+test('a late Google response cannot appear on another activity', async ({ page }) => {
+  let releaseGoogle
+  let startedGoogle
+  const googleGate = new Promise((resolve) => {
+    releaseGoogle = resolve
+  })
+  const googleStarted = new Promise((resolve) => {
+    startedGoogle = resolve
+  })
+  await mockBackend(page, {
+    records: [googlePottery, picnic],
+    googleGate,
+    onGoogleRequest: startedGoogle,
+  })
+  await page.goto('/activities/' + potteryId)
+  await googleStarted
+  await page.getByRole('link', { name: 'Activities', exact: true }).click()
+  await page.getByRole('link', { name: picnic.name, exact: true }).click()
+  await expect(page.getByTestId('activity-detail-name')).toHaveText(picnic.name)
+
+  const oldResponse = page.waitForResponse('**/functions/v1/google-place-details')
+  releaseGoogle()
+  await oldResponse
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
+  await expect(page.getByTestId('detail-rating')).toHaveCount(0)
+  await expect(page.getByTestId('detail-hours-source')).toHaveCount(0)
+  await expect(page.getByTestId('detail-google-error')).toHaveCount(0)
 })
 
 test('unknown activity shows a missing-record state', async ({ page }) => {
@@ -337,7 +577,11 @@ test('phone detail page fits the viewport and falls back from a broken photo', a
   await page.setViewportSize({ width: 375, height: 667 })
   await mockBackend(page, {
     records: [
-      { ...pottery, image_url: '/images/missing-demo-photo.jpg', website: 'javascript:alert(1)' },
+      {
+        ...googlePottery,
+        image_url: '/images/missing-demo-photo.jpg',
+        website: 'javascript:alert(1)',
+      },
     ],
   })
   await page.goto('/activities/' + potteryId)
@@ -345,5 +589,10 @@ test('phone detail page fits the viewport and falls back from a broken photo', a
   await expect(page.getByTestId('detail-photo-placeholder')).toBeVisible()
   await expect(page.getByTestId('detail-website')).toHaveCount(0)
   await expect(page.getByTestId('detail-share')).toBeVisible()
+  await expect(page.getByTestId('detail-rating')).toContainText('4.6')
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375)
+  await page.screenshot({
+    path: test.info().outputPath('google-details-phone.png'),
+    fullPage: true,
+  })
 })
