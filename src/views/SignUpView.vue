@@ -104,7 +104,7 @@ async function signUp() {
       email: email.value,
       password: password.value,
       options: {
-        emailRedirectTo: new URL(import.meta.env.BASE_URL + 'login', window.location.origin).href,
+        emailRedirectTo: new URL(import.meta.env.BASE_URL + 'onboarding', window.location.origin).href,
       },
     })
     if (error) throw error
@@ -113,10 +113,10 @@ async function signUp() {
 
     // With email confirmation required, signup succeeds without signing the user in.
     if (data.session) {
-      await router.replace('/')
+      await router.replace('/onboarding')
     } else {
       message.value =
-        'Check your inbox and spam folder for a confirmation email before logging in. If you already have an account, log in instead.'
+        'Check your inbox and spam folder for a confirmation email. Confirm your email to continue to onboarding. If you already have an account, log in instead.'
     }
   } catch (error) {
     errorMessage.value = authErrorMessage(error)

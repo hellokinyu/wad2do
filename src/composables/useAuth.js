@@ -5,7 +5,35 @@ import { supabase } from '@/lib/supabase'
 const session = ref(null)
 const user = computed(() => session.value?.user ?? null)
 const authError = ref('')
+const isAdmin = ref(false)
+const adminError = ref('')
 let initialization
+
+// The router calls this after restoring the session and before opening a page.
+async function loadAdminStatus() {
+  const userId = user.value?.id
+  adminError.value = ''
+  if (!userId) {
+    isAdmin.value = false
+    return
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', userId)
+      .maybeSingle()
+    if (error) throw error
+    // Ignore the response if the account changed while this request was running.
+    if (user.value?.id === userId) isAdmin.value = data?.is_admin === true
+  } catch {
+    if (user.value?.id === userId) {
+      isAdmin.value = false
+      adminError.value = "Couldn't check your admin access. Please try again."
+    }
+  }
+}
 
 export function authErrorMessage(error) {
   if (error?.code === 'email_not_confirmed') {
@@ -34,6 +62,7 @@ function initializeAuth() {
 
     // Keep this callback synchronous; awaiting Supabase calls here can cause a deadlock.
     const { data } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (session.value?.user?.id !== newSession?.user?.id) isAdmin.value = false
       session.value = newSession
     })
 
@@ -56,5 +85,5 @@ function initializeAuth() {
 }
 
 export function useAuth() {
-  return { user, authError, initializeAuth }
+  return { user, authError, isAdmin, adminError, initializeAuth, loadAdminStatus }
 }

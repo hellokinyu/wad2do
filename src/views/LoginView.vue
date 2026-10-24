@@ -122,7 +122,7 @@ async function resendConfirmation() {
       type: 'signup',
       email: email.value,
       options: {
-        emailRedirectTo: new URL(import.meta.env.BASE_URL + 'login', window.location.origin).href,
+        emailRedirectTo: new URL(import.meta.env.BASE_URL + 'onboarding', window.location.origin).href,
       },
     })
     if (error) throw error
