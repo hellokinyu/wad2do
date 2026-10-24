@@ -64,10 +64,10 @@
           </div>
 
           <div v-if="!editingName" class="d-flex gap-2 align-self-md-start">
-            <button type="button" class="btn btn-line btn-sm" data-testid="profile-edit-name" @click="startEditName">
+            <button type="button" class="btn btn-grey btn-sm" data-testid="profile-edit-name" @click="startEditName">
               Edit name
             </button>
-            <button type="button" class="btn btn-line btn-sm" data-testid="profile-logout" @click="logOut">
+            <button type="button" class="btn btn-red btn-sm" data-testid="profile-logout" @click="logOut">
               Log out
             </button>
           </div>
@@ -225,7 +225,8 @@
                   </RouterLink>
                 </h3>
                 <p class="fw-semibold mb-1">{{ formatPrice(activity.price_per_person) }}</p>
-                <p v-if="activity.area" class="muted small mb-3">{{ activity.area }}</p>
+                <p v-if="detailsLine(activity)" class="muted small mb-3">{{ detailsLine(activity) }}</p>
+                <div v-else class="mb-3"></div>
                 <button
                   type="button"
                   class="btn btn-line btn-sm mt-auto align-self-start unsave-btn"
@@ -447,7 +448,7 @@ async function loadSaved() {
   const ids = favourites.map((fav) => fav.activity_id)
   const { data: activities, error: actError } = await supabase
     .from('activities')
-    .select('id, name, category, price_per_person, area, image_url')
+    .select('id, name, category, price_per_person, area, image_url, duration_min, indoor')
     .in('id', ids)
 
   if (actError) {
@@ -487,14 +488,15 @@ async function saveName() {
   savingName.value = true
   nameError.value = ''
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .update({ display_name: nameDraft.value })
     .eq('id', userId.value)
+    .select()
 
   savingName.value = false
 
-  if (error) {
+  if (error || !data || data.length === 0) {
     console.error('Could not save name:', error)
     nameError.value = "Couldn't save your name."
     return
@@ -531,7 +533,7 @@ async function savePreferences() {
   prefsMessage.value = ''
   prefsError.value = ''
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .update({
       interests: interests.value,
@@ -540,10 +542,11 @@ async function savePreferences() {
       company: company.value,
     })
     .eq('id', userId.value)
+    .select()
 
   savingPrefs.value = false
 
-  if (error) {
+  if (error || !data || data.length === 0) {
     console.error('Could not save preferences:', error)
     prefsError.value = "Couldn't save your preferences."
     return
@@ -578,6 +581,27 @@ function sameList(a, b) {
 
 function slug(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+}
+
+function durationText(minutes) {
+  if (!minutes) return ''
+  if (minutes < 60) return minutes + ' min'
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return rest === 0 ? hours + ' hr' : hours + ' hr ' + rest + ' min'
+}
+
+function settingText(activity) {
+  let setting = ''
+  if (activity.indoor === true) setting = 'Indoor'
+  if (activity.indoor === false) setting = 'Outdoor'
+  if (setting.toLowerCase() === String(activity.category || '').trim().toLowerCase()) return ''
+  return setting
+}
+
+function detailsLine(activity) {
+  const parts = [activity.area, durationText(activity.duration_min), settingText(activity)]
+  return parts.filter((part) => part).join(' · ')
 }
 
 function formatPrice(price) {
@@ -933,6 +957,45 @@ function statusClass(status) {
 }
 
 .btn-line.btn-sm {
+  --bs-btn-padding-x: 0.9rem;
+  --bs-btn-padding-y: 0.35rem;
+  --bs-btn-font-size: 0.875rem;
+}
+
+.btn-grey {
+  --bs-btn-color: #111;
+  --bs-btn-bg: #ececea;
+  --bs-btn-border-color: #ececea;
+  --bs-btn-hover-color: #111;
+  --bs-btn-hover-bg: #dcdcd8;
+  --bs-btn-hover-border-color: #dcdcd8;
+  --bs-btn-active-color: #111;
+  --bs-btn-active-bg: #cfcfca;
+  --bs-btn-active-border-color: #cfcfca;
+  --bs-btn-border-radius: 999px;
+  --bs-btn-padding-x: 1.2rem;
+  --bs-btn-padding-y: 0.6rem;
+  --bs-btn-font-weight: 600;
+}
+
+.btn-red {
+  --bs-btn-color: #b42318;
+  --bs-btn-bg: #fff;
+  --bs-btn-border-color: #b42318;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #b42318;
+  --bs-btn-hover-border-color: #b42318;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #8f1b12;
+  --bs-btn-active-border-color: #8f1b12;
+  --bs-btn-border-radius: 999px;
+  --bs-btn-padding-x: 1.2rem;
+  --bs-btn-padding-y: 0.6rem;
+  --bs-btn-font-weight: 600;
+}
+
+.btn-grey.btn-sm,
+.btn-red.btn-sm {
   --bs-btn-padding-x: 0.9rem;
   --bs-btn-padding-y: 0.35rem;
   --bs-btn-font-size: 0.875rem;
