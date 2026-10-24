@@ -2,6 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { supabase } from '@/lib/supabase'
+import GroupSettingsForm from '@/components/group/GroupSettingsForm.vue'
+import GroupMembersPanel from '@/components/group/GroupMembersPanel.vue'
 
 const route = useRoute()
 const groupId = route.params.id
@@ -12,6 +14,8 @@ const loading = ref(true)
 const errorMessage = ref('')
 
 const showInvite = ref(false)
+const showMembers = ref(false)
+const showSettings = ref(false)
 const copyMessage = ref('')
 const joinError = ref('')
 
@@ -37,7 +41,7 @@ async function loadGroup() {
     const { data, error } = await supabase
       .from('groups')
       .select(
-        'id, name, start_date, end_date, budget_per_person, invite_code, group_members(count)',
+        'id, name, start_date, end_date, budget_per_person, invite_code, chosen_start, group_members(count)',
       )
       .eq('id', groupId)
       .maybeSingle()
@@ -102,6 +106,12 @@ async function joinGroup() {
     joinError.value = "Couldn't join the group. Please try again."
   }
 }
+
+// After saving settings, reload so the header and the tabs show the new settings
+function onSettingsSaved() {
+  showSettings.value = false
+  loadGroup()
+}
 </script>
 
 <template>
@@ -139,17 +149,39 @@ async function joinGroup() {
       <header class="mt-3" data-testid="group-header">
         <h1>{{ group.name }}</h1>
         <p class="mb-1">{{ group.start_date }} to {{ group.end_date }}</p>
-        <p class="mb-1">Budget: ${{ group.budget_per_person }} per person</p>
-        <p>{{ getMemberCount() }} members</p>
+        <p>Budget: ${{ group.budget_per_person }} per person</p>
 
         <button
-          class="btn btn-outline-primary"
+          class="btn btn-outline-primary me-2"
+          data-testid="members-button"
+          @click="showMembers = !showMembers"
+        >
+          Members ({{ getMemberCount() }})
+        </button>
+        <button
+          class="btn btn-outline-primary me-2"
           data-testid="invite-button"
           @click="showInvite = !showInvite"
         >
           Invite
         </button>
+        <button
+          class="btn btn-outline-secondary"
+          data-testid="settings-button"
+          @click="showSettings = !showSettings"
+        >
+          Settings
+        </button>
       </header>
+
+      <GroupMembersPanel v-if="showMembers" :group="group" @changed="loadGroup" />
+
+      <GroupSettingsForm
+        v-if="showSettings"
+        :group="group"
+        @saved="onSettingsSaved"
+        @cancel="showSettings = false"
+      />
 
       <!-- Invite panel -->
       <div v-if="showInvite" class="card mt-3" data-testid="invite-panel">
