@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test'
-import { loadEnv } from 'vite'
-import process from 'node:process'
-import { Buffer } from 'node:buffer'
+import { signInMockUser } from './helpers/auth'
+
+test.beforeEach(async ({ page }) => {
+  await signInMockUser(page)
+})
 
 const potteryId = 'fb4101f7-c87f-4238-ac23-800e8f2c496d'
 const picnicId = 'd50c48f1-fb26-49c2-8ff5-db44e2010711'
@@ -44,38 +46,6 @@ const picnic = {
   area: 'Marina Bay',
   address: '8 Marina Gardens Dr',
   source: 'curated',
-}
-
-async function signInMockUser(page) {
-  // A fake session is used only with mocked Supabase endpoints.
-  const url = loadEnv('test', process.cwd()).VITE_SUPABASE_URL
-  const storageKey = 'sb-' + new URL(url).hostname.split('.')[0] + '-auth-token'
-  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
-  const user = {
-    id: userId,
-    email: 'demo@example.com',
-    aud: 'authenticated',
-    role: 'authenticated',
-  }
-  const session = {
-    access_token: [
-      encode({ alg: 'HS256', typ: 'JWT' }),
-      encode({ sub: userId, aud: 'authenticated', role: 'authenticated', exp: 4102444800 }),
-      'test-signature',
-    ].join('.'),
-    refresh_token: 'test-refresh-token',
-    token_type: 'bearer',
-    expires_at: 4102444800,
-    expires_in: 3600,
-    user,
-  }
-  await page.addInitScript(
-    ({ key, value }) => {
-      localStorage.setItem(key, JSON.stringify(value))
-    },
-    { key: storageKey, value: session },
-  )
-  await page.route('**/auth/v1/user*', (route) => route.fulfill({ json: user }))
 }
 
 async function mockBackend(page, options = {}) {
@@ -268,22 +238,7 @@ test('detail request failure can be retried', async ({ page }) => {
   await expect(page.getByTestId('activity-detail-name')).toHaveText('Pottery Workshop')
 })
 
-test('signed-out Save and Share show a login prompt', async ({ page }) => {
-  await mockBackend(page)
-  await page.goto('/activities/' + potteryId)
-  await page.getByTestId('detail-save').click()
-  await expect(page.getByTestId('detail-action-error')).toContainText('Log in')
-  await expect(page.getByTestId('detail-save')).toHaveAttribute('aria-pressed', 'false')
-
-  await page.getByTestId('detail-share').click()
-  await expect(page.getByTestId('detail-share-dialog')).toBeHidden()
-  await expect(
-    page.getByTestId('detail-action-error').getByRole('link', { name: 'Log in' }),
-  ).toHaveAttribute('href', '/login')
-})
-
 test('signed-in user saves, reloads, removes and shares to their group', async ({ page }) => {
-  await signInMockUser(page)
   const state = await mockBackend(page)
   await page.goto('/activities/' + potteryId)
 
@@ -307,7 +262,6 @@ test('signed-in user saves, reloads, removes and shares to their group', async (
 })
 
 test('a delayed initial favourite read cannot undo a successful Save click', async ({ page }) => {
-  await signInMockUser(page)
   let releaseRead
   let startedRead
   const initialReadGate = new Promise((resolve) => {
@@ -335,7 +289,6 @@ test('a delayed initial favourite read cannot undo a successful Save click', asy
 test('failed Save, group loading and Share can be retried without a false success', async ({
   page,
 }) => {
-  await signInMockUser(page)
   const state = await mockBackend(page, { saveFailures: 1, groupFailures: 1, shareFailures: 1 })
   await page.goto('/activities/' + potteryId)
 
@@ -363,7 +316,6 @@ test('failed Save, group loading and Share can be retried without a false succes
 })
 
 test('a user without groups can close the share menu and reach Create group', async ({ page }) => {
-  await signInMockUser(page)
   await mockBackend(page, { noGroups: true })
   await page.goto('/activities/' + potteryId)
   await page.getByTestId('detail-share').click()

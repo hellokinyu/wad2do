@@ -49,6 +49,8 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
+        // Optional: use an installed Chrome/Edge instead of downloading Chromium.
+        channel: process.env.PLAYWRIGHT_CHROMIUM_CHANNEL,
       },
     },
     {

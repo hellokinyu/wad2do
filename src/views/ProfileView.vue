@@ -18,6 +18,10 @@
     </div>
 
     <template v-else>
+      <div v-if="logoutError" class="notice mb-4" role="alert" data-testid="logout-error">
+        <p class="mb-0">{{ logoutError }}</p>
+      </div>
+
       <div v-if="profileError" class="notice mb-4" role="alert" data-testid="profile-error">
         <p class="mb-2">{{ profileError }}</p>
         <button type="button" class="btn btn-line btn-sm" @click="loadProfile">Try again</button>
@@ -64,11 +68,23 @@
           </div>
 
           <div v-if="!editingName" class="d-flex gap-2 align-self-md-start">
-            <button type="button" class="btn btn-grey btn-sm" data-testid="profile-edit-name" @click="startEditName">
+            <button
+              type="button"
+              class="btn btn-grey btn-sm"
+              :disabled="!!profileError"
+              data-testid="profile-edit-name"
+              @click="startEditName"
+            >
               Edit name
             </button>
-            <button type="button" class="btn btn-red btn-sm" data-testid="profile-logout" @click="logOut">
-              Log out
+            <button
+              type="button"
+              class="btn btn-red btn-sm"
+              :disabled="loggingOut"
+              data-testid="profile-logout"
+              @click="logOut"
+            >
+              {{ loggingOut ? 'Logging out…' : 'Log out' }}
             </button>
           </div>
         </div>
@@ -166,7 +182,7 @@
             <button
               type="button"
               class="btn btn-ink"
-              :disabled="!hasChanges || savingPrefs"
+              :disabled="!hasChanges || savingPrefs || !!profileError"
               data-testid="profile-save-prefs"
               @click="savePreferences"
             >
@@ -292,8 +308,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
+import { authErrorMessage, useAuth } from '@/composables/useAuth'
 
 const router = useRouter()
+const { user: authenticatedUser, authError } = useAuth()
 
 const interestOptions = [
   'Food',
@@ -369,6 +387,8 @@ const savingPrefs = ref(false)
 const prefsMessage = ref('')
 const prefsError = ref('')
 const profileError = ref('')
+const logoutError = ref('')
+const loggingOut = ref(false)
 
 const savedActivities = ref([])
 const savedError = ref('')
@@ -410,11 +430,16 @@ async function loadProfile() {
     .from('profiles')
     .select('display_name, interests, budget, home_area, company')
     .eq('id', userId.value)
-    .single()
+    .maybeSingle()
 
   if (error) {
     console.error('Could not load profile:', error)
     profileError.value = "Couldn't load your profile."
+    return
+  }
+
+  if (!data) {
+    profileError.value = 'Your profile is unavailable. Please contact the WAD2Do team before saving preferences.'
     return
   }
 
@@ -507,8 +532,23 @@ async function saveName() {
 }
 
 async function logOut() {
-  await supabase.auth.signOut()
-  router.push('/login')
+  if (loggingOut.value) return
+  loggingOut.value = true
+  logoutError.value = ''
+  authError.value = ''
+  try {
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
+    await router.replace('/login')
+  } catch (error) {
+    logoutError.value = authErrorMessage(error)
+    if (!authenticatedUser.value) {
+      authError.value = 'You are logged out on this browser, but we could not confirm sign-out on the server. ' + logoutError.value
+      await router.replace('/login')
+    }
+  } finally {
+    loggingOut.value = false
+  }
 }
 
 function rememberSavedPrefs() {
