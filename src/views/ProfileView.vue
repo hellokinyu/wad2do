@@ -18,10 +18,11 @@
     </div>
 
     <template v-else>
-      <div v-if="logoutError" class="alert alert-danger" role="alert" data-testid="logout-error">
-        {{ logoutError }}
+      <div v-if="logoutError" class="notice mb-4" role="alert" data-testid="logout-error">
+        <p class="mb-0">{{ logoutError }}</p>
       </div>
-      <div v-if="profileError" class="alert alert-danger" role="alert" data-testid="profile-error">
+
+      <div v-if="profileError" class="notice mb-4" role="alert" data-testid="profile-error">
         <p class="mb-2">{{ profileError }}</p>
         <button type="button" class="btn btn-line btn-sm" @click="loadProfile">Try again</button>
       </div>
@@ -34,20 +35,8 @@
             <p class="eyebrow mb-2">Your profile</p>
 
             <div v-if="!editingName">
-              <p class="small text-primary fw-semibold mb-0">Your profile</p>
-              <div class="d-flex align-items-center gap-2 flex-wrap">
-                <h1 class="h3 mb-0" data-testid="profile-name">{{ displayName || 'Add your name' }}</h1>
-                <button
-                  type="button"
-                  class="btn btn-link btn-sm p-0 text-decoration-none"
-                  data-testid="profile-edit-name"
-                  :disabled="!!profileError"
-                  @click="startEditName"
-                >
-                  Edit name
-                </button>
-              </div>
-              <p class="text-muted mb-0" data-testid="profile-email">{{ email }}</p>
+              <h1 class="display-5 fw-bold title mb-1" data-testid="profile-name">{{ displayName || 'Add your name' }}</h1>
+              <p class="muted mb-0" data-testid="profile-email">{{ email }}</p>
             </div>
 
             <div v-else class="name-edit">
@@ -78,9 +67,26 @@
             </div>
           </div>
 
-          <button type="button" class="btn btn-outline-danger rounded-pill px-3 align-self-md-start" data-testid="profile-logout" :disabled="loggingOut" @click="logOut">
-            {{ loggingOut ? 'Logging out…' : 'Log out' }}
-          </button>
+          <div v-if="!editingName" class="d-flex gap-2 align-self-md-start">
+            <button
+              type="button"
+              class="btn btn-grey btn-sm"
+              :disabled="!!profileError"
+              data-testid="profile-edit-name"
+              @click="startEditName"
+            >
+              Edit name
+            </button>
+            <button
+              type="button"
+              class="btn btn-red btn-sm"
+              :disabled="loggingOut"
+              data-testid="profile-logout"
+              @click="logOut"
+            >
+              {{ loggingOut ? 'Logging out…' : 'Log out' }}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -175,7 +181,7 @@
           <div class="d-flex flex-wrap align-items-center gap-3 mt-4 pt-4 panel-footer">
             <button
               type="button"
-              class="btn btn-primary rounded-pill px-4"
+              class="btn btn-ink"
               :disabled="!hasChanges || savingPrefs || !!profileError"
               data-testid="profile-save-prefs"
               @click="savePreferences"
@@ -235,7 +241,8 @@
                   </RouterLink>
                 </h3>
                 <p class="fw-semibold mb-1">{{ formatPrice(activity.price_per_person) }}</p>
-                <p v-if="activity.area" class="muted small mb-3">{{ activity.area }}</p>
+                <p v-if="detailsLine(activity)" class="muted small mb-3">{{ detailsLine(activity) }}</p>
+                <div v-else class="mb-3"></div>
                 <button
                   type="button"
                   class="btn btn-line btn-sm mt-auto align-self-start unsave-btn"
@@ -466,7 +473,7 @@ async function loadSaved() {
   const ids = favourites.map((fav) => fav.activity_id)
   const { data: activities, error: actError } = await supabase
     .from('activities')
-    .select('id, name, category, price_per_person, area, image_url')
+    .select('id, name, category, price_per_person, area, image_url, duration_min, indoor')
     .in('id', ids)
 
   if (actError) {
@@ -506,14 +513,15 @@ async function saveName() {
   savingName.value = true
   nameError.value = ''
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .update({ display_name: nameDraft.value })
     .eq('id', userId.value)
+    .select()
 
   savingName.value = false
 
-  if (error) {
+  if (error || !data || data.length === 0) {
     console.error('Could not save name:', error)
     nameError.value = "Couldn't save your name."
     return
@@ -534,7 +542,6 @@ async function logOut() {
     await router.replace('/login')
   } catch (error) {
     logoutError.value = authErrorMessage(error)
-    // Some Supabase versions clear the local session even when server logout fails.
     if (!authenticatedUser.value) {
       authError.value = 'You are logged out on this browser, but we could not confirm sign-out on the server. ' + logoutError.value
       await router.replace('/login')
@@ -566,7 +573,7 @@ async function savePreferences() {
   prefsMessage.value = ''
   prefsError.value = ''
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .update({
       interests: interests.value,
@@ -575,12 +582,11 @@ async function savePreferences() {
       company: company.value,
     })
     .eq('id', userId.value)
-    .select('id')
-    .single()
+    .select()
 
   savingPrefs.value = false
 
-  if (error) {
+  if (error || !data || data.length === 0) {
     console.error('Could not save preferences:', error)
     prefsError.value = "Couldn't save your preferences."
     return
@@ -615,6 +621,27 @@ function sameList(a, b) {
 
 function slug(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+}
+
+function durationText(minutes) {
+  if (!minutes) return ''
+  if (minutes < 60) return minutes + ' min'
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return rest === 0 ? hours + ' hr' : hours + ' hr ' + rest + ' min'
+}
+
+function settingText(activity) {
+  let setting = ''
+  if (activity.indoor === true) setting = 'Indoor'
+  if (activity.indoor === false) setting = 'Outdoor'
+  if (setting.toLowerCase() === String(activity.category || '').trim().toLowerCase()) return ''
+  return setting
+}
+
+function detailsLine(activity) {
+  const parts = [activity.area, durationText(activity.duration_min), settingText(activity)]
+  return parts.filter((part) => part).join(' · ')
 }
 
 function formatPrice(price) {
@@ -878,5 +905,139 @@ function statusClass(status) {
 .unsave-btn {
   position: relative;
   z-index: 2;
+}
+
+.submission-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #e5e5e5;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.submission-row {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e5e5e5;
+  background-color: #fff;
+}
+
+.submission-row:last-child {
+  border-bottom: none;
+}
+
+.status {
+  flex-shrink: 0;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.status-pending {
+  border: 1px solid #cfcfcf;
+  color: #6b6b6b;
+}
+
+.status-approved {
+  border: 1px solid #111;
+  background-color: #111;
+  color: #fff;
+}
+
+.status-rejected {
+  border: 1px solid #111;
+  color: #111;
+}
+
+.reason {
+  color: #555;
+}
+
+.notice {
+  padding: 1rem 1.25rem;
+  border: 1px solid #111;
+  border-radius: 1rem;
+  background-color: #f8f8f7;
+}
+
+.btn-ink {
+  --bs-btn-color: #fff;
+  --bs-btn-bg: #111;
+  --bs-btn-border-color: #111;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #333;
+  --bs-btn-hover-border-color: #333;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #000;
+  --bs-btn-active-border-color: #000;
+  --bs-btn-disabled-color: #fff;
+  --bs-btn-disabled-bg: #111;
+  --bs-btn-disabled-border-color: #111;
+  --bs-btn-border-radius: 999px;
+  --bs-btn-padding-x: 1.4rem;
+  --bs-btn-padding-y: 0.6rem;
+  --bs-btn-font-weight: 600;
+}
+
+.btn-line {
+  --bs-btn-color: #111;
+  --bs-btn-bg: #fff;
+  --bs-btn-border-color: #111;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #111;
+  --bs-btn-hover-border-color: #111;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #000;
+  --bs-btn-active-border-color: #000;
+  --bs-btn-border-radius: 999px;
+  --bs-btn-padding-x: 1.2rem;
+  --bs-btn-padding-y: 0.6rem;
+  --bs-btn-font-weight: 600;
+}
+
+.btn-line.btn-sm {
+  --bs-btn-padding-x: 0.9rem;
+  --bs-btn-padding-y: 0.35rem;
+  --bs-btn-font-size: 0.875rem;
+}
+
+.btn-grey {
+  --bs-btn-color: #111;
+  --bs-btn-bg: #ececea;
+  --bs-btn-border-color: #ececea;
+  --bs-btn-hover-color: #111;
+  --bs-btn-hover-bg: #dcdcd8;
+  --bs-btn-hover-border-color: #dcdcd8;
+  --bs-btn-active-color: #111;
+  --bs-btn-active-bg: #cfcfca;
+  --bs-btn-active-border-color: #cfcfca;
+  --bs-btn-border-radius: 999px;
+  --bs-btn-padding-x: 1.2rem;
+  --bs-btn-padding-y: 0.6rem;
+  --bs-btn-font-weight: 600;
+}
+
+.btn-red {
+  --bs-btn-color: #b42318;
+  --bs-btn-bg: #fff;
+  --bs-btn-border-color: #b42318;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #b42318;
+  --bs-btn-hover-border-color: #b42318;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #8f1b12;
+  --bs-btn-active-border-color: #8f1b12;
+  --bs-btn-border-radius: 999px;
+  --bs-btn-padding-x: 1.2rem;
+  --bs-btn-padding-y: 0.6rem;
+  --bs-btn-font-weight: 600;
+}
+
+.btn-grey.btn-sm,
+.btn-red.btn-sm {
+  --bs-btn-padding-x: 0.9rem;
+  --bs-btn-padding-y: 0.35rem;
+  --bs-btn-font-size: 0.875rem;
 }
 </style>

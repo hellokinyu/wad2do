@@ -28,140 +28,145 @@
           <span>{{ stepNames[step - 1] }}</span>
         </p>
 
-        <section v-if="step === 1" data-testid="onboarding-step-interests">
-          <h1 class="display-5 fw-bold title mb-3">What do you <span class="hl">love</span> doing?</h1>
-          <p class="lead-text mb-4">Pick at least 3 and we'll line up hangouts that fit you.</p>
-          <div class="d-flex flex-wrap gap-2">
-            <template v-for="item in interestOptions" :key="item">
-              <input
-                type="checkbox"
-                class="btn-check"
-                :id="'interest-' + slug(item)"
-                :value="item"
-                v-model="interests"
-                :data-testid="'interest-' + slug(item)"
-              />
-              <label class="chip chip-lg" :for="'interest-' + slug(item)">{{ item }}</label>
-            </template>
-          </div>
-          <p class="hint mt-3 mb-0" :class="{ ready: interests.length >= 3 }" data-testid="interest-count">
-            {{ interestHint }}
-          </p>
-        </section>
-
-        <section v-if="step === 2" data-testid="onboarding-step-budget">
-          <h1 class="display-5 fw-bold title mb-3">What's your usual <span class="hl">budget?</span></h1>
-          <p class="lead-text mb-4">Per person, per hangout. No judgement.</p>
-          <div class="row g-3">
-            <div v-for="option in budgetOptions" :key="option.id" class="col-12 col-sm-6">
-              <input
-                type="radio"
-                class="btn-check"
-                name="budget"
-                :id="'budget-' + option.id"
-                :value="option.id"
-                v-model="budget"
-                :data-testid="'budget-' + option.id"
-              />
-              <label class="option-tile" :for="'budget-' + option.id">
-                <span class="tick" aria-hidden="true"></span>
-                <span class="d-block fs-3 fw-bold title">{{ option.label }}</span>
-                <span class="d-block tile-hint">{{ option.hint }}</span>
-              </label>
+        <Transition name="step" mode="out-in">
+          <section v-if="step === 1" key="interests" data-testid="onboarding-step-interests">
+            <h1 class="display-5 fw-bold title mb-3">What do you <span class="hl">love</span> doing?</h1>
+            <p class="lead-text mb-4">Pick at least 3 and we'll line up hangouts that fit you.</p>
+            <div class="d-flex flex-wrap gap-2">
+              <template v-for="item in interestOptions" :key="item">
+                <input
+                  type="checkbox"
+                  class="btn-check"
+                  :id="'interest-' + slug(item)"
+                  :value="item"
+                  v-model="interests"
+                  :data-testid="'interest-' + slug(item)"
+                />
+                <label class="chip chip-lg" :for="'interest-' + slug(item)">{{ item }}</label>
+              </template>
             </div>
-          </div>
-        </section>
+            <p class="hint mt-3 mb-0" :class="{ ready: interests.length >= 3 }" data-testid="interest-count">
+              {{ interestHint }}
+            </p>
+          </section>
 
-        <section v-if="step === 3" data-testid="onboarding-step-area">
-          <h1 class="display-5 fw-bold title mb-3">Where do you usually <span class="hl">start?</span></h1>
-          <p class="lead-text mb-4">We'll show hangouts near you first.</p>
-          <input
-            type="text"
-            class="form-control field mb-3"
-            placeholder="Search areas, e.g. Tampines"
-            v-model="areaSearch"
-            data-testid="area-search"
-          />
-          <p class="hint mb-3">
-            <template v-if="homeArea">
-              Starting from <strong class="text-dark" data-testid="area-selected">{{ homeArea }}</strong>
-            </template>
-            <template v-else>Pick one area.</template>
-          </p>
-          <div class="d-flex flex-wrap gap-2">
-            <button
-              v-for="area in filteredAreas"
-              :key="area"
-              type="button"
-              class="chip"
-              :class="{ selected: homeArea === area }"
-              :data-testid="'area-option-' + slug(area)"
-              @click="pickArea(area)"
-            >
-              {{ area }}
-            </button>
-          </div>
-          <p v-if="filteredAreas.length === 0" class="hint mb-0">No areas match "{{ areaSearch }}".</p>
-        </section>
-
-        <section v-if="step === 4" data-testid="onboarding-step-company">
-          <h1 class="display-5 fw-bold title mb-3">Who do you usually <span class="hl">hang out</span> with?</h1>
-          <p class="lead-text mb-4">Optional. Pick any that apply.</p>
-          <div class="d-flex flex-wrap gap-2">
-            <template v-for="item in companyOptions" :key="item">
-              <input
-                type="checkbox"
-                class="btn-check"
-                :id="'company-' + slug(item)"
-                :value="item"
-                v-model="company"
-                :data-testid="'company-' + slug(item)"
-              />
-              <label class="chip chip-lg" :for="'company-' + slug(item)">{{ item }}</label>
-            </template>
-          </div>
-
-          <div v-if="errorMessage" class="notice mt-4" role="alert" data-testid="onboarding-error">
-            <p class="fw-semibold mb-1">Something went wrong.</p>
-            <p class="mb-3">{{ errorMessage }}</p>
-            <button type="button" class="btn btn-line btn-sm" @click="saveProfile">Try again</button>
-          </div>
-        </section>
-
-        <section v-if="step === 5" data-testid="onboarding-step-done">
-          <p class="eyebrow mb-3">All done</p>
-          <h1 class="display-5 fw-bold title mb-3">You're all <span class="hl">set.</span></h1>
-          <p class="lead-text mb-4">Here's what we'll use to find your next hangout.</p>
-
-          <div class="panel mb-4">
-            <div class="summary-row">
-              <p class="eyebrow mb-2">Interests</p>
-              <div v-if="interests.length > 0" class="d-flex flex-wrap gap-2" data-testid="summary-interests">
-                <span v-for="item in interests" :key="item" class="tag">{{ item }}</span>
+          <section v-else-if="step === 2" key="budget" data-testid="onboarding-step-budget">
+            <h1 class="display-5 fw-bold title mb-3">What's your usual <span class="hl">budget?</span></h1>
+            <p class="lead-text mb-4">Per person, per hangout. No judgement.</p>
+            <div class="row g-3">
+              <div v-for="option in budgetOptions" :key="option.id" class="col-12 col-sm-6">
+                <input
+                  type="radio"
+                  class="btn-check"
+                  name="budget"
+                  :id="'budget-' + option.id"
+                  :value="option.id"
+                  v-model="budget"
+                  :data-testid="'budget-' + option.id"
+                />
+                <label class="option-tile" :for="'budget-' + option.id">
+                  <span class="tick" aria-hidden="true"></span>
+                  <span class="d-block fs-3 fw-bold title">{{ option.label }}</span>
+                  <span class="d-block tile-hint">{{ option.hint }}</span>
+                </label>
               </div>
-              <p v-else class="mb-0" data-testid="summary-interests">Not set</p>
             </div>
-            <div class="summary-row">
-              <p class="eyebrow mb-1">Budget</p>
-              <p class="fw-semibold mb-0" data-testid="summary-budget">{{ budgetLabel }}</p>
-            </div>
-            <div class="summary-row">
-              <p class="eyebrow mb-1">Home area</p>
-              <p class="fw-semibold mb-0" data-testid="summary-area">{{ homeArea || 'Not set' }}</p>
-            </div>
-            <div class="summary-row">
-              <p class="eyebrow mb-1">Hangs out with</p>
-              <p class="fw-semibold mb-0" data-testid="summary-company">{{ listOrNotSet(company) }}</p>
-            </div>
-          </div>
+          </section>
 
-          <div class="d-flex flex-wrap align-items-center gap-3">
-            <button type="button" class="btn btn-ink btn-lg" data-testid="onboarding-explore" @click="exploreActivities">
-              Find my hangouts →
-            </button>
-            <span class="hint">You can change these anytime in Profile.</span>
-          </div>
-        </section>
+          <section v-else-if="step === 3" key="area" data-testid="onboarding-step-area">
+            <h1 class="display-5 fw-bold title mb-3">Where do you usually <span class="hl">start?</span></h1>
+            <p class="lead-text mb-4">We'll show hangouts near you first.</p>
+            <input
+              type="text"
+              class="form-control field mb-3"
+              placeholder="Search areas, e.g. Tampines"
+              v-model="areaSearch"
+              data-testid="area-search"
+            />
+            <p class="hint mb-3">
+              <template v-if="homeArea">
+                Starting from <strong class="text-dark" data-testid="area-selected">{{ homeArea }}</strong>
+              </template>
+              <template v-else>Pick one area.</template>
+            </p>
+            <div v-for="group in filteredGroups" :key="group.name" class="area-group">
+              <p class="eyebrow mb-2">{{ group.name }}</p>
+              <div class="d-flex flex-wrap gap-2">
+                <button
+                  v-for="area in group.areas"
+                  :key="area"
+                  type="button"
+                  class="chip"
+                  :class="{ selected: homeArea === area }"
+                  :data-testid="'area-option-' + slug(area)"
+                  @click="pickArea(area)"
+                >
+                  {{ area }}
+                </button>
+              </div>
+            </div>
+            <p v-if="filteredGroups.length === 0" class="hint mb-0">No areas match "{{ areaSearch }}".</p>
+          </section>
+
+          <section v-else-if="step === 4" key="company" data-testid="onboarding-step-company">
+            <h1 class="display-5 fw-bold title mb-3">Who do you usually <span class="hl">hang out</span> with?</h1>
+            <p class="lead-text mb-4">Optional. Pick any that apply.</p>
+            <div class="d-flex flex-wrap gap-2">
+              <template v-for="item in companyOptions" :key="item">
+                <input
+                  type="checkbox"
+                  class="btn-check"
+                  :id="'company-' + slug(item)"
+                  :value="item"
+                  v-model="company"
+                  :data-testid="'company-' + slug(item)"
+                />
+                <label class="chip chip-lg" :for="'company-' + slug(item)">{{ item }}</label>
+              </template>
+            </div>
+
+            <div v-if="errorMessage" class="notice mt-4" role="alert" data-testid="onboarding-error">
+              <p class="fw-semibold mb-1">Something went wrong.</p>
+              <p class="mb-3">{{ errorMessage }}</p>
+              <button type="button" class="btn btn-line btn-sm" @click="saveProfile">Try again</button>
+            </div>
+          </section>
+
+          <section v-else-if="step === 5" key="done" data-testid="onboarding-step-done">
+            <p class="eyebrow mb-3">All done</p>
+            <h1 class="display-5 fw-bold title mb-3">You're all <span class="hl">set.</span></h1>
+            <p class="lead-text mb-4">Here's what we'll use to find your next hangout.</p>
+
+            <div class="panel mb-4">
+              <div class="summary-row">
+                <p class="eyebrow mb-2">Interests</p>
+                <div v-if="interests.length > 0" class="d-flex flex-wrap gap-2" data-testid="summary-interests">
+                  <span v-for="item in interests" :key="item" class="tag">{{ item }}</span>
+                </div>
+                <p v-else class="mb-0" data-testid="summary-interests">Not set</p>
+              </div>
+              <div class="summary-row">
+                <p class="eyebrow mb-1">Budget</p>
+                <p class="fw-semibold mb-0" data-testid="summary-budget">{{ budgetLabel }}</p>
+              </div>
+              <div class="summary-row">
+                <p class="eyebrow mb-1">Home area</p>
+                <p class="fw-semibold mb-0" data-testid="summary-area">{{ homeArea || 'Not set' }}</p>
+              </div>
+              <div class="summary-row">
+                <p class="eyebrow mb-1">Hangs out with</p>
+                <p class="fw-semibold mb-0" data-testid="summary-company">{{ listOrNotSet(company) }}</p>
+              </div>
+            </div>
+
+            <div class="d-flex flex-wrap align-items-center gap-3">
+              <button type="button" class="btn btn-ink btn-lg" data-testid="onboarding-explore" @click="exploreActivities">
+                Find my hangouts →
+              </button>
+              <span class="hint">You can change these anytime in Profile.</span>
+            </div>
+          </section>
+        </Transition>
 
         <div v-if="step < 5" class="footer-bar d-flex justify-content-between align-items-center mt-5 pt-4">
           <button
@@ -202,7 +207,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 
@@ -228,39 +233,32 @@ const budgetOptions = [
   { id: '100-plus', label: '$100+', hint: 'Fine dining, special experiences' },
 ]
 
-const areaOptions = [
-  'Ang Mo Kio',
-  'Bedok',
-  'Bishan',
-  'Bugis',
-  'Bukit Batok',
-  'Bukit Merah',
-  'Bukit Panjang',
-  'Bukit Timah',
-  'Changi',
-  'Choa Chu Kang',
-  'City / Downtown',
-  'Clementi',
-  'Geylang',
-  'Hougang',
-  'Jurong East',
-  'Jurong West',
-  'Kallang',
-  'Marine Parade',
-  'Novena',
-  'Orchard',
-  'Paya Lebar',
-  'Pasir Ris',
-  'Punggol',
-  'Queenstown',
-  'Sembawang',
-  'Sengkang',
-  'Serangoon',
-  'Tampines',
-  'Tanjong Pagar',
-  'Toa Payoh',
-  'Woodlands',
-  'Yishun',
+const areaGroups = [
+  {
+    name: 'Central',
+    areas: [
+      'Bishan',
+      'Bugis',
+      'Bukit Merah',
+      'Bukit Timah',
+      'City / Downtown',
+      'Geylang',
+      'Kallang',
+      'Marine Parade',
+      'Novena',
+      'Orchard',
+      'Queenstown',
+      'Tanjong Pagar',
+      'Toa Payoh',
+    ],
+  },
+  { name: 'East', areas: ['Bedok', 'Changi', 'Pasir Ris', 'Paya Lebar', 'Tampines'] },
+  { name: 'North', areas: ['Sembawang', 'Woodlands', 'Yishun'] },
+  { name: 'North-East', areas: ['Ang Mo Kio', 'Hougang', 'Punggol', 'Sengkang', 'Serangoon'] },
+  {
+    name: 'West',
+    areas: ['Bukit Batok', 'Bukit Panjang', 'Choa Chu Kang', 'Clementi', 'Jurong East', 'Jurong West'],
+  },
 ]
 
 const companyOptions = ['Friends', 'Family', 'Partner']
@@ -285,9 +283,16 @@ const interestHint = computed(() => {
   return count + ' picked. Nice!'
 })
 
-const filteredAreas = computed(() => {
+const filteredGroups = computed(() => {
   const text = areaSearch.value.trim().toLowerCase()
-  return areaOptions.filter((area) => area.toLowerCase().includes(text))
+  const result = []
+  for (const group of areaGroups) {
+    const matches = group.areas.filter((area) => area.toLowerCase().includes(text))
+    if (matches.length > 0) {
+      result.push({ name: group.name, areas: matches })
+    }
+  }
+  return result
 })
 
 const canNext = computed(() => {
@@ -332,6 +337,21 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+})
+
+function onEnterKey(event) {
+  if (event.key !== 'Enter') return
+  const tag = event.target.tagName
+  if (tag === 'BUTTON' || tag === 'A' || event.target.type === 'text') return
+  if (step.value < 5 && canNext.value && !saving.value) goNext()
+}
+
+onMounted(() => {
+  document.addEventListener('keyup', onEnterKey)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keyup', onEnterKey)
 })
 
 function goBack() {
@@ -449,15 +469,26 @@ function exploreActivities() {
 }
 
 .step-bar {
+  position: relative;
   flex: 1;
   height: 6px;
   border-radius: 999px;
   background-color: #e6e6e1;
-  transition: background-color 0.3s ease;
+  overflow: hidden;
 }
 
-.step-bar.filled {
+.step-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
   background-color: #111;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.4s ease;
+}
+
+.step-bar.filled::after {
+  transform: scaleX(1);
 }
 
 .chip {
@@ -635,5 +666,34 @@ function exploreActivities() {
   --bs-btn-padding-x: 1.2rem;
   --bs-btn-padding-y: 0.6rem;
   --bs-btn-font-weight: 600;
+}
+
+.area-group {
+  margin-bottom: 1.25rem;
+}
+
+.step-enter-active,
+.step-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.step-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.step-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-enter-active,
+  .step-leave-active,
+  .step-bar::after {
+    transition: none;
+  }
 }
 </style>
