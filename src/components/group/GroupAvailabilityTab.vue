@@ -397,7 +397,10 @@ async function loadAll() {
       .select('user_id, slot_start')
       .eq('group_id', groupId.value)
     if (e4) throw e4
-    allSlots.value = av.map((r) => ({ user_id: r.user_id, key: fromDb(r.slot_start) }))
+    // Skip slots outside the date range (e.g. after the dates were changed in Settings)
+    allSlots.value = av
+      .map((r) => ({ user_id: r.user_id, key: fromDb(r.slot_start) }))
+      .filter((s) => days.value.includes(s.key.split('T')[0]))
 
     // 4. split out my own slots so the "My availability" grid is pre-filled
     const mine = {}
