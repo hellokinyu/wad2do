@@ -278,7 +278,12 @@ onUnmounted(() => {
                 <dt>Rating</dt>
                 <dd>
                   {{ rating ? rating + ' / 5' : 'Not available yet' }}
-                  <span v-if="rating && googleDetails" class="google-attribution" translate="no">
+                  <span
+                    v-if="googleDetails && (rating || reviewCount !== null)"
+                    class="google-attribution"
+                    translate="no"
+                    data-testid="detail-rating-source"
+                  >
                     Google Maps
                   </span>
                   <span

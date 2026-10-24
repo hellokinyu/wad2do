@@ -247,6 +247,7 @@ test('direct visit handles missing metadata and has a safe Back destination', as
   await expect(page.getByTestId('detail-description')).toContainText("hasn't been added")
   await expect(page.getByTestId('detail-hours-unavailable')).toBeVisible()
   await expect(page.getByTestId('detail-rating')).toHaveCount(0)
+  await expect(page.getByTestId('detail-rating-source')).toHaveCount(0)
   await expect(page.getByTestId('detail-website')).toHaveCount(0)
   await expect(page.getByTestId('detail-map')).toHaveCount(0)
   await expect(page.getByTestId('detail-tags').getByText('Outdoor', { exact: true })).toHaveCount(1)
@@ -334,6 +335,24 @@ test('Google hours fall back to regular hours and missing ratings stay unavailab
   )
   await expect(page.getByTestId('detail-rating')).toHaveCount(0)
   await expect(page.getByTestId('detail-review-count')).toHaveCount(0)
+})
+
+test('a Google review count has attribution even without a rating or Google hours', async ({
+  page,
+}) => {
+  await mockBackend(page, {
+    records: [googlePottery],
+    googleDetails: { userRatingCount: 0 },
+  })
+  await page.goto('/activities/' + potteryId)
+
+  const reviews = page.getByTestId('detail-review-count')
+  await expect(reviews).toHaveText('0 reviews')
+  await expect(page.getByTestId('detail-rating')).toHaveCount(0)
+  await expect(page.getByTestId('detail-hours-source')).toHaveCount(0)
+  const source = reviews.locator('..').getByTestId('detail-rating-source')
+  await expect(source).toHaveText('Google Maps')
+  await expect(source).toHaveAttribute('translate', 'no')
 })
 
 test('missing Google hours keep saved activity hours and unsafe attribution links stay text', async ({
