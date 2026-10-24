@@ -20,13 +20,39 @@ const loading = ref(true)
 const errorMessage = ref('')
 const imageFailed = ref(false)
 const shareDialog = ref(null)
+const googleDetails = ref(null)
+const googleLoading = ref(false)
+const googleError = ref('')
 let requestNumber = 0
 
 const price = computed(() => formatPrice(activity.value?.price_per_person))
 const duration = computed(() => formatDuration(activity.value?.duration_min))
-const hours = computed(() => getWeeklyHours(activity.value?.opening_hours))
+const googleHours = computed(() => {
+  const current = getWeeklyHours(googleDetails.value?.currentOpeningHours?.weekdayDescriptions)
+  return current.available
+    ? current
+    : getWeeklyHours(googleDetails.value?.regularOpeningHours?.weekdayDescriptions)
+})
+const hours = computed(() =>
+  googleHours.value.available ? googleHours.value : getWeeklyHours(activity.value?.opening_hours),
+)
 const websiteUrl = computed(() => getWebsiteUrl(activity.value))
-const rating = computed(() => getRating(activity.value))
+const rating = computed(() =>
+  getRating(
+    activity.value?.google_place_id || activity.value?.source === 'google'
+      ? googleDetails.value
+      : activity.value,
+  ),
+)
+const reviewCount = computed(() => {
+  const count = googleDetails.value?.userRatingCount
+  return Number.isSafeInteger(count) && count >= 0 ? count.toLocaleString('en-SG') : null
+})
+const googleAttributions = computed(() =>
+  (Array.isArray(googleDetails.value?.attributions) ? googleDetails.value.attributions : [])
+    .filter((item) => typeof item?.provider === 'string' && item.provider.trim())
+    .map((item) => ({ name: item.provider, url: getWebsiteUrl({ website: item.providerUri }) })),
+)
 const setting = computed(() => getSetting(activity.value?.indoor))
 const location = computed(() => getLocation(activity.value))
 
@@ -70,19 +96,49 @@ async function loadActivity() {
   errorMessage.value = ''
   activity.value = null
   imageFailed.value = false
+  googleDetails.value = null
+  googleLoading.value = false
+  googleError.value = ''
 
   try {
     const { data, error } = await supabase.from('activities').select('*').eq('id', id).maybeSingle()
 
     // A malformed UUID is an invalid link, rather than a retryable outage.
     if (error && error.code !== '22P02') throw error
-    if (request === requestNumber) activity.value = error ? null : data
+    if (request === requestNumber) {
+      activity.value = error ? null : data
+      if (activity.value?.google_place_id) void loadGoogleDetails()
+    }
   } catch {
     if (request === requestNumber) {
       errorMessage.value = "Couldn't load this activity. Please try again."
     }
   } finally {
     if (request === requestNumber) loading.value = false
+  }
+}
+
+async function loadGoogleDetails() {
+  const request = requestNumber
+  const activityId = activity.value?.id
+  if (!activity.value?.google_place_id || googleLoading.value) return
+  googleLoading.value = true
+  googleError.value = ''
+
+  try {
+    const { data, error } = await supabase.functions.invoke('google-place-details', {
+      body: { activityId },
+    })
+    if (error || !data || typeof data !== 'object' || Array.isArray(data) || data.error) {
+      throw error || new Error('Invalid Google details response')
+    }
+    if (request === requestNumber) googleDetails.value = data
+  } catch {
+    if (request === requestNumber) {
+      googleError.value = "Couldn't load Google ratings and opening hours. Please try again."
+    }
+  } finally {
+    if (request === requestNumber) googleLoading.value = false
   }
 }
 
@@ -169,10 +225,31 @@ onUnmounted(() => {
           <h1 class="detail-title mb-2" data-testid="activity-detail-name">{{ activity.name }}</h1>
           <span v-if="rating" class="rating-badge" data-testid="detail-rating">
             <span aria-hidden="true">★</span> {{ rating }}
+            <span v-if="googleDetails" class="google-attribution" translate="no">Google Maps</span>
           </span>
         </div>
         <p class="text-secondary mb-0">{{ activity.area || 'Area unavailable' }}</p>
       </header>
+
+      <p v-if="googleLoading" role="status" data-testid="detail-google-loading">
+        Loading Google ratings and opening hours…
+      </p>
+      <div
+        v-else-if="googleError"
+        class="alert alert-warning"
+        role="alert"
+        data-testid="detail-google-error"
+      >
+        <p>{{ googleError }}</p>
+        <button
+          type="button"
+          class="btn btn-outline-dark"
+          data-testid="detail-google-retry"
+          @click="loadGoogleDetails()"
+        >
+          Try again
+        </button>
+      </div>
 
       <div class="row g-4">
         <aside class="col-12 col-lg-4 order-lg-last">
@@ -198,7 +275,19 @@ onUnmounted(() => {
               </div>
               <div>
                 <dt>Rating</dt>
-                <dd>{{ rating ? rating + ' / 5' : 'Not available yet' }}</dd>
+                <dd>
+                  {{ rating ? rating + ' / 5' : 'Not available yet' }}
+                  <span v-if="rating && googleDetails" class="google-attribution" translate="no">
+                    Google Maps
+                  </span>
+                  <span
+                    v-if="reviewCount !== null"
+                    class="d-block text-secondary small"
+                    data-testid="detail-review-count"
+                  >
+                    {{ reviewCount }} reviews
+                  </span>
+                </dd>
               </div>
             </dl>
 
@@ -261,6 +350,17 @@ onUnmounted(() => {
           <section class="detail-section mb-4" aria-labelledby="hours-title">
             <h2 id="hours-title" class="h5 fw-bold mb-3">Opening hours</h2>
             <p
+              v-if="googleHours.available"
+              class="google-attribution"
+              translate="no"
+              data-testid="detail-hours-source"
+            >
+              Google Maps
+            </p>
+            <p v-else-if="hours.available && activity.google_place_id" class="text-secondary small">
+              Showing saved activity hours.
+            </p>
+            <p
               v-if="!hours.available"
               class="text-secondary small"
               data-testid="detail-hours-unavailable"
@@ -283,6 +383,17 @@ onUnmounted(() => {
                 <span>{{ row.hours }}</span>
               </li>
             </ul>
+            <p
+              v-for="(provider, index) in googleAttributions"
+              :key="index"
+              class="small mt-2 mb-0"
+              data-testid="detail-google-attribution"
+            >
+              <a v-if="provider.url" :href="provider.url" target="_blank" rel="noopener noreferrer">
+                {{ provider.name }}
+              </a>
+              <span v-else>{{ provider.name }}</span>
+            </p>
           </section>
 
           <section
@@ -386,6 +497,15 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.google-attribution {
+  color: #5e5e5e;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: normal;
+  white-space: nowrap;
+}
+
 .back-button {
   padding: 8px 18px;
 }
