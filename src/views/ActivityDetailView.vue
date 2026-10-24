@@ -128,6 +128,7 @@ async function loadGoogleDetails() {
   try {
     const { data, error } = await supabase.functions.invoke('google-place-details', {
       body: { activityId },
+      timeout: 15000,
     })
     if (error || !data || typeof data !== 'object' || Array.isArray(data) || data.error) {
       throw error || new Error('Invalid Google details response')

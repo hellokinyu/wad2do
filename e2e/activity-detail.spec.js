@@ -97,6 +97,7 @@ async function mockBackend(page, options = {}) {
   await page.route('**/functions/v1/google-place-details', async (route) => {
     state.googleRequests.push(route.request().postDataJSON())
     expect(route.request().headers().authorization).toMatch(/^Bearer /)
+    if (options.stallGoogle && state.googleRequests.length === 1) return
     if (options.googleGate) {
       options.onGoogleRequest()
       await options.googleGate
@@ -390,6 +391,28 @@ test('Google loading leaves the activity usable and failed requests can be retri
   await expect(page.getByTestId('detail-hours-row').filter({ hasText: 'Monday' })).toContainText(
     'Closed',
   )
+  await page.getByTestId('detail-google-retry').click()
+  await expect(page.getByTestId('detail-rating')).toContainText('4.6')
+  await expect(page.getByTestId('detail-google-error')).toHaveCount(0)
+  expect(state.googleRequests).toEqual([{ activityId: potteryId }, { activityId: potteryId }])
+})
+
+test('a stalled Google request times out and can be retried without reloading the activity', async ({
+  page,
+}) => {
+  await page.clock.install()
+  const state = await mockBackend(page, { records: [googlePottery], stallGoogle: true })
+  await page.goto('/activities/' + potteryId)
+
+  await expect(page.getByTestId('detail-google-loading')).toBeVisible()
+  await expect.poll(() => state.googleRequests.length).toBe(1)
+  await page.clock.fastForward(15000)
+
+  await expect(page.getByTestId('detail-google-error')).toBeVisible()
+  await expect(page.getByTestId('detail-google-loading')).toHaveCount(0)
+  await expect(page.getByTestId('detail-error')).toHaveCount(0)
+  await expect(page.getByTestId('detail-share')).toBeEnabled()
+  await expect(page.getByText('Showing saved activity hours.')).toBeVisible()
   await page.getByTestId('detail-google-retry').click()
   await expect(page.getByTestId('detail-rating')).toContainText('4.6')
   await expect(page.getByTestId('detail-google-error')).toHaveCount(0)
