@@ -282,6 +282,42 @@ test('Google details replace stored ratings and hours, with review count and att
   await page.screenshot({ path: test.info().outputPath('google-details.png'), fullPage: true })
 })
 
+test('abbreviated Google weekdays override saved hours, including overnight and closed days', async ({
+  page,
+}) => {
+  await mockBackend(page, {
+    records: [googlePottery],
+    googleDetails: {
+      currentOpeningHours: {
+        weekdayDescriptions: [
+          'Mon: 09:00–19:00',
+          'tue: Closed',
+          'WED: Open 24 hours',
+          'Thu: 10:00–20:00',
+          'Fri: 10:00–21:00',
+          'Sat: 10:00–22:00',
+          'Sun: 18:00–06:00',
+        ],
+      },
+    },
+  })
+  await page.goto('/activities/' + potteryId)
+
+  await expect(page.getByTestId('detail-hours-source')).toHaveText('Google Maps')
+  for (const [day, hours] of [
+    ['Monday', '09:00–19:00'],
+    ['Tuesday', 'Closed'],
+    ['Wednesday', 'Open 24 hours'],
+    ['Thursday', '10:00–20:00'],
+    ['Friday', '10:00–21:00'],
+    ['Saturday', '10:00–22:00'],
+    ['Sunday', '18:00–06:00'],
+  ]) {
+    await expect(page.getByTestId('detail-hours-row').filter({ hasText: day })).toContainText(hours)
+  }
+  await expect(page.getByText('Showing saved activity hours.')).toHaveCount(0)
+})
+
 test('Google hours fall back to regular hours and missing ratings stay unavailable', async ({
   page,
 }) => {

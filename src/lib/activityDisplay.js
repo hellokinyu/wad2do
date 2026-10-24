@@ -67,7 +67,9 @@ export function getWeeklyHours(value) {
     if (Array.isArray(textRows)) {
       const line = textRows.find(
         (text) =>
-          typeof text === 'string' && text.toLowerCase().startsWith(day.toLowerCase() + ':'),
+          typeof text === 'string' &&
+          (text.toLowerCase().startsWith(day.toLowerCase() + ':') ||
+            text.toLowerCase().startsWith(day.slice(0, 3).toLowerCase() + ':')),
       )
       if (line) entry = line.slice(line.indexOf(':') + 1).trim()
     } else if (hours && typeof hours === 'object') {

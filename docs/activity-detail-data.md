@@ -29,7 +29,7 @@ Opening hours can use a weekday map. Example structure only — these are not ve
 }
 ~~~
 
-Long weekday names and provider weekday_text arrays such as ["Monday: Closed", "Tuesday: 10:00–18:00"] are also accepted. Missing days are shown as Hours unavailable. The highlighted day uses Asia/Singapore time. This helper formats display text; it does not implement the team's opening-hours checks for Plan.
+Long weekday names and provider weekday_text arrays such as ["Monday: Closed", "Tuesday: 10:00–18:00"] are also accepted. Provider descriptions can use full names or three-letter weekday abbreviations, case-insensitively (for example, "Sun: 18:00–06:00"). Missing days are shown as Hours unavailable. The highlighted day uses Asia/Singapore time. This helper formats display text; it does not implement the team's opening-hours checks for Plan.
 
 Rating is displayed only when a valid value is available. Activities with a `google_place_id` now call the deployed `google-place-details` Edge Function using `supabase.functions.invoke('google-place-details', { body: { activityId: activity.id } })`. The signed-in session is sent by the shared client; the Google API key stays in the Edge Function's `GOOGLE_MAPS_API_KEY` secret. The function must validate the user, read the activity's Place ID under RLS, and return Google Place Details fields. No Google key or service-role key belongs in the frontend.
 
