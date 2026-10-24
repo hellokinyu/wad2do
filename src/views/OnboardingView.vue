@@ -16,7 +16,7 @@
           aria-label="Onboarding progress"
           :aria-valuenow="progressPercent"
           aria-valuemin="0"
-          aria-valuemax="100"[]
+          aria-valuemax="100"
           data-testid="onboarding-progress"
         >
           <span v-for="n in 4" :key="n" class="step-bar" :class="{ filled: n <= step }"></span>
