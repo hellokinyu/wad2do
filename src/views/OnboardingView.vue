@@ -8,6 +8,11 @@
         </div>
       </div>
 
+      <div v-else-if="loadError" class="notice" role="alert" data-testid="onboarding-load-error">
+        <p>{{ loadError }}</p>
+        <button type="button" class="btn btn-line" data-testid="onboarding-load-retry" @click="loadProfile">Try again</button>
+      </div>
+
       <template v-else>
         <div
           v-if="step < 5"
@@ -28,6 +33,7 @@
           <span>{{ stepNames[step - 1] }}</span>
         </p>
 
+        <fieldset :disabled="saving" class="border-0 p-0 m-0">
         <Transition name="step" mode="out-in">
           <section v-if="step === 1" key="interests" data-testid="onboarding-step-interests">
             <h1 class="display-5 fw-bold title mb-3">What do you <span class="hl">love</span> doing?</h1>
@@ -74,38 +80,17 @@
           </section>
 
           <section v-else-if="step === 3" key="area" data-testid="onboarding-step-area">
-            <h1 class="display-5 fw-bold title mb-3">Where do you usually <span class="hl">start?</span></h1>
-            <p class="lead-text mb-4">We'll show hangouts near you first.</p>
-            <input
-              type="text"
-              class="form-control field mb-3"
-              placeholder="Search areas, e.g. Tampines"
-              v-model="areaSearch"
-              data-testid="area-search"
-            />
-            <p class="hint mb-3">
-              <template v-if="homeArea">
-                Starting from <strong class="text-dark" data-testid="area-selected">{{ homeArea }}</strong>
-              </template>
-              <template v-else>Pick one area.</template>
-            </p>
-            <div v-for="group in filteredGroups" :key="group.name" class="area-group">
-              <p class="eyebrow mb-2">{{ group.name }}</p>
-              <div class="d-flex flex-wrap gap-2">
-                <button
-                  v-for="area in group.areas"
-                  :key="area"
-                  type="button"
-                  class="chip"
-                  :class="{ selected: homeArea === area }"
-                  :data-testid="'area-option-' + slug(area)"
-                  @click="pickArea(area)"
-                >
-                  {{ area }}
-                </button>
+            <h1 class="display-5 fw-bold title mb-3">Which MRT station do you usually <span class="hl">start from?</span></h1>
+            <p class="lead-text mb-4">Choose your usual starting station. We'll use its area for activity matches.</p>
+            <MrtStationPicker :model-value="homeStationId" :disabled="saving" @update:model-value="pickStation">
+              <div class="mt-3">
+                <label for="home-area" class="form-label">Home area</label>
+                <select id="home-area" class="form-select field" :value="homeArea" data-testid="home-area" @change="pickArea($event.target.value)">
+                  <option value="">Not set</option>
+                  <option v-for="area in homeAreas" :key="area" :value="area">{{ area }}</option>
+                </select>
               </div>
-            </div>
-            <p v-if="filteredGroups.length === 0" class="hint mb-0">No areas match "{{ areaSearch }}".</p>
+            </MrtStationPicker>
           </section>
 
           <section v-else-if="step === 4" key="company" data-testid="onboarding-step-company">
@@ -150,8 +135,8 @@
                 <p class="fw-semibold mb-0" data-testid="summary-budget">{{ budgetLabel }}</p>
               </div>
               <div class="summary-row">
-                <p class="eyebrow mb-1">Home area</p>
-                <p class="fw-semibold mb-0" data-testid="summary-area">{{ homeArea || 'Not set' }}</p>
+                <p class="eyebrow mb-1">Starting location</p>
+                <p class="fw-semibold mb-0" data-testid="summary-area">{{ selectedStation ? selectedStation.name + ' MRT · ' + selectedStation.codes.join(' / ') : homeArea || 'Not set' }}</p>
               </div>
               <div class="summary-row">
                 <p class="eyebrow mb-1">Hangs out with</p>
@@ -167,6 +152,7 @@
             </div>
           </section>
         </Transition>
+        </fieldset>
 
         <div v-if="step < 5" class="footer-bar d-flex justify-content-between align-items-center mt-5 pt-4">
           <button
@@ -210,6 +196,9 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
+import MrtStationPicker from '@/components/MrtStationPicker.vue'
+import { homeAreas } from '@/data/homeAreas'
+import { findStation } from '@/data/mrtStations'
 
 const router = useRouter()
 
@@ -233,44 +222,18 @@ const budgetOptions = [
   { id: '100-plus', label: '$100+', hint: 'Fine dining, special experiences' },
 ]
 
-const areaGroups = [
-  {
-    name: 'Central',
-    areas: [
-      'Bishan',
-      'Bugis',
-      'Bukit Merah',
-      'Bukit Timah',
-      'City / Downtown',
-      'Geylang',
-      'Kallang',
-      'Marine Parade',
-      'Novena',
-      'Orchard',
-      'Queenstown',
-      'Tanjong Pagar',
-      'Toa Payoh',
-    ],
-  },
-  { name: 'East', areas: ['Bedok', 'Changi', 'Pasir Ris', 'Paya Lebar', 'Tampines'] },
-  { name: 'North', areas: ['Sembawang', 'Woodlands', 'Yishun'] },
-  { name: 'North-East', areas: ['Ang Mo Kio', 'Hougang', 'Punggol', 'Sengkang', 'Serangoon'] },
-  {
-    name: 'West',
-    areas: ['Bukit Batok', 'Bukit Panjang', 'Choa Chu Kang', 'Clementi', 'Jurong East', 'Jurong West'],
-  },
-]
-
 const companyOptions = ['Friends', 'Family', 'Partner']
 
 const step = ref(1)
 const interests = ref([])
 const budget = ref('')
 const homeArea = ref('')
+const homeStationId = ref(null)
+const selectedStation = computed(() => findStation(homeStationId.value))
 const company = ref([])
 
-const areaSearch = ref('')
 const loading = ref(true)
+const loadError = ref('')
 const saving = ref(false)
 const errorMessage = ref('')
 
@@ -283,22 +246,10 @@ const interestHint = computed(() => {
   return count + ' picked. Nice!'
 })
 
-const filteredGroups = computed(() => {
-  const text = areaSearch.value.trim().toLowerCase()
-  const result = []
-  for (const group of areaGroups) {
-    const matches = group.areas.filter((area) => area.toLowerCase().includes(text))
-    if (matches.length > 0) {
-      result.push({ name: group.name, areas: matches })
-    }
-  }
-  return result
-})
-
 const canNext = computed(() => {
   if (step.value === 1) return interests.value.length >= 3
   if (step.value === 2) return budget.value !== ''
-  if (step.value === 3) return homeArea.value !== ''
+  if (step.value === 3) return !!selectedStation.value || homeAreas.includes(homeArea.value)
   return true
 })
 
@@ -315,34 +266,38 @@ function listOrNotSet(items) {
   return items.length > 0 ? items.join(', ') : 'Not set'
 }
 
-onMounted(async () => {
+async function loadProfile() {
+  loading.value = true
+  loadError.value = ''
   try {
-    const { data: userData } = await supabase.auth.getUser()
-    if (userData.user) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('interests, budget, home_area, company')
-        .eq('id', userData.user.id)
-        .single()
+    const { data: userData, error: userError } = await supabase.auth.getUser()
+    if (userError || !userData.user) throw userError || new Error('Not logged in')
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('interests, budget, home_area, home_station_id, company')
+      .eq('id', userData.user.id)
+      .single()
 
-      if (data) {
-        interests.value = data.interests || []
-        budget.value = data.budget || ''
-        homeArea.value = data.home_area || ''
-        company.value = data.company || []
-      }
-    }
+    if (error || !data) throw error || new Error('No profile row found')
+    interests.value = data.interests || []
+    budget.value = data.budget || ''
+    homeArea.value = data.home_area || ''
+    homeStationId.value = data.home_station_id || null
+    company.value = data.company || []
   } catch (err) {
     console.error('Could not load saved answers:', err)
+    loadError.value = "Couldn't load your saved answers. Try again before editing."
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(loadProfile)
 
 function onEnterKey(event) {
-  if (event.key !== 'Enter') return
+  if (event.key !== 'Enter' || loading.value || loadError.value) return
   const tag = event.target.tagName
-  if (tag === 'BUTTON' || tag === 'A' || event.target.type === 'text') return
+  if (['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) return
   if (step.value < 5 && canNext.value && !saving.value) goNext()
 }
 
@@ -370,7 +325,7 @@ function goNext() {
 function skipStep() {
   if (step.value === 1) interests.value = []
   if (step.value === 2) budget.value = ''
-  if (step.value === 3) homeArea.value = ''
+  if (step.value === 3) pickStation(null)
   if (step.value === 4) company.value = []
 
   if (step.value < 4) {
@@ -381,10 +336,18 @@ function skipStep() {
 }
 
 function pickArea(area) {
+  homeStationId.value = null
   homeArea.value = area
 }
 
+function pickStation(id) {
+  const station = findStation(id)
+  homeStationId.value = station?.id || null
+  homeArea.value = station?.area || ''
+}
+
 async function saveProfile() {
+  if (saving.value) return
   saving.value = true
   errorMessage.value = ''
 
@@ -400,13 +363,15 @@ async function saveProfile() {
         interests: interests.value,
         budget: budget.value || null,
         home_area: homeArea.value || null,
+        home_station_id: homeStationId.value,
         company: company.value,
       })
       .eq('id', userData.user.id)
-      .select()
+      .select('id')
+      .single()
 
     if (error) throw error
-    if (!data || data.length === 0) {
+    if (!data?.id) {
       throw new Error('No profile row found for this user')
     }
 

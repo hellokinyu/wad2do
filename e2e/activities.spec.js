@@ -448,7 +448,12 @@ test('price and catalogue sorts display results while preferences are still load
   const pendingProfileRequest = new Promise((resolve) => {
     captureProfileRequest = resolve
   })
-  await page.route('**/rest/v1/profiles?*', (route) => captureProfileRequest(route))
+  await page.route('**/rest/v1/profiles?*', (route) => {
+    if (new URL(route.request().url()).searchParams.get('select') === 'is_admin') {
+      return route.fulfill({ json: [{ is_admin: false }] })
+    }
+    captureProfileRequest(route)
+  })
   const catalogueLoaded = page.waitForResponse('**/rest/v1/activities?*')
   await page.goto('/activities')
   const profileRequest = await pendingProfileRequest
@@ -502,6 +507,9 @@ test('profile failure keeps the catalogue usable and can be retried', async ({ p
   await mockActivities(page)
   let requests = 0
   await page.route('**/rest/v1/profiles?*', (route) => {
+    if (new URL(route.request().url()).searchParams.get('select') === 'is_admin') {
+      return route.fulfill({ json: [{ is_admin: false }] })
+    }
     requests += 1
     return requests === 1
       ? route.fulfill({ status: 403, json: { message: 'Profile read denied' } })

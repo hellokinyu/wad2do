@@ -114,7 +114,7 @@
           <span v-if="hasChanges" class="unsaved" data-testid="profile-unsaved">Unsaved changes</span>
         </div>
 
-        <div class="panel">
+        <fieldset :disabled="savingPrefs" class="panel">
           <div class="row g-4">
             <div class="col-12">
               <p class="group-label">Interests</p>
@@ -152,12 +152,17 @@
               </div>
             </div>
 
-            <div class="col-12 col-lg-5">
-              <label for="pref-area" class="group-label d-block">Home area</label>
-              <select id="pref-area" class="form-select field" v-model="homeArea" data-testid="pref-area">
-                <option value="">Not set</option>
-                <option v-for="area in areaOptions" :key="area" :value="area">{{ area }}</option>
-              </select>
+            <div class="col-12">
+              <p class="group-label">Starting location</p>
+              <MrtStationPicker :model-value="homeStationId" :disabled="savingPrefs" @update:model-value="pickStation">
+                <div class="mt-3">
+                  <label for="pref-area" class="group-label d-block">Home area</label>
+                  <select id="pref-area" class="form-select field" :value="homeArea" data-testid="pref-area" @change="pickArea($event.target.value)">
+                    <option value="">Not set</option>
+                    <option v-for="area in homeAreas" :key="area" :value="area">{{ area }}</option>
+                  </select>
+                </div>
+              </MrtStationPicker>
             </div>
 
             <div class="col-12">
@@ -201,7 +206,7 @@
             <span v-if="prefsMessage" class="fw-semibold" data-testid="profile-prefs-saved">✓ {{ prefsMessage }}</span>
             <span v-if="prefsError" class="error-text" data-testid="profile-prefs-error">{{ prefsError }}</span>
           </div>
-        </div>
+        </fieldset>
       </section>
 
       <section class="mb-5" data-testid="profile-saved">
@@ -308,6 +313,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
+import MrtStationPicker from '@/components/MrtStationPicker.vue'
+import { homeAreas } from '@/data/homeAreas'
+import { findStation } from '@/data/mrtStations'
 import { authErrorMessage, useAuth } from '@/composables/useAuth'
 
 const router = useRouter()
@@ -331,41 +339,6 @@ const budgetOptions = [
   { id: '100-plus', label: '$100+' },
 ]
 
-const areaOptions = [
-  'Ang Mo Kio',
-  'Bedok',
-  'Bishan',
-  'Bugis',
-  'Bukit Batok',
-  'Bukit Merah',
-  'Bukit Panjang',
-  'Bukit Timah',
-  'Changi',
-  'Choa Chu Kang',
-  'City / Downtown',
-  'Clementi',
-  'Geylang',
-  'Hougang',
-  'Jurong East',
-  'Jurong West',
-  'Kallang',
-  'Marine Parade',
-  'Novena',
-  'Orchard',
-  'Paya Lebar',
-  'Pasir Ris',
-  'Punggol',
-  'Queenstown',
-  'Sembawang',
-  'Sengkang',
-  'Serangoon',
-  'Tampines',
-  'Tanjong Pagar',
-  'Toa Payoh',
-  'Woodlands',
-  'Yishun',
-]
-
 const companyOptions = ['Friends', 'Family', 'Partner']
 
 const loading = ref(true)
@@ -381,8 +354,9 @@ const nameError = ref('')
 const interests = ref([])
 const budget = ref('')
 const homeArea = ref('')
+const homeStationId = ref(null)
 const company = ref([])
-const savedPrefs = ref({ interests: [], budget: '', homeArea: '', company: [] })
+const savedPrefs = ref({ interests: [], budget: '', homeArea: '', homeStationId: null, company: [] })
 const savingPrefs = ref(false)
 const prefsMessage = ref('')
 const prefsError = ref('')
@@ -405,6 +379,7 @@ const hasChanges = computed(() => {
     !sameList(interests.value, savedPrefs.value.interests) ||
     budget.value !== savedPrefs.value.budget ||
     homeArea.value !== savedPrefs.value.homeArea ||
+    homeStationId.value !== savedPrefs.value.homeStationId ||
     !sameList(company.value, savedPrefs.value.company)
   )
 })
@@ -428,7 +403,7 @@ async function loadProfile() {
   profileError.value = ''
   const { data, error } = await supabase
     .from('profiles')
-    .select('display_name, interests, budget, home_area, company')
+    .select('display_name, interests, budget, home_area, home_station_id, company')
     .eq('id', userId.value)
     .maybeSingle()
 
@@ -447,6 +422,7 @@ async function loadProfile() {
   interests.value = data.interests || []
   budget.value = data.budget || ''
   homeArea.value = data.home_area || ''
+  homeStationId.value = data.home_station_id || null
   company.value = data.company || []
   rememberSavedPrefs()
 }
@@ -556,47 +532,62 @@ function rememberSavedPrefs() {
     interests: [...interests.value],
     budget: budget.value,
     homeArea: homeArea.value,
+    homeStationId: homeStationId.value,
     company: [...company.value],
   }
 }
 
 function undoChanges() {
+  if (savingPrefs.value) return
   interests.value = [...savedPrefs.value.interests]
   budget.value = savedPrefs.value.budget
   homeArea.value = savedPrefs.value.homeArea
+  homeStationId.value = savedPrefs.value.homeStationId
   company.value = [...savedPrefs.value.company]
   prefsError.value = ''
 }
 
+function pickArea(area) {
+  homeStationId.value = null
+  homeArea.value = area
+}
+
+function pickStation(id) {
+  const station = findStation(id)
+  homeStationId.value = station?.id || null
+  homeArea.value = station?.area || ''
+}
+
 async function savePreferences() {
+  if (savingPrefs.value || profileError.value || !hasChanges.value) return
   savingPrefs.value = true
   prefsMessage.value = ''
   prefsError.value = ''
 
-  const { data, error } = await supabase
-    .from('profiles')
-    .update({
-      interests: interests.value,
-      budget: budget.value || null,
-      home_area: homeArea.value || null,
-      company: company.value,
-    })
-    .eq('id', userId.value)
-    .select()
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        interests: interests.value,
+        budget: budget.value || null,
+        home_area: homeArea.value || null,
+        home_station_id: homeStationId.value,
+        company: company.value,
+      })
+      .eq('id', userId.value)
+      .select('id')
+      .single()
 
-  savingPrefs.value = false
-
-  if (error || !data || data.length === 0) {
+    if (error || !data?.id) throw error || new Error('No profile row updated')
+    rememberSavedPrefs()
+    prefsMessage.value = 'Preferences saved'
+    setTimeout(() => { prefsMessage.value = '' }, 3000)
+  } catch (error) {
     console.error('Could not save preferences:', error)
     prefsError.value = "Couldn't save your preferences."
-    return
+  } finally {
+    savingPrefs.value = false
   }
-
-  rememberSavedPrefs()
-  prefsMessage.value = 'Preferences saved'
-  setTimeout(() => {
-    prefsMessage.value = ''
-  }, 3000)
 }
 
 async function unsave(activityId) {
