@@ -9,7 +9,7 @@ test('station-only changes enable Save, Undo restores both fields and reload res
   await expect(page.getByTestId('mrt-marker-tampines')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTestId('mrt-zoom-level')).toHaveText('25%')
   const map = await page.getByTestId('mrt-map-canvas').boundingBox()
-  expect(map.width).toBe(900)
+  expect(map.width).toBeGreaterThanOrEqual(900)
   await expect(page.getByTestId('profile-save-prefs')).toBeDisabled()
   expect(state.saves).toHaveLength(0)
   await expect(page.getByTestId('mrt-search')).toHaveCount(0)
@@ -33,6 +33,73 @@ test('station-only changes enable Save, Undo restores both fields and reload res
   await page.reload()
   await expect(page.getByTestId('mrt-marker-tampines-east')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTestId('profile-save-prefs')).toBeDisabled()
+})
+
+test('25% map fills the Profile panel after resizing and keeps stations aligned and centred', async ({
+  page,
+}) => {
+  const state = await mockPreferences(page, { home_station_id: 'tampines', home_area: 'Tampines' })
+  await page.goto('/profile')
+  for (const width of [1920, 1440, 1280, 768, 375, 320, 1920]) {
+    await page.setViewportSize({ width, height: 900 })
+    await expect(page.getByTestId('mrt-marker-tampines')).toHaveAttribute('aria-pressed', 'true')
+    const measureGeometry = () =>
+      page.getByTestId('mrt-map-canvas').evaluate((canvas) => {
+        const viewport = canvas.parentElement
+        const map = canvas.getBoundingClientRect()
+        const image = canvas.querySelector('img').getBoundingClientRect()
+        const marker = canvas.querySelector('[data-station-id="tampines"]')
+        const bounds = marker.getBoundingClientRect()
+        const x = parseFloat(marker.style.left) / 100
+        const y = parseFloat(marker.style.top) / 100
+        return {
+          width: map.width,
+          viewportWidth: viewport.clientWidth,
+          imageWidth: image.width,
+          imageHeight: image.height,
+          height: map.height,
+          xError: Math.abs(bounds.x + bounds.width / 2 - map.x - x * map.width),
+          yError: Math.abs(bounds.y + bounds.height / 2 - map.y - y * map.height),
+          scrollLeft: viewport.scrollLeft,
+          expectedLeft: Math.max(
+            0,
+            Math.min(
+              x * map.width - viewport.clientWidth / 2,
+              viewport.scrollWidth - viewport.clientWidth,
+            ),
+          ),
+          scrollTop: viewport.scrollTop,
+          expectedTop: Math.max(
+            0,
+            Math.min(
+              y * map.height - viewport.clientHeight / 2,
+              viewport.scrollHeight - viewport.clientHeight,
+            ),
+          ),
+          pageOverflow: document.documentElement.scrollWidth > window.innerWidth,
+        }
+      })
+    await expect
+      .poll(async () => {
+        const geometry = await measureGeometry()
+        return Math.max(
+          Math.abs(geometry.scrollLeft - geometry.expectedLeft),
+          Math.abs(geometry.scrollTop - geometry.expectedTop),
+        )
+      })
+      .toBeLessThanOrEqual(1)
+    const geometry = await measureGeometry()
+    expect(geometry.width).toBe(Math.max(900, geometry.viewportWidth))
+    expect(geometry.imageWidth).toBe(geometry.width)
+    expect(geometry.imageHeight).toBeCloseTo(geometry.height, 1)
+    expect(geometry.xError).toBeLessThan(0.1)
+    expect(geometry.yError).toBeLessThan(0.1)
+    expect(Math.abs(geometry.scrollTop - geometry.expectedTop)).toBeLessThanOrEqual(1)
+    expect(geometry.pageOverflow, `Page overflow at ${width}px`).toBe(false)
+    await expect(page.getByTestId('mrt-zoom-level')).toHaveText('25%')
+  }
+  expect(state.saves).toHaveLength(0)
+  await page.screenshot({ path: test.info().outputPath('mrt-profile-wide.png'), fullPage: true })
 })
 
 test('manual area clears station, Undo restores station and Clear resets both fields', async ({

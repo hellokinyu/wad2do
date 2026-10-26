@@ -718,6 +718,7 @@ function statusClass(status) {
 .stat {
   padding: 1.25rem 1rem;
   border-left: 1px solid #e5e5e5;
+  overflow-wrap: anywhere;
 }
 
 .stat:first-child {

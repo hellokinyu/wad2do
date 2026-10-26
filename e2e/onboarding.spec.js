@@ -183,6 +183,7 @@ for (const [width, zoom] of [375, 1280].flatMap((width) =>
         .getBoundingClientRect()
       return {
         width: map.width,
+        viewportWidth: canvas.parentElement.clientWidth,
         imageWidth: image.width,
         imageHeight: image.height,
         mapHeight: map.height,
@@ -197,7 +198,7 @@ for (const [width, zoom] of [375, 1280].flatMap((width) =>
         pageOverflow: document.documentElement.scrollWidth > window.innerWidth,
       }
     })
-    expect(geometry.width).toBe(3600 * zoom)
+    expect(geometry.width).toBe(Math.max(3600 * zoom, geometry.viewportWidth))
     expect(geometry.imageWidth).toBe(geometry.width)
     expect(geometry.imageHeight).toBeCloseTo(geometry.mapHeight, 1)
     expect(Math.abs(geometry.x - 723.5 / 1410) * geometry.width).toBeLessThan(0.1)

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref, useId, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, useId, watch } from 'vue'
 import { findStation, mrtStations } from '@/data/mrtStations'
 
 const props = defineProps({
@@ -10,6 +10,7 @@ const emit = defineEmits(['update:modelValue'])
 const id = useId()
 const zoom = ref(0.25)
 const viewport = ref(null)
+const canvas = ref(null)
 const imageFailed = ref(false)
 const selected = computed(() => findStation(props.modelValue))
 
@@ -38,15 +39,22 @@ async function revealStation() {
   await nextTick()
   const station = selected.value || findStation('dhoby-ghaut')
   const container = viewport.value
-  if (!container || imageFailed.value) return
-  const width = 3600 * zoom.value
+  if (!container || !canvas.value || imageFailed.value) return
+  const width = canvas.value.clientWidth
   container.scrollTo({
     left: (station.x / 100) * width - container.clientWidth / 2,
     top: ((station.y / 100) * width * 1007) / 1410 - container.clientHeight / 2,
   })
 }
 
-onMounted(revealStation)
+let resizeObserver
+onMounted(() => {
+  revealStation()
+  if (!viewport.value) return
+  resizeObserver = new ResizeObserver(revealStation)
+  resizeObserver.observe(viewport.value)
+})
+onUnmounted(() => resizeObserver?.disconnect())
 watch([() => props.modelValue, zoom], revealStation)
 </script>
 
@@ -92,6 +100,7 @@ watch([() => props.modelValue, zoom], revealStation)
         @keydown="moveStationFocus"
       >
         <div
+          ref="canvas"
           class="map-canvas"
           :style="{ width: 3600 * zoom + 'px', '--marker-size': 48 * zoom + 'px' }"
           data-testid="mrt-map-canvas"
@@ -181,6 +190,7 @@ watch([() => props.modelValue, zoom], revealStation)
 /* Scale targets with the map so neighbouring stations stay separate at 25%. */
 .map-canvas {
   position: relative;
+  min-width: 100%;
   aspect-ratio: 1410 / 1007;
 }
 .map-canvas img {
