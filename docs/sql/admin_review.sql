@@ -3,6 +3,9 @@
 -- This file does not promote any account to admin or remove existing policies.
 begin;
 
+alter table public.submissions add column if not exists google_place_id text;
+alter table public.submissions add column if not exists postal_code text;
+
 -- A helper for policies: checks only the signed-in user's own admin flag.
 -- SECURITY DEFINER lets this read profiles without recursively applying its policies.
 create or replace function public.wad2do_is_admin()
@@ -48,18 +51,18 @@ create policy wad2do_limit_profile_updates on public.profiles as restrictive
 alter table public.submissions enable row level security;
 revoke all on public.submissions from public, anon, authenticated;
 revoke insert (id, submitted_by, name, category, price_per_person, duration_min,
-  indoor, address, area, opening_hours, description, image_url, website, status,
+  indoor, address, area, opening_hours, description, image_url, website, google_place_id, postal_code, status,
   reject_reason, reviewed_by, reviewed_at, activity_id, created_at),
   update (id, submitted_by, name, category, price_per_person, duration_min,
-  indoor, address, area, opening_hours, description, image_url, website, status,
+  indoor, address, area, opening_hours, description, image_url, website, google_place_id, postal_code, status,
   reject_reason, reviewed_by, reviewed_at, activity_id, created_at)
   on public.submissions from public, anon, authenticated;
 grant select on public.submissions to authenticated;
 grant insert (id, submitted_by, name, category, price_per_person, duration_min,
-  indoor, address, area, opening_hours, description, image_url, website, status)
+  indoor, address, area, opening_hours, description, image_url, website, google_place_id, postal_code, status)
   on public.submissions to authenticated;
 grant update (name, category, price_per_person, duration_min, indoor, address,
-  area, opening_hours, description, image_url, website)
+  area, opening_hours, description, image_url, website, google_place_id, postal_code)
   on public.submissions to authenticated;
 
 drop policy if exists wad2do_read_submissions on public.submissions;
@@ -137,12 +140,12 @@ begin
 
   insert into public.activities (
     name, category, price_per_person, duration_min, indoor, address, area,
-    opening_hours, description, image_url, website, source
+    opening_hours, description, image_url, website, source, google_place_id
   ) values (
     submission.name, submission.category, submission.price_per_person,
     submission.duration_min, submission.indoor, submission.address, submission.area,
     submission.opening_hours, submission.description, submission.image_url,
-    submission.website, 'community'
+    submission.website, 'community', submission.google_place_id
   ) returning id into new_activity_id;
 
   update public.submissions set

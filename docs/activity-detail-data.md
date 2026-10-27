@@ -52,3 +52,5 @@ Code:
 - src/lib/activityDisplay.js — price, duration, hours, rating and link formatting.
 - src/composables/useActivityActions.js — saved state, group sharing and short messages.
 
+
+Community submissions can now carry a suggested `google_place_id` through admin review and transactional approval. The existing detail view invokes Google details based on ID presence regardless of `source`. The deployed details source is unavailable locally: verify a newly published Community activity against the live function as described in [lookup setup](google-place-search.md).

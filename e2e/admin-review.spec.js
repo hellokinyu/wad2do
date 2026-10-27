@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { mockUser, signInMockUser } from './helpers/auth'
+import { mockPlaceSearch, placeCandidates } from './helpers/places'
 
 const submissionId = '22222222-2222-4222-8222-222222222222'
 const activityId = '33333333-3333-4333-8333-333333333333'
@@ -24,6 +25,8 @@ async function mockBackend(page, admin = true) {
         duration_min: 90,
         indoor: true,
         address: '10 Orchard Road',
+        postal_code: '012345',
+        google_place_id: 'ChIJ_original',
         area: 'Orchard',
         description: 'Try a weekend art session.',
         website: 'https://example.com/studio',
@@ -81,10 +84,29 @@ async function mockBackend(page, admin = true) {
       const submission = state.submissions.find((row) => row.id === body.p_submission_id)
       submission.reviewed_by = mockUser.id
       submission.reviewed_at = '2026-10-23T04:00:00Z'
-      if (endpoint === 'approve_submission') {
+      if (endpoint === 'approve_submission' && submission.status !== 'approved') {
         submission.status = 'approved'
         submission.activity_id = activityId
-        state.activities.push({ ...submission, id: activityId, source: 'community' })
+        // Explicit approval contract; browser mocks still do not execute the real SQL.
+        const fields = [
+          'name',
+          'category',
+          'price_per_person',
+          'duration_min',
+          'indoor',
+          'address',
+          'area',
+          'opening_hours',
+          'description',
+          'image_url',
+          'website',
+          'google_place_id',
+        ]
+        state.activities.push({
+          ...Object.fromEntries(fields.map((key) => [key, submission[key]])),
+          id: activityId,
+          source: 'community',
+        })
       } else {
         submission.status = 'rejected'
         submission.reject_reason = body.p_reason
@@ -160,6 +182,7 @@ test('edits name, price and hours before approval and publishes a Community acti
   await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (0)')
   expect(state.requests[0].body).toMatchObject({
     name: 'Corrected studio name',
+    google_place_id: null,
     price_per_person: 30,
     opening_hours: { Mon: { open: '11:00', close: '18:00' } },
   })
@@ -252,3 +275,92 @@ test('reviews the last card on a page and returns to the previous page', async (
   await expect(page.getByRole('heading', { name: 'Studio 1', exact: true })).toBeVisible()
   await expect(page.locator('[data-testid^="admin-submission-"]')).toHaveCount(10)
 })
+
+const venueEdits = [
+  [
+    'correct',
+    placeCandidates[1].id,
+    async (page) => {
+      await page.getByTestId('admin-edit-address').fill('20 Orchard Road')
+      await expect(page.getByTestId('place-link')).toHaveCount(0)
+      await page.getByTestId('place-find').click()
+      await page.getByTestId('place-candidate').nth(1).click()
+    },
+  ],
+  [
+    'clear',
+    null,
+    async (page) => {
+      await page.getByTestId('place-clear').click()
+    },
+  ],
+]
+for (const [action, expectedId, edit] of venueEdits) {
+  test(`admin can ${action} a suggested venue before publishing`, async ({ page }) => {
+    const state = await mockBackend(page)
+    const lookup = await mockPlaceSearch(page)
+    await page.goto('/admin/submissions')
+    await expect(page.getByTestId('admin-place-suggestion')).toContainText('ChIJ_original')
+    expect(lookup.requests).toHaveLength(0)
+    await page.getByTestId('admin-edit').click()
+    await expect(page.getByRole('link', { name: 'Inspect suggested venue' })).toHaveAttribute(
+      'href',
+      /query_place_id=ChIJ_original/,
+    )
+    await edit(page)
+    await page.getByTestId('admin-save-edits').click()
+    await expect(page.getByRole('status')).toContainText('Changes saved')
+    await page.getByTestId('admin-approve').click()
+    await expect(page.getByTestId('admin-empty')).toBeVisible()
+    expect(state.activities).toHaveLength(1)
+    expect(state.activities[0].google_place_id).toBe(expectedId)
+    expect(state.activities[0]).not.toHaveProperty('postal_code')
+  })
+}
+
+test('unrelated admin edits preserve the saved venue ID', async ({ page }) => {
+  const state = await mockBackend(page)
+  await mockPlaceSearch(page)
+  await page.goto('/admin/submissions')
+  await page.getByTestId('admin-edit').click()
+  await page.getByTestId('admin-edit-price').fill('31')
+  await page.getByTestId('admin-save-edits').click()
+  await expect(page.getByRole('status')).toContainText('Changes saved')
+  expect(state.submissions[0].google_place_id).toBe('ChIJ_original')
+  await page.getByTestId('admin-approve').click()
+  await expect(page.getByTestId('admin-empty')).toBeVisible()
+  expect(state.activities[0].google_place_id).toBe('ChIJ_original')
+})
+
+for (const options of [
+  { status: 429, error: 'app_limit' },
+  { status: 503, error: 'unavailable' },
+  { candidates: [] },
+]) {
+  test(`an admin keeps the existing venue after lookup ${options.error || 'no match'}`, async ({
+    page,
+  }) => {
+    const state = await mockBackend(page)
+    const lookup = await mockPlaceSearch(page, options)
+    await page.goto('/admin/submissions')
+    await page.getByTestId('admin-edit').click()
+    await page.getByTestId('admin-edit-price').fill('31')
+    await page.getByTestId('place-find').click()
+    await expect(page.getByTestId('place-find')).toBeEnabled()
+    expect(lookup.requests).toHaveLength(1)
+    await expect(page.getByTestId('place-candidate')).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Inspect suggested venue' })).toHaveAttribute(
+      'href',
+      /query_place_id=ChIJ_original/,
+    )
+    await page.getByTestId('admin-save-edits').click()
+    await expect(page.getByRole('status')).toContainText('Changes saved')
+    expect(state.submissions[0]).toMatchObject({
+      price_per_person: 31,
+      google_place_id: 'ChIJ_original',
+    })
+    await page.getByTestId('admin-approve').click()
+    await expect(page.getByTestId('admin-empty')).toBeVisible()
+    expect(state.activities[0].google_place_id).toBe('ChIJ_original')
+  })
+}

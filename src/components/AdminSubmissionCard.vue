@@ -1,6 +1,7 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import GooglePlacePicker from '@/components/GooglePlacePicker.vue'
 import {
   formatPrice,
   formatDuration,
@@ -53,6 +54,8 @@ function startEdit() {
     duration_min: submission.duration_min ?? '',
     indoor: submission.indoor ?? '',
     address: submission.address ?? '',
+    postal_code: submission.postal_code ?? '',
+    google_place_id: submission.google_place_id ?? null,
     area: submission.area ?? '',
     description: submission.description ?? '',
     website: submission.website ?? '',
@@ -116,6 +119,10 @@ async function saveEdits() {
     errorMessage.value = 'Complete the required fields with a valid price and duration.'
     return
   }
+  if (form.postal_code && !/^\d{6}$/.test(form.postal_code)) {
+    errorMessage.value = 'Enter a six-digit postal code or leave it blank.'
+    return
+  }
   if (!validUrl(form.website) || !validUrl(form.image_url)) {
     errorMessage.value = 'Website and photo URLs must start with http:// or https://.'
     return
@@ -155,6 +162,8 @@ async function saveEdits() {
         duration_min: form.duration_min,
         indoor: form.indoor,
         address: form.address.trim(),
+        postal_code: form.postal_code || null,
+        google_place_id: form.google_place_id,
         area: form.area.trim(),
         description: form.description.trim() || null,
         website: form.website.trim() || null,
@@ -269,6 +278,13 @@ async function reject() {
           <dd class="col-sm-8">{{ getSetting(submission.indoor) }}</dd>
           <dt class="col-sm-4">Address</dt>
           <dd class="col-sm-8">{{ submission.address || 'Not provided' }}</dd>
+          <dt class="col-sm-4">Postal code</dt>
+          <dd class="col-sm-8">{{ submission.postal_code || 'Not provided' }}</dd>
+          <dt class="col-sm-4">Suggested venue</dt>
+          <dd class="col-sm-8 text-break" data-testid="admin-place-suggestion">
+            {{ submission.google_place_id || 'No Google link' }}
+            <span v-if="submission.google_place_id"> (suggested, not verified)</span>
+          </dd>
           <dt class="col-sm-4">Area</dt>
           <dd class="col-sm-8">{{ submission.area || 'Not provided' }}</dd>
           <dt class="col-sm-4">Description</dt>
@@ -373,6 +389,11 @@ async function reject() {
         <p class="small text-secondary">
           Save your changes before approving. Fields marked * are required.
         </p>
+        <GooglePlacePicker
+          v-model="form.google_place_id" v-model:postal-code="form.postal_code"
+          :name="form.name" :address="form.address" :area="form.area"
+          class="mb-3"
+        />
         <div class="row g-3">
           <div class="col-12">
             <label :for="`name-${submission.id}`" class="form-label">Name *</label>
@@ -446,6 +467,7 @@ async function reject() {
           <div class="col-sm-8">
             <label :for="`address-${submission.id}`" class="form-label">Address *</label>
             <input
+              data-testid="admin-edit-address"
               :id="`address-${submission.id}`"
               v-model="form.address"
               class="form-control"

@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/composables/useAuth'
+import GooglePlacePicker from '@/components/GooglePlacePicker.vue'
 
 const { user } = useAuth()
 const submitting = ref(false)
@@ -71,6 +72,8 @@ const form = reactive({
   free: false,
   duration: '',
   address: '',
+  postal_code: '',
+  google_place_id: null,
   area: '',
   indoor: '',
   description: '',
@@ -103,6 +106,11 @@ async function submitActivity() {
     form.description.trim().length > 300
   ) {
     errorMessage.value = 'Complete all required fields with a valid price and duration.'
+    return
+  }
+
+  if (form.postal_code && !/^\d{6}$/.test(form.postal_code)) {
+    errorMessage.value = 'Enter a six-digit postal code or leave it blank.'
     return
   }
 
@@ -150,6 +158,8 @@ async function submitActivity() {
       duration_min: form.duration,
       indoor: form.indoor === 'indoor',
       address: form.address.trim(),
+      postal_code: form.postal_code || null,
+      google_place_id: form.google_place_id,
       area: form.area,
       opening_hours: openingHours,
       description: form.description.trim() || null,
@@ -309,6 +319,14 @@ async function submitActivity() {
             </select>
           </div>
         </div>
+
+        <GooglePlacePicker
+          v-model="form.google_place_id"
+          v-model:postal-code="form.postal_code"
+          :name="form.name"
+          :address="form.address"
+          :area="form.area"
+        />
 
         <fieldset class="mt-4">
           <legend class="h5">Opening hours *</legend>

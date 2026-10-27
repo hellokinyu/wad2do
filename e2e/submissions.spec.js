@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { mockUser, signInMockUser } from './helpers/auth'
+import { mockPlaceSearch, placeCandidates } from './helpers/places'
 
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -106,6 +107,8 @@ for (const width of [1280, 375]) {
       duration_min: 90,
       indoor: !free,
       address: '10 Orchard Road',
+      postal_code: null,
+      google_place_id: null,
       area: 'Orchard',
       opening_hours: {
         Mon: { closed: true },
@@ -233,4 +236,212 @@ test('rejects missing fields, blank names, ambiguous hours and unsafe websites',
   await page.getByTestId('submission-submit').click()
   await expect(page.getByTestId('submission-error')).toContainText('open on at least one day')
   expect(state.attempts).toHaveLength(0)
+})
+
+for (const width of [1280, 375]) {
+  test(`selects an explicit venue with keyboard and saves only its ID at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 812 })
+    const state = await mockBackend(page)
+    const lookup = await mockPlaceSearch(page)
+    await page.goto('/activities/submit')
+    await fillActivity(page)
+    await page.getByTestId('place-postal-code').fill('012345')
+    await page.getByTestId('place-find').focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('place-candidate')).toHaveCount(2)
+    await expect(page.getByTestId('place-link')).toHaveCount(0)
+    expect(state.attempts).toHaveLength(0)
+    expect(lookup.requests).toEqual([
+      { name: 'Weekend art studio', address: '10 Orchard Road', postalCode: '012345' },
+    ])
+    await expect(page.getByText('Google Maps', { exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Example provider' })).toHaveAttribute(
+      'href',
+      'https://example.com/provider',
+    )
+    await page.getByTestId('place-candidate').nth(1).focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('place-selected')).toContainText('Google studio two')
+    await expect(page.getByTestId('submission-name')).toHaveValue('  Weekend art studio  ')
+    await expect(page.getByTestId('submission-address')).toHaveValue('  10 Orchard Road  ')
+    await expect(page.locator('body')).toHaveJSProperty('scrollWidth', width)
+    await page.getByTestId('submission-submit').click()
+    await expect(page.getByTestId('submission-success')).toBeVisible()
+    expect(state.saved[0]).toMatchObject({
+      google_place_id: placeCandidates[1].id,
+      postal_code: '012345',
+      name: 'Weekend art studio',
+    })
+    expect(JSON.stringify(state.saved)).not.toContain('Google studio')
+  })
+}
+
+test('invalid postal code cannot trigger a lookup or a submission', async ({ page }) => {
+  const state = await mockBackend(page)
+  const lookup = await mockPlaceSearch(page)
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  await page.getByTestId('place-postal-code').fill('12345x')
+  await page.getByTestId('place-find').click()
+  await expect(page.getByTestId('place-error')).toContainText('six-digit')
+  await page.getByTestId('submission-submit').click()
+  expect(lookup.requests).toHaveLength(0)
+  expect(state.attempts).toHaveLength(0)
+})
+
+for (const options of [
+  { candidates: [] },
+  { status: 503, error: 'unavailable' },
+  { status: 503, error: 'lookup_disabled' },
+  { status: 429, error: 'app_limit' },
+]) {
+  test(`lookup ${options.error || 'no match'} preserves entries and allows manual submission`, async ({
+    page,
+  }) => {
+    const state = await mockBackend(page)
+    await mockPlaceSearch(page, options)
+    await page.goto('/activities/submit')
+    await fillActivity(page)
+    await page.getByTestId('place-find').click()
+    await expect(page.getByTestId('place-find')).toBeEnabled()
+    await expect(page.getByTestId('submission-name')).toHaveValue('  Weekend art studio  ')
+    await expect(page.getByTestId('hours-Sat-open')).toHaveValue('10:00')
+    await expect(page.getByTestId('place-candidate')).toHaveCount(0)
+    await page.getByTestId('submission-submit').click()
+    await expect(page.getByTestId('submission-success')).toBeVisible()
+    expect(state.saved[0].google_place_id).toBeNull()
+  })
+}
+
+test('a stalled lookup times out and leaves the complete form usable', async ({ page }) => {
+  await mockBackend(page)
+  await mockPlaceSearch(page, { stall: true })
+  await page.clock.install()
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  const sent = page.waitForRequest('**/functions/v1/google-place-search')
+  await page.getByTestId('place-find').click()
+  await sent
+  await page.clock.fastForward(12001)
+  await expect(page.getByTestId('place-error')).toContainText("Couldn't find locations")
+  await expect(page.getByTestId('submission-address')).toHaveValue('  10 Orchard Road  ')
+  await expect(page.getByTestId('place-find')).toBeEnabled()
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+})
+
+test('editing each location input clears selection, and Clear never submits', async ({ page }) => {
+  const state = await mockBackend(page)
+  await mockPlaceSearch(page)
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  for (const [field, value] of [
+    ['submission-name', 'Another studio'],
+    ['submission-address', '20 Orchard Road'],
+    ['place-postal-code', '012346'],
+  ]) {
+    await page.getByTestId('place-find').click()
+    await page.getByTestId('place-candidate').first().click()
+    await page.getByTestId(field).fill(value)
+    await expect(page.getByTestId('place-link')).toHaveCount(0)
+    await expect(page.getByTestId('place-candidate')).toHaveCount(0)
+  }
+  await page.getByTestId('place-find').click()
+  await page.getByTestId('place-candidate').first().click()
+  await page.getByTestId('place-clear').click()
+  await expect(page.getByTestId('place-link')).toHaveCount(0)
+  expect(state.attempts).toHaveLength(0)
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+  expect(state.saved[0].google_place_id).toBeNull()
+})
+
+test('old requests cannot restore results after input changes, newer searches or navigation', async ({
+  page,
+}) => {
+  await mockBackend(page)
+  const releases = []
+  await page.route('**/functions/v1/google-place-search', async (route) => {
+    await new Promise((resolve) => releases.push(resolve))
+    await route.fulfill({ json: { candidates: [placeCandidates[0]] } }).catch(() => {})
+  })
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  const first = page.waitForRequest('**/functions/v1/google-place-search')
+  await page.getByTestId('place-find').click()
+  await first
+  await page.getByTestId('submission-name').fill('New studio')
+  const second = page.waitForRequest('**/functions/v1/google-place-search')
+  await page.getByTestId('place-find').click()
+  await second
+  releases[0]()
+  await expect(page.getByTestId('place-find')).toBeDisabled()
+  await expect(page.getByTestId('place-candidate')).toHaveCount(0)
+  await page.getByRole('link', { name: '← Back to Activities' }).click()
+  await expect(page).toHaveURL('/activities')
+  releases[1]()
+  await page.getByTestId('submit-activity-button').click()
+  await expect(page.getByTestId('place-candidate')).toHaveCount(0)
+  await expect(page.getByTestId('place-link')).toHaveCount(0)
+  await expect(page.getByTestId('place-find')).toBeEnabled()
+})
+
+test('lost-response recovery keeps the original Place ID and warns that later edits were not saved', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  await mockPlaceSearch(page)
+  state.loseNextResponse = true
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  await page.getByTestId('place-find').click()
+  await page.getByTestId('place-candidate').first().click()
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-error')).toBeVisible()
+  await page.getByTestId('place-clear').click()
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-recovered')).toContainText('were not submitted')
+  expect(state.saved).toHaveLength(1)
+  expect(state.saved[0].google_place_id).toBe(placeCandidates[0].id)
+  expect(state.attempts[1].id).toBe(state.attempts[0].id)
+})
+
+test('another lookup retains the chosen venue until an explicit replacement is selected', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  const options = {}
+  await mockPlaceSearch(page, options)
+  await page.clock.install()
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  await page.getByTestId('place-find').click()
+  await page.getByTestId('place-candidate').first().click()
+
+  options.stall = true
+  const sent = page.waitForRequest('**/functions/v1/google-place-search')
+  await page.getByTestId('place-find').click()
+  await sent
+  await page.clock.fastForward(12001)
+  await expect(page.getByTestId('place-error')).toContainText("Couldn't find locations")
+  await expect(page.getByRole('link', { name: 'Inspect suggested venue' })).toHaveAttribute(
+    'href',
+    /query_place_id=ChIJ_studio_one/,
+  )
+
+  options.stall = false
+  await page.getByTestId('place-find').click()
+  await expect(page.getByTestId('place-candidate')).toHaveCount(2)
+  await expect(page.getByRole('link', { name: 'Inspect suggested venue' })).toHaveAttribute(
+    'href',
+    /query_place_id=ChIJ_studio_one/,
+  )
+  await expect(page.getByText('Choose a match to replace your current venue link.')).toBeVisible()
+  await page.getByTestId('place-candidate').nth(1).click()
+  await expect(page.getByTestId('place-selected')).toContainText('Google studio two')
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+  expect(state.saved[0].google_place_id).toBe(placeCandidates[1].id)
 })

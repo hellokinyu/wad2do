@@ -19,3 +19,7 @@ The user confirmed these live database changes in the Supabase SQL Editor on 22 
 The form does not provide database authorization. Keep the live RLS policies and constraints enabled. Category/area choices, detailed opening-hours structure and website checks in this form are client validation; the current database constraints check only basic field presence, prices/durations, opening-hours object shape, description length and review status.
 
 Verification: `pnpm run build` and `pnpm run test:e2e e2e/submissions.spec.js --project=chromium`. Tests mock all database requests and cover desktop/mobile submission, free and paid pricing, pending status in Profile, failed-save retry, lost-response recovery without duplicate records, failed recovery reads, unrelated duplicate errors, and invalid input. They do not verify live database permissions or write real submissions.
+
+## Optional Google location link
+
+The form now supports an optional six-digit postal code and explicit Google venue selection. It stores the selected `google_place_id` or null alongside user-entered data. Manual submission, UUID retries and lost-response recovery remain available. Follow [the paste-ready setup and live checks](google-place-search.md) before deploying the frontend; both SQL scripts and `google-place-search` are required. Lookup stays disabled until the owner configures allowance limits.
