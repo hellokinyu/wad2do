@@ -1,8 +1,8 @@
 <template>
-  <nav class="navbar navbar-expand-md bg-white border-bottom">
+  <nav ref="navbar" class="navbar navbar-expand-md bg-white border-bottom">
     <div class="container">
       <RouterLink class="navbar-brand" to="/" aria-label="WAD2Do home">
-        <img :src="brandLogo" alt="WAD2Do" class="brand-logo" width="168" height="56" />
+        <img :src="brandLogo" alt="WAD2Do" class="brand-logo" width="180" height="60" />
       </RouterLink>
 
       <button
@@ -81,7 +81,7 @@
               to="/profile"
               data-testid="nav-profile"
             >
-              <AnimalAvatar :animal="avatarAnimal" :size="30" data-testid="nav-profile-avatar" />
+              <AnimalAvatar :animal="avatarAnimal" :size="34" data-testid="nav-profile-avatar" />
               Profile
             </RouterLink>
           </li>
@@ -97,18 +97,44 @@
 </template>
 
 <script setup>
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import AnimalAvatar from '@/components/AnimalAvatar.vue'
 import brandLogo from '@/assets/wad2do-logo.png'
 
 const { user, isAdmin, avatarAnimal } = useAuth()
+const navbar = ref(null)
+let resizeObserver
+
+onMounted(() => {
+  const updateHeight = () => {
+    document.documentElement.style.setProperty(
+      '--navbar-height',
+      `${navbar.value.getBoundingClientRect().height}px`,
+    )
+  }
+  updateHeight()
+  resizeObserver = new ResizeObserver(updateHeight)
+  resizeObserver.observe(navbar.value)
+})
+
+onUnmounted(() => {
+  resizeObserver?.disconnect()
+  document.documentElement.style.removeProperty('--navbar-height')
+})
 </script>
 
 <style scoped>
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 1020;
+}
+
 .brand-logo {
   display: block;
-  width: 168px;
-  height: 56px;
+  width: 180px;
+  height: 60px;
   object-fit: contain;
 }
 .nav-link {
@@ -116,10 +142,11 @@ const { user, isAdmin, avatarAnimal } = useAuth()
   align-items: center;
   gap: 0.45rem;
   min-height: 44px;
+  font-size: 1.1rem;
 }
 .nav-icon {
-  width: 21px;
-  height: 21px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
 }
 </style>
