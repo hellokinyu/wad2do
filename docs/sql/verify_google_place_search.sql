@@ -16,7 +16,9 @@ begin
     raise exception 'Create an ordinary account and an admin account first.';
   end if;
 
-  if not has_column_privilege('authenticated', 'public.submissions', 'google_place_id', 'INSERT')
+  if not has_column_privilege('authenticated', 'public.profiles', 'home_station_id', 'UPDATE')
+    or has_column_privilege('authenticated', 'public.profiles', 'is_admin', 'UPDATE')
+    or not has_column_privilege('authenticated', 'public.submissions', 'google_place_id', 'INSERT')
     or not has_column_privilege('authenticated', 'public.submissions', 'postal_code', 'UPDATE')
     or has_column_privilege('authenticated', 'public.submissions', 'status', 'UPDATE')
     or has_column_privilege('authenticated', 'public.activities', 'name', 'INSERT')

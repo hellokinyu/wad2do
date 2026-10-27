@@ -51,8 +51,11 @@ submissions is deliberately disabled. If another admin reviews a pending card,
 an attempted edit or conflicting decision fails; refresh to see its new state.
 An approval uses the latest saved details in the database.
 
-Photo URLs already stored on submissions are displayed and can be corrected in
-the edit form. This feature does not add uploads to the existing submission form.
+Photo URLs stored on submissions are displayed and can be corrected or cleared in
+the edit form. The submission form now supports optional photo uploads; apply the
+separate [Storage setup](activity-photo-uploads.md) first. Approval copies the
+saved URL without moving or modifying the uploaded object. Browser users cannot
+replace/delete those immutable objects after approval.
 
 ## Verification
 
@@ -79,3 +82,5 @@ References: [Supabase RLS](https://supabase.com/docs/guides/database/postgres/ro
 ## Suggested Google venue links
 
 Pending submission edits reuse the optional venue picker. Inspect, replace or clear a suggested ID; editing name/address/area/postal code clears it. Lookup happens only on request. Approval now explicitly copies the saved `google_place_id`, including null, into the Community activity. Apply the additional [lookup migration and setup](google-place-search.md); normal-user restrictions and concurrent-review behavior remain in the SQL review functions. Browser publication mocks use an explicit column list and do not validate real SQL.
+
+The profile grant list includes `home_station_id` for the MRT picker. If an older copy of this script was applied and preference saves fail, run only [mrt_station_preferences.sql](sql/mrt_station_preferences.sql) to repair that column permission. No submission policies need to be reinstalled for this repair.

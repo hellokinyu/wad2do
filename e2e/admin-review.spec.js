@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { mockUser, signInMockUser } from './helpers/auth'
 import { mockPlaceSearch, placeCandidates } from './helpers/places'
+import { photoFile } from './helpers/photos'
 
 const submissionId = '22222222-2222-4222-8222-222222222222'
 const activityId = '33333333-3333-4333-8333-333333333333'
@@ -364,3 +365,58 @@ for (const options of [
     expect(state.activities[0].google_place_id).toBe('ChIJ_original')
   })
 }
+
+test('reviews a submitted photo and publishes the same image in the card and detail page', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  const imageUrl =
+    'https://example.supabase.co/storage/v1/object/public/activity-images/owner/submission/photo.png'
+  state.submissions[0].image_url = imageUrl
+  state.submissions[0].google_place_id = null
+  const image = await photoFile(page)
+  const storageWrites = []
+  await page.route('**/storage/v1/**', (route) => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({ contentType: image.mimeType, body: image.buffer })
+    }
+    storageWrites.push(route.request().method())
+    return route.abort()
+  })
+  await page.goto('/admin/submissions')
+  await expect(page.getByRole('img', { name: 'Weekend art studio' })).toHaveJSProperty(
+    'naturalWidth',
+    2,
+  )
+  await page.getByTestId('admin-approve').click()
+  await expect(page.getByTestId('admin-empty')).toBeVisible()
+  expect(state.activities).toHaveLength(1)
+  expect(state.activities[0].image_url).toBe(imageUrl)
+  await page.goto('/activities')
+  await expect(page.getByTestId('activity-card').getByRole('img')).toHaveAttribute('src', imageUrl)
+  await expect(page.getByTestId('activity-card').getByRole('img')).toHaveJSProperty(
+    'naturalWidth',
+    2,
+  )
+  await page.getByTestId('activity-photo-link').click()
+  await expect(page.getByTestId('detail-photo')).toHaveAttribute('src', imageUrl)
+  await expect(page.getByTestId('detail-photo')).toHaveJSProperty('naturalWidth', 2)
+  expect(storageWrites).toHaveLength(0)
+})
+
+test('a broken submitted photo uses the fallback and rejection never publishes it', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  state.submissions[0].image_url =
+    'https://example.supabase.co/storage/v1/object/public/activity-images/missing.png'
+  await page.route('**/storage/v1/**', (route) => route.fulfill({ status: 404 }))
+  await page.goto('/admin/submissions')
+  await expect(page.getByText('Photo unavailable', { exact: true })).toBeVisible()
+  await page.getByTestId('admin-reject').click()
+  await page.getByTestId('admin-reject-reason').fill('Activity could not be verified')
+  await page.getByTestId('admin-confirm-reject').click()
+  await expect(page.getByTestId('admin-empty')).toBeVisible()
+  expect(state.activities).toHaveLength(0)
+  expect(state.submissions[0].status).toBe('rejected')
+})

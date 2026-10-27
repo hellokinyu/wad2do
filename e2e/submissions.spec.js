@@ -1,11 +1,45 @@
+import { Buffer } from 'node:buffer'
+import { photoFile } from './helpers/photos'
+import { authStorageKey } from './helpers/auth'
 import { test, expect } from '@playwright/test'
-import { mockUser, signInMockUser } from './helpers/auth'
+import { mockSession, mockUser, signInMockUser } from './helpers/auth'
 import { mockPlaceSearch, placeCandidates } from './helpers/places'
 
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 async function mockBackend(page, failures = 0) {
-  const state = { attempts: [], saved: [], loseNextResponse: false, readFailures: 0 }
+  const state = {
+    attempts: [],
+    saved: [],
+    loseNextResponse: false,
+    readFailures: 0,
+    uploads: [],
+    uploadFailures: 0,
+    loseUploadResponse: false,
+    stallUpload: false,
+  }
+  await page.route('**/storage/v1/**', async (route) => {
+    const request = route.request()
+    if (request.method() !== 'POST') return route.abort()
+    state.uploads.push({
+      path: new URL(request.url()).pathname,
+      headers: request.headers(),
+      size: request.postDataBuffer()?.length,
+    })
+    if (state.stallUpload)
+      await new Promise((resolve) => {
+        state.releaseUpload = resolve
+      })
+    if (state.loseUploadResponse) {
+      state.loseUploadResponse = false
+      return route.abort('failed')
+    }
+    if (state.uploadFailures > 0) {
+      state.uploadFailures -= 1
+      return route.fulfill({ status: 403, json: { message: 'Upload denied' } })
+    }
+    return route.fulfill({ status: 200, json: { Key: 'activity-images/test' } }).catch(() => {})
+  })
   await signInMockUser(page)
   await page.route('**/rest/v1/**', async (route) => {
     const request = route.request()
@@ -96,6 +130,7 @@ for (const width of [1280, 375]) {
     await expect(page.getByTestId('submission-success')).toBeVisible()
     await expect(page.getByTestId('submission-form')).toHaveCount(0)
     expect(state.attempts).toHaveLength(1)
+    expect(state.uploads).toHaveLength(0)
     expect(state.saved[0]).toEqual({
       id: expect.stringMatching(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
@@ -121,6 +156,7 @@ for (const width of [1280, 375]) {
       },
       description: free ? null : 'Try a weekend art session.',
       website: free ? null : 'https://example.com/studio',
+      image_url: null,
       status: 'pending',
       reject_reason: null,
     })
@@ -167,8 +203,7 @@ test('retry after a lost save response confirms the original without duplicating
     'Any changes made since then were not submitted',
   )
   expect(state.saved[0].name).toBe('Weekend art studio')
-  expect(state.attempts).toHaveLength(2)
-  expect(state.attempts[1].id).toBe(state.attempts[0].id)
+  expect(state.attempts).toHaveLength(1)
 })
 
 test('failed confirmation keeps the form and another retry still creates no duplicate', async ({
@@ -185,11 +220,11 @@ test('failed confirmation keeps the form and another retry still creates no dupl
   await expect(page.getByTestId('submission-error')).toBeVisible()
   await expect(page.getByTestId('submission-form')).toBeVisible()
   await expect(page.getByTestId('submission-submit')).toBeEnabled()
-  expect(state.attempts).toHaveLength(2)
+  expect(state.attempts).toHaveLength(1)
   await page.getByTestId('submission-submit').click()
   await expect(page.getByTestId('submission-success')).toBeVisible()
   expect(state.saved).toHaveLength(1)
-  expect(state.attempts).toHaveLength(3)
+  expect(state.attempts).toHaveLength(1)
   expect(new Set(state.attempts.map((attempt) => attempt.id)).size).toBe(1)
 })
 
@@ -405,7 +440,7 @@ test('lost-response recovery keeps the original Place ID and warns that later ed
   await expect(page.getByTestId('submission-recovered')).toContainText('were not submitted')
   expect(state.saved).toHaveLength(1)
   expect(state.saved[0].google_place_id).toBe(placeCandidates[0].id)
-  expect(state.attempts[1].id).toBe(state.attempts[0].id)
+  expect(state.attempts).toHaveLength(1)
 })
 
 test('another lookup retains the chosen venue until an explicit replacement is selected', async ({
@@ -444,4 +479,590 @@ test('another lookup retains the chosen venue until an explicit replacement is s
   await page.getByTestId('submission-submit').click()
   await expect(page.getByTestId('submission-success')).toBeVisible()
   expect(state.saved[0].google_place_id).toBe(placeCandidates[1].id)
+})
+
+for (const [type, extension] of [
+  ['image/jpeg', 'jpg'],
+  ['image/png', 'png'],
+  ['image/webp', 'webp'],
+]) {
+  test(`uploads a ${type} photo before saving its public URL`, async ({ page }) => {
+    await page.setViewportSize({ width: extension === 'png' ? 375 : 1280, height: 900 })
+    const state = await mockBackend(page)
+    await page.goto('/activities/submit')
+    await fillActivity(page)
+    const file = await photoFile(page, type, 'untrusted.name.svg')
+    await page.getByTestId('submission-image').setInputFiles(file)
+    await expect(page.getByTestId('submission-image-preview')).toBeVisible()
+    await expect(page.getByTestId('submission-image-preview')).toHaveJSProperty('naturalWidth', 2)
+    expect(state.uploads).toHaveLength(0)
+    await expect(page.locator('body')).toHaveJSProperty(
+      'scrollWidth',
+      extension === 'png' ? 375 : 1280,
+    )
+    await page.getByTestId('submission-submit').click()
+    await expect(page.getByTestId('submission-success')).toBeVisible()
+    expect(state.uploads).toHaveLength(1)
+    expect(state.uploads[0].path).toMatch(
+      new RegExp(`/activity-images/${mockUser.id}/${state.saved[0].id}/[0-9a-f-]+\\.${extension}$`),
+    )
+    expect(state.uploads[0].headers['content-type']).toBe(type)
+    expect(state.uploads[0].headers['x-upsert']).toBe('false')
+    expect(state.uploads[0].headers.authorization).toMatch(/^Bearer /)
+    expect(state.uploads[0].size).toBe(file.buffer.length)
+    expect(state.saved[0].image_url).toContain(
+      state.uploads[0].path.replace('/object/', '/object/public/'),
+    )
+    expect(state.saved[0].status).toBe('pending')
+  })
+}
+
+test('replaces and removes a photo, revokes previews and allows selecting the same file again', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  const file = await photoFile(page)
+  await page.getByTestId('submission-image').setInputFiles(file)
+  const preview = page.getByTestId('submission-image-preview')
+  await expect(preview).toBeVisible()
+  const first = await preview.getAttribute('src')
+  await page.getByTestId('submission-image').setInputFiles({ ...file, name: 'second.png' })
+  await expect(preview).toBeVisible()
+  await expect(preview).not.toHaveAttribute('src', first)
+  expect(
+    await page.evaluate(async (url) => {
+      try {
+        await fetch(url)
+        return true
+      } catch {
+        return false
+      }
+    }, first),
+  ).toBe(false)
+  const second = await preview.getAttribute('src')
+  await page.getByTestId('submission-image-remove').focus()
+  await page.keyboard.press('Enter')
+  await expect(preview).toHaveCount(0)
+  expect(
+    await page.evaluate(async (url) => {
+      try {
+        await fetch(url)
+        return true
+      } catch {
+        return false
+      }
+    }, second),
+  ).toBe(false)
+  await page.getByTestId('submission-image').setInputFiles(file)
+  await expect(preview).toBeVisible()
+  await page.getByTestId('submission-image-remove').click()
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+  expect(state.uploads).toHaveLength(0)
+  expect(state.saved[0].image_url).toBeNull()
+})
+
+test('rejects disallowed, empty, oversized and corrupt photos without writing', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  const file = await photoFile(page)
+  for (const invalid of [
+    { ...file, mimeType: 'image/svg+xml' },
+    { ...file, buffer: Buffer.alloc(0) },
+    { ...file, buffer: Buffer.alloc(5000001) },
+    { ...file, buffer: Buffer.from('not an image') },
+  ]) {
+    await page.getByTestId('submission-image').setInputFiles(invalid)
+    await expect(page.getByTestId('submission-image-error')).not.toBeEmpty()
+    await expect(page.getByTestId('submission-image')).toHaveAttribute('aria-invalid', 'true')
+    await page.getByTestId('submission-submit').click()
+    await expect(page.getByTestId('submission-success')).toHaveCount(0)
+  }
+  expect(state.uploads).toHaveLength(0)
+  expect(state.attempts).toHaveLength(0)
+  await page.getByTestId('submission-image-remove').click()
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+})
+
+test('accepts exactly 5 MB, with valid image bytes', async ({ page }) => {
+  const state = await mockBackend(page)
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  const file = await photoFile(page)
+  file.buffer = Buffer.concat([file.buffer, Buffer.alloc(5000000 - file.buffer.length)])
+  await page.getByTestId('submission-image').setInputFiles(file)
+  await expect(page.getByTestId('submission-image-preview')).toBeVisible()
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+  expect(state.uploads[0].size).toBe(5000000)
+})
+
+test('a rejected upload retains entries, prevents an insert and retries with a fresh path', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  state.uploadFailures = 1
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  await page.getByTestId('submission-image').setInputFiles(await photoFile(page))
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-error')).toContainText("Couldn't upload your photo")
+  await expect(page.getByTestId('submission-image-preview')).toBeVisible()
+  await expect(page.getByTestId('submission-name')).toHaveValue('  Weekend art studio  ')
+  expect(state.attempts).toHaveLength(0)
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+  expect(state.uploads).toHaveLength(2)
+  expect(state.uploads[0].path).not.toBe(state.uploads[1].path)
+  expect(state.saved).toHaveLength(1)
+})
+
+test('reuses the confirmed upload after a failed database insert', async ({ page }) => {
+  const state = await mockBackend(page, 1)
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  await page.getByTestId('submission-image').setInputFiles(await photoFile(page))
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-error')).toContainText("Couldn't submit")
+  await page.getByTestId('submission-name').fill('Changed studio')
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+  expect(state.uploads).toHaveLength(1)
+  expect(state.attempts[0].image_url).toBe(state.saved[0].image_url)
+  expect(state.saved[0].name).toBe('Changed studio')
+})
+
+test('a new photo after a failed insert uses a different object and URL', async ({ page }) => {
+  const state = await mockBackend(page, 1)
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  const file = await photoFile(page)
+  await page.getByTestId('submission-image').setInputFiles(file)
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-error')).toBeVisible()
+  await page.getByTestId('submission-image').setInputFiles({ ...file, name: 'replacement.png' })
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+  expect(state.uploads).toHaveLength(2)
+  expect(state.attempts[0].image_url).not.toBe(state.saved[0].image_url)
+})
+
+test('recovers an already-saved photo before uploading later edits, including failed recovery reads', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  state.loseNextResponse = true
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  const file = await photoFile(page)
+  await page.getByTestId('submission-image').setInputFiles(file)
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-error')).toBeVisible()
+  const savedUrl = state.saved[0].image_url
+  await page.getByTestId('submission-image').setInputFiles({ ...file, name: 'later-edit.png' })
+  state.readFailures = 1
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-error')).toBeVisible()
+  expect(state.uploads).toHaveLength(1)
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-recovered')).toContainText('were not submitted')
+  expect(state.saved).toHaveLength(1)
+  expect(state.saved[0].image_url).toBe(savedUrl)
+  expect(state.uploads).toHaveLength(1)
+  expect(state.attempts).toHaveLength(1)
+})
+
+test('a lost upload response does not insert and retry gets a new key', async ({ page }) => {
+  const state = await mockBackend(page)
+  state.loseUploadResponse = true
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  await page.getByTestId('submission-image').setInputFiles(await photoFile(page))
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-error')).toContainText("Couldn't upload")
+  expect(state.attempts).toHaveLength(0)
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+  expect(state.uploads).toHaveLength(2)
+  expect(state.uploads[0].path).not.toBe(state.uploads[1].path)
+})
+
+test('a stalled upload times out, cancels, and cannot insert after retry succeeds', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  state.stallUpload = true
+  await page.clock.install()
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  await page.getByTestId('submission-image').setInputFiles(await photoFile(page))
+  const sent = page.waitForRequest('**/storage/v1/object/activity-images/**')
+  await page.getByTestId('submission-submit').click()
+  await sent
+  await expect(page.getByTestId('submission-upload-status')).toHaveText('Uploading photo…')
+  await expect(page.getByTestId('submission-name')).toBeDisabled()
+  await page.clock.fastForward(30001)
+  await expect(page.getByTestId('submission-error')).toContainText("Couldn't upload")
+  expect(state.attempts).toHaveLength(0)
+  state.stallUpload = false
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+  state.releaseUpload()
+  expect(state.saved).toHaveLength(1)
+  expect(state.uploads).toHaveLength(2)
+})
+
+test('stalled session refresh times out without a late upload and allows retry after refresh', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  await page.clock.install()
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  await page.getByTestId('submission-image').setInputFiles(await photoFile(page))
+  await expect(page.getByTestId('submission-image-preview')).toBeVisible()
+  let pendingRefresh
+  await page.route('**/auth/v1/token**', (route) => {
+    pendingRefresh = route
+  })
+  await page.evaluate((key) => {
+    const session = JSON.parse(localStorage.getItem(key))
+    session.expires_at = Math.floor(Date.now() / 1000) - 1
+    localStorage.setItem(key, JSON.stringify(session))
+  }, authStorageKey())
+  const requested = page.waitForRequest('**/auth/v1/token**')
+  await page.getByTestId('submission-submit').click()
+  await requested
+  await page.clock.fastForward(30001)
+  await expect(page.getByTestId('submission-error')).toContainText("Couldn't upload")
+  await expect(page.getByTestId('submission-submit')).toBeEnabled()
+  await expect(page.getByTestId('submission-name')).toHaveValue('  Weekend art studio  ')
+  await expect(page.getByTestId('submission-image-preview')).toBeVisible()
+  expect(state.uploads).toHaveLength(0)
+  expect(state.attempts).toHaveLength(0)
+  await pendingRefresh.fulfill({ json: mockSession })
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+  expect(state.uploads).toHaveLength(1)
+  expect(state.saved).toHaveLength(1)
+  expect(state.attempts).toHaveLength(1)
+})
+
+for (const { committed, expectedAttempts, successId, expectedName } of [
+  {
+    committed: false,
+    expectedAttempts: 2,
+    successId: 'submission-success',
+    expectedName: 'Edited after timeout',
+  },
+  {
+    committed: true,
+    expectedAttempts: 1,
+    successId: 'submission-recovered',
+    expectedName: 'Weekend art studio',
+  },
+]) {
+  test(`a stalled insert unlocks the form and retries safely when committed=${committed}`, async ({
+    page,
+  }) => {
+    const state = await mockBackend(page)
+    await page.clock.install()
+    await page.goto('/activities/submit')
+    await fillActivity(page)
+    await page.getByTestId('submission-image').setInputFiles(await photoFile(page))
+    let pendingSave
+    await page.route('**/rest/v1/submissions*', (route) => {
+      if (route.request().method() !== 'POST' || pendingSave) return route.fallback()
+      pendingSave = route
+      const record = route.request().postDataJSON()
+      state.attempts.push(record)
+      if (committed) state.saved.push({ ...record, reject_reason: null })
+    })
+    const saving = page.waitForRequest(
+      (request) => request.method() === 'POST' && request.url().includes('/rest/v1/submissions'),
+    )
+    await page.getByTestId('submission-submit').click()
+    await saving
+    await expect(page.getByTestId('submission-upload-status')).toHaveText('Submitting…')
+    await page.clock.fastForward(30001)
+    await expect(page.getByTestId('submission-error')).toContainText("Couldn't submit")
+    await expect(page.getByTestId('submission-submit')).toBeEnabled()
+    await expect(page.getByTestId('submission-image-preview')).toBeVisible()
+    await page.getByTestId('submission-name').fill('Edited after timeout')
+    await page.getByTestId('submission-submit').click()
+    await expect(page.getByTestId(successId)).toBeVisible()
+    await pendingSave.fulfill({ status: 201, body: '' }).catch(() => {})
+    expect(state.uploads).toHaveLength(1)
+    expect(state.attempts).toHaveLength(expectedAttempts)
+    expect(state.saved).toHaveLength(1)
+    expect(state.saved[0].id).toBe(state.attempts[0].id)
+    expect(state.saved[0].image_url).toBe(state.attempts[0].image_url)
+    expect(state.saved[0].name).toBe(expectedName)
+  })
+}
+
+test('a stalled recovery read times out without extra writes and can be retried', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  state.loseNextResponse = true
+  await page.clock.install()
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  await page.getByTestId('submission-image').setInputFiles(await photoFile(page))
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-error')).toBeVisible()
+  const original = { ...state.saved[0] }
+  let pendingRead
+  await page.route('**/rest/v1/submissions*', (route) => {
+    if (route.request().method() !== 'GET' || pendingRead) return route.fallback()
+    pendingRead = route
+  })
+  const reading = page.waitForRequest(
+    (request) => request.method() === 'GET' && request.url().includes('/rest/v1/submissions'),
+  )
+  await page.getByTestId('submission-submit').click()
+  await reading
+  await page.clock.fastForward(30001)
+  await expect(page.getByTestId('submission-error')).toContainText("Couldn't submit")
+  await expect(page.getByTestId('submission-submit')).toBeEnabled()
+  expect(state.uploads).toHaveLength(1)
+  expect(state.attempts).toHaveLength(1)
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-recovered')).toBeVisible()
+  await pendingRead.fulfill({ json: [] }).catch(() => {})
+  expect(state.saved).toEqual([original])
+  expect(state.uploads).toHaveLength(1)
+  expect(state.attempts).toHaveLength(1)
+})
+
+test('a no-photo save waiting for login refresh also times out without a late insert', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  await page.clock.install()
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  let pendingRefresh
+  await page.route('**/auth/v1/token**', (route) => {
+    pendingRefresh = route
+  })
+  await page.evaluate((key) => {
+    const session = JSON.parse(localStorage.getItem(key))
+    session.expires_at = Math.floor(Date.now() / 1000) - 1
+    localStorage.setItem(key, JSON.stringify(session))
+  }, authStorageKey())
+  const refreshing = page.waitForRequest('**/auth/v1/token**')
+  await page.getByTestId('submission-submit').click()
+  await refreshing
+  await page.clock.fastForward(30001)
+  await expect(page.getByTestId('submission-error')).toContainText("Couldn't submit")
+  await expect(page.getByTestId('submission-submit')).toBeEnabled()
+  expect(state.attempts).toHaveLength(0)
+  await pendingRefresh.fulfill({ json: mockSession })
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+  expect(state.attempts).toHaveLength(1)
+  expect(state.saved).toHaveLength(1)
+  expect(state.uploads).toHaveLength(0)
+})
+
+test('switching accounts cancels an unfinished database save and allows the new account to submit', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  let pendingSave
+  await page.route('**/rest/v1/submissions*', (route) => {
+    if (route.request().method() !== 'POST' || pendingSave) return route.fallback()
+    pendingSave = route
+  })
+  const saving = page.waitForRequest(
+    (request) => request.method() === 'POST' && request.url().includes('/rest/v1/submissions'),
+  )
+  await page.getByTestId('submission-submit').click()
+  await saving
+  const oldId = pendingSave.request().postDataJSON().id
+  const otherId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+  await page.evaluate(
+    ({ key, otherId }) => {
+      const session = JSON.parse(localStorage.getItem(key))
+      session.user.id = otherId
+      localStorage.setItem(key, JSON.stringify(session))
+      const channel = new BroadcastChannel(key)
+      channel.postMessage({ event: 'SIGNED_IN', session })
+      channel.close()
+    },
+    { key: authStorageKey(), otherId },
+  )
+  await expect(page.getByTestId('submission-submit')).toBeEnabled()
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+  await pendingSave.fulfill({ status: 201, body: '' }).catch(() => {})
+  expect(state.saved).toHaveLength(1)
+  expect(state.saved[0].id).not.toBe(oldId)
+  expect(state.saved[0].submitted_by).toBe(otherId)
+})
+
+test('double submission while uploading sends only one request', async ({ page }) => {
+  const state = await mockBackend(page)
+  state.stallUpload = true
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  await page.getByTestId('submission-image').setInputFiles(await photoFile(page))
+  const sent = page.waitForRequest('**/storage/v1/object/activity-images/**')
+  await page.getByTestId('submission-submit').click()
+  await sent
+  await page.getByTestId('submission-form').dispatchEvent('submit')
+  state.releaseUpload()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+  expect(state.uploads).toHaveLength(1)
+  expect(state.saved).toHaveLength(1)
+})
+
+test('old photo validation cannot restore a removed photo or replace the next selection', async ({
+  page,
+}) => {
+  await mockBackend(page)
+  await page.goto('/activities/submit')
+  await page.evaluate(() => {
+    window.photoDecodes = []
+    const decode = HTMLImageElement.prototype.decode
+    HTMLImageElement.prototype.decode = function () {
+      return new Promise((resolve, reject) =>
+        window.photoDecodes.push(() => decode.call(this).then(resolve, reject)),
+      )
+    }
+  })
+  const file = await photoFile(page)
+  await page.getByTestId('submission-image').setInputFiles(file)
+  await expect(page.getByTestId('submission-submit')).toBeDisabled()
+  await page.getByTestId('submission-image-remove').click()
+  await page.getByTestId('submission-image').setInputFiles({ ...file, name: 'new.png' })
+  await page.evaluate(() => window.photoDecodes[0]())
+  await expect(page.getByTestId('submission-image-error')).toBeEmpty()
+  await expect(page.getByTestId('submission-submit')).toBeDisabled()
+  await page.evaluate(() => window.photoDecodes[1]())
+  await expect(page.getByTestId('submission-image-preview')).toBeVisible()
+  await expect(page.getByTestId('submission-submit')).toBeEnabled()
+})
+
+for (const { action, leave, destination } of [
+  {
+    action: 'navigate',
+    leave: (page) => page.getByRole('link', { name: '← Back to Activities' }).click(),
+    destination: '/activities',
+  },
+  {
+    action: 'sign out',
+    leave: (page) =>
+      page.evaluate((key) => {
+        localStorage.removeItem(key)
+        const channel = new BroadcastChannel(key)
+        channel.postMessage({ event: 'SIGNED_OUT', session: null })
+        channel.close()
+      }, authStorageKey()),
+    destination: '/login',
+  },
+]) {
+  test(`${action} during an upload prevents a late insert`, async ({ page }) => {
+    const state = await mockBackend(page)
+    state.stallUpload = true
+    await page.goto('/activities/submit')
+    await fillActivity(page)
+    await page.getByTestId('submission-image').setInputFiles(await photoFile(page))
+    const sent = page.waitForRequest('**/storage/v1/object/activity-images/**')
+    await page.getByTestId('submission-submit').click()
+    await sent
+    await leave(page)
+    await expect(page).toHaveURL(destination)
+    state.releaseUpload()
+    await expect(page.getByTestId('submission-success')).toHaveCount(0)
+    expect(state.attempts).toHaveLength(0)
+  })
+}
+
+test('switching accounts while uploading cancels the old operation even when the form stays open', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  state.stallUpload = true
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  await page.getByTestId('submission-image').setInputFiles(await photoFile(page))
+  const sent = page.waitForRequest('**/storage/v1/object/activity-images/**')
+  await page.getByTestId('submission-submit').click()
+  await sent
+  await page.evaluate((key) => {
+    const session = JSON.parse(localStorage.getItem(key))
+    session.user.id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    localStorage.setItem(key, JSON.stringify(session))
+    const channel = new BroadcastChannel(key)
+    channel.postMessage({ event: 'SIGNED_IN', session })
+    channel.close()
+  }, authStorageKey())
+  await expect(page.getByTestId('submission-submit')).toBeEnabled()
+  state.releaseUpload()
+  await expect(page.getByTestId('submission-success')).toHaveCount(0)
+  expect(state.attempts).toHaveLength(0)
+})
+
+test('switching accounts after a lost save response uses a fresh submission and photo', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  state.loseNextResponse = true
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  await page.getByTestId('submission-image').setInputFiles(await photoFile(page))
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-error')).toBeVisible()
+  const original = { ...state.saved[0] }
+  const otherId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+  await page.evaluate(
+    ({ key, otherId }) => {
+      const session = JSON.parse(localStorage.getItem(key))
+      session.user.id = otherId
+      localStorage.setItem(key, JSON.stringify(session))
+      const channel = new BroadcastChannel(key)
+      channel.postMessage({ event: 'SIGNED_IN', session })
+      channel.close()
+    },
+    { key: authStorageKey(), otherId },
+  )
+  await expect(page.getByTestId('submission-error')).toHaveCount(0)
+  await expect(page.getByTestId('submission-image-preview')).toBeVisible()
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+  await expect(page.getByTestId('submission-recovered')).toHaveCount(0)
+  expect(state.saved).toHaveLength(2)
+  expect(state.saved[0]).toEqual(original)
+  expect(state.saved[1].id).not.toBe(original.id)
+  expect(state.saved[1].submitted_by).toBe(otherId)
+  expect(state.saved[1].image_url).not.toBe(original.image_url)
+  expect(state.uploads).toHaveLength(2)
+  expect(state.uploads[1].path).toContain(`/${otherId}/${state.saved[1].id}/`)
+})
+
+test('a duplicate insert is recovered only when the exact owned submission can be read', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  await page.route('**/rest/v1/submissions*', (route) => {
+    if (route.request().method() !== 'POST') return route.fallback()
+    state.saved.push(route.request().postDataJSON())
+    return route.fulfill({ status: 409, json: { code: '23505', message: 'Already saved' } })
+  })
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-recovered')).toContainText('were not submitted')
+  expect(state.saved).toHaveLength(1)
 })

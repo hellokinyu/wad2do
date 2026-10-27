@@ -3,6 +3,7 @@
 -- This file does not promote any account to admin or remove existing policies.
 begin;
 
+alter table public.profiles add column if not exists home_station_id text;
 alter table public.submissions add column if not exists google_place_id text;
 alter table public.submissions add column if not exists postal_code text;
 
@@ -26,11 +27,11 @@ grant execute on function public.wad2do_is_admin() to authenticated;
 alter table public.profiles enable row level security;
 revoke insert, update, delete on public.profiles from public, anon, authenticated;
 -- Remove any earlier column grants too; table grants and column grants are separate.
-revoke insert (id, display_name, interests, budget, home_area, company, is_admin, created_at),
-  update (id, display_name, interests, budget, home_area, company, is_admin, created_at)
+revoke insert (id, display_name, interests, budget, home_area, home_station_id, company, is_admin, created_at),
+  update (id, display_name, interests, budget, home_area, home_station_id, company, is_admin, created_at)
   on public.profiles from public, anon, authenticated;
 grant select on public.profiles to authenticated;
-grant update (display_name, interests, budget, home_area, company)
+grant update (display_name, interests, budget, home_area, home_station_id, company)
   on public.profiles to authenticated;
 
 drop policy if exists wad2do_read_profile on public.profiles;
