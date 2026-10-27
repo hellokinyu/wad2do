@@ -339,7 +339,10 @@ for (const count of [40, 45]) {
       `Showing ${lastStart + 1}–${count} of ${count} activities`,
     )
     await expect(pagination.getByRole('button', { name: 'Next' })).toBeDisabled()
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(375)
+    // A visible scrollbar can reduce the document width below the viewport width.
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+    ).toBe(true)
     await pagination.getByRole('button', { name: 'Previous' }).click()
     await expect(names).toHaveText(
       records.slice(lastStart - 20, lastStart).map((activity) => activity.name),

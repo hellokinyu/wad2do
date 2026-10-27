@@ -15,7 +15,7 @@
 
       <template v-else>
         <div
-          v-if="step < 5"
+          v-if="step <= 5"
           class="step-bars mb-4"
           role="progressbar"
           aria-label="Onboarding progress"
@@ -24,11 +24,11 @@
           aria-valuemax="100"
           data-testid="onboarding-progress"
         >
-          <span v-for="n in 4" :key="n" class="step-bar" :class="{ filled: n <= step }"></span>
+          <span v-for="n in 5" :key="n" class="step-bar" :class="{ filled: n <= step }"></span>
         </div>
 
-        <p v-if="step < 5" class="eyebrow mb-3">
-          <span data-testid="onboarding-step-label">Step {{ step }} of 4</span>
+        <p v-if="step <= 5" class="eyebrow mb-3">
+          <span data-testid="onboarding-step-label">Step {{ step }} of 5</span>
           <span class="mx-2">·</span>
           <span>{{ stepNames[step - 1] }}</span>
         </p>
@@ -110,19 +110,44 @@
               </template>
             </div>
 
-            <div v-if="errorMessage" class="notice mt-4" role="alert" data-testid="onboarding-error">
-              <p class="fw-semibold mb-1">Something went wrong.</p>
-              <p class="mb-3">{{ errorMessage }}</p>
-              <button type="button" class="btn btn-line btn-sm" @click="saveProfile">Try again</button>
-            </div>
           </section>
 
-          <section v-else-if="step === 5" key="done" data-testid="onboarding-step-done">
+          <section v-else-if="step === 5" key="identity" data-testid="onboarding-step-identity">
+            <h1 class="display-5 fw-bold title mb-3">Make it <span class="hl">yours.</span></h1>
+            <p class="lead-text mb-4">One last thing: add your name and pick a little face for your profile. Both are required.</p>
+            <div class="mb-4">
+              <label for="onboarding-name" class="form-label fw-bold">Your name <span class="text-muted">(required)</span></label>
+              <input
+                id="onboarding-name"
+                v-model.trim="displayName"
+                type="text"
+                class="form-control field"
+                autocomplete="nickname"
+                placeholder="What should we call you?"
+                maxlength="40"
+                required
+                aria-describedby="onboarding-name-hint"
+                data-testid="onboarding-name"
+                @keyup.enter.stop="goNext"
+              />
+              <p id="onboarding-name-hint" class="hint small mt-2">This is the name that appears on your profile. Up to 40 characters.</p>
+            </div>
+            <AnimalAvatarPicker v-model="avatarAnimal" :disabled="saving" />
+          </section>
+
+          <section v-else-if="step === 6" key="done" data-testid="onboarding-step-done">
             <p class="eyebrow mb-3">All done</p>
             <h1 class="display-5 fw-bold title mb-3">You're all <span class="hl">set.</span></h1>
             <p class="lead-text mb-4">Here's what we'll use to find your next hangout.</p>
 
             <div class="panel mb-4">
+              <div class="summary-row d-flex align-items-center gap-3">
+                <AnimalAvatar :animal="avatarAnimal" :size="64" />
+                <div>
+                  <p class="eyebrow mb-1">Your profile</p>
+                  <p class="fw-semibold mb-0" data-testid="summary-name">{{ displayName }}</p>
+                </div>
+              </div>
               <div class="summary-row">
                 <p class="eyebrow mb-2">Interests</p>
                 <div v-if="interests.length > 0" class="d-flex flex-wrap gap-2" data-testid="summary-interests">
@@ -154,7 +179,12 @@
         </Transition>
         </fieldset>
 
-        <div v-if="step < 5" class="footer-bar d-flex justify-content-between align-items-center mt-5 pt-4">
+        <div v-if="errorMessage" class="notice mt-4" role="alert" data-testid="onboarding-error">
+          <p class="mb-3">{{ errorMessage }}</p>
+          <button type="button" class="btn btn-line btn-sm" :disabled="saving || !canNext" @click="saveProfile">Try again</button>
+        </div>
+
+        <div v-if="step <= 5" class="footer-bar d-flex justify-content-between align-items-center mt-5 pt-4">
           <button
             type="button"
             class="btn btn-line"
@@ -167,6 +197,7 @@
           </button>
           <div class="d-flex align-items-center gap-3">
             <button
+              v-if="step < 5"
               type="button"
               class="btn btn-link skip-link"
               :disabled="saving"
@@ -183,7 +214,7 @@
               @click="goNext"
             >
               <span v-if="saving" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-              {{ step === 4 ? 'Finish' : 'Next' }} →
+              {{ step === 5 ? 'Finish' : 'Next' }} →
             </button>
           </div>
         </div>
@@ -197,12 +228,15 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import MrtStationPicker from '@/components/MrtStationPicker.vue'
+import AnimalAvatar from '@/components/AnimalAvatar.vue'
+import AnimalAvatarPicker from '@/components/AnimalAvatarPicker.vue'
+import { findProfileAnimal } from '@/data/profileAnimals'
 import { homeAreas } from '@/data/homeAreas'
 import { findStation } from '@/data/mrtStations'
 
 const router = useRouter()
 
-const stepNames = ['Interests', 'Budget', 'Location', 'Company']
+const stepNames = ['Interests', 'Budget', 'Location', 'Company', 'Your profile']
 
 const interestOptions = [
   'Food',
@@ -231,13 +265,15 @@ const homeArea = ref('')
 const homeStationId = ref(null)
 const selectedStation = computed(() => findStation(homeStationId.value))
 const company = ref([])
+const displayName = ref('')
+const avatarAnimal = ref('')
 
 const loading = ref(true)
 const loadError = ref('')
 const saving = ref(false)
 const errorMessage = ref('')
 
-const progressPercent = computed(() => Math.round((step.value / 4) * 100))
+const progressPercent = computed(() => Math.round((step.value / 5) * 100))
 
 const interestHint = computed(() => {
   const count = interests.value.length
@@ -250,6 +286,9 @@ const canNext = computed(() => {
   if (step.value === 1) return interests.value.length >= 3
   if (step.value === 2) return budget.value !== ''
   if (step.value === 3) return !!selectedStation.value || homeAreas.includes(homeArea.value)
+  if (step.value === 5) {
+    return displayName.value.trim().length > 0 && displayName.value.trim().length <= 40 && !!findProfileAnimal(avatarAnimal.value)
+  }
   return true
 })
 
@@ -274,7 +313,7 @@ async function loadProfile() {
     if (userError || !userData.user) throw userError || new Error('Not logged in')
     const { data, error } = await supabase
       .from('profiles')
-      .select('interests, budget, home_area, home_station_id, company')
+      .select('display_name, interests, budget, home_area, home_station_id, company')
       .eq('id', userData.user.id)
       .single()
 
@@ -284,6 +323,8 @@ async function loadProfile() {
     homeArea.value = data.home_area || ''
     homeStationId.value = data.home_station_id || null
     company.value = data.company || []
+    displayName.value = data.display_name || ''
+    avatarAnimal.value = findProfileAnimal(userData.user.user_metadata?.avatar_animal)?.id || ''
   } catch (err) {
     console.error('Could not load saved answers:', err)
     loadError.value = "Couldn't load your saved answers. Try again before editing."
@@ -298,7 +339,7 @@ function onEnterKey(event) {
   if (event.key !== 'Enter' || loading.value || loadError.value) return
   const tag = event.target.tagName
   if (['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) return
-  if (step.value < 5 && canNext.value && !saving.value) goNext()
+  if (step.value <= 5 && canNext.value && !saving.value) goNext()
 }
 
 onMounted(() => {
@@ -310,12 +351,15 @@ onUnmounted(() => {
 })
 
 function goBack() {
+  if (saving.value) return
+  errorMessage.value = ''
   if (step.value > 1) step.value--
 }
 
 function goNext() {
-  if (!canNext.value) return
-  if (step.value < 4) {
+  if (!canNext.value || saving.value || step.value > 5) return
+  errorMessage.value = ''
+  if (step.value < 5) {
     step.value++
   } else {
     saveProfile()
@@ -323,16 +367,13 @@ function goNext() {
 }
 
 function skipStep() {
+  if (step.value >= 5 || saving.value) return
   if (step.value === 1) interests.value = []
   if (step.value === 2) budget.value = ''
   if (step.value === 3) pickStation(null)
   if (step.value === 4) company.value = []
 
-  if (step.value < 4) {
-    step.value++
-  } else {
-    saveProfile()
-  }
+  step.value++
 }
 
 function pickArea(area) {
@@ -347,7 +388,11 @@ function pickStation(id) {
 }
 
 async function saveProfile() {
-  if (saving.value) return
+  if (saving.value || step.value !== 5) return
+  if (!canNext.value) {
+    errorMessage.value = 'Please enter your name and choose an animal before finishing.'
+    return
+  }
   saving.value = true
   errorMessage.value = ''
 
@@ -360,6 +405,7 @@ async function saveProfile() {
     const { data, error } = await supabase
       .from('profiles')
       .update({
+        display_name: displayName.value.trim(),
         interests: interests.value,
         budget: budget.value || null,
         home_area: homeArea.value || null,
@@ -375,7 +421,14 @@ async function saveProfile() {
       throw new Error('No profile row found for this user')
     }
 
-    step.value = 5
+    // Save the identity to Auth only after the profile row was saved successfully.
+    // The router checks these fields before allowing access to the rest of the app.
+    const { error: identityError } = await supabase.auth.updateUser({
+      data: { display_name: displayName.value.trim(), avatar_animal: avatarAnimal.value },
+    })
+    if (identityError) throw identityError
+
+    step.value = 6
   } catch (err) {
     console.error('Onboarding save failed:', err)
     errorMessage.value = "We couldn't save your answers. Please check you're logged in and try again."

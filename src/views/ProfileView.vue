@@ -29,7 +29,10 @@
 
       <section class="mb-4" data-testid="profile-account">
         <div class="d-flex flex-column flex-md-row align-items-md-center gap-4">
-          <div class="avatar" aria-hidden="true">{{ initial }}</div>
+          <div class="d-flex flex-column align-items-center gap-2">
+            <AnimalAvatar :animal="avatarAnimal" :size="96" data-testid="profile-avatar" />
+            <button type="button" class="btn btn-link text-body small p-0" :disabled="!!profileError || savingAvatar" data-testid="profile-edit-avatar" @click="startEditAvatar">Change picture</button>
+          </div>
 
           <div class="flex-grow-1">
             <p class="eyebrow mb-2">Your profile</p>
@@ -49,6 +52,7 @@
                   placeholder="Your name"
                   v-model.trim="nameDraft"
                   maxlength="40"
+                  required
                   data-testid="profile-name-input"
                   @keyup.enter="saveName"
                 />
@@ -87,6 +91,14 @@
               {{ loggingOut ? 'Logging out…' : 'Log out' }}
             </button>
           </div>
+        </div>
+        <div v-if="editingAvatar" class="panel mt-4">
+          <AnimalAvatarPicker v-model="avatarDraft" :disabled="savingAvatar" />
+          <div class="d-flex gap-2 mt-3">
+            <button type="button" class="btn btn-ink" :disabled="!findProfileAnimal(avatarDraft) || savingAvatar" data-testid="profile-save-avatar" @click="saveAvatar">{{ savingAvatar ? 'Saving…' : 'Save picture' }}</button>
+            <button type="button" class="btn btn-line" :disabled="savingAvatar" @click="editingAvatar = false">Cancel</button>
+          </div>
+          <p v-if="avatarError" class="error-text mt-3 mb-0" role="alert" data-testid="profile-avatar-error">{{ avatarError }}</p>
         </div>
       </section>
 
@@ -314,12 +326,15 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import MrtStationPicker from '@/components/MrtStationPicker.vue'
+import AnimalAvatar from '@/components/AnimalAvatar.vue'
+import AnimalAvatarPicker from '@/components/AnimalAvatarPicker.vue'
+import { findProfileAnimal } from '@/data/profileAnimals'
 import { homeAreas } from '@/data/homeAreas'
 import { findStation } from '@/data/mrtStations'
 import { authErrorMessage, useAuth } from '@/composables/useAuth'
 
 const router = useRouter()
-const { user: authenticatedUser, authError } = useAuth()
+const { user: authenticatedUser, authError, avatarAnimal } = useAuth()
 
 const interestOptions = [
   'Food',
@@ -350,6 +365,10 @@ const editingName = ref(false)
 const nameDraft = ref('')
 const savingName = ref(false)
 const nameError = ref('')
+const editingAvatar = ref(false)
+const avatarDraft = ref('')
+const savingAvatar = ref(false)
+const avatarError = ref('')
 
 const interests = ref([])
 const budget = ref('')
@@ -368,11 +387,6 @@ const savedActivities = ref([])
 const savedError = ref('')
 const submissions = ref([])
 const submissionsError = ref('')
-
-const initial = computed(() => {
-  const source = displayName.value || email.value || '?'
-  return source.charAt(0).toUpperCase()
-})
 
 const hasChanges = computed(() => {
   return (
@@ -485,13 +499,13 @@ function startEditName() {
 }
 
 async function saveName() {
-  if (nameDraft.value === '') return
+  if (savingName.value || !nameDraft.value.trim() || nameDraft.value.trim().length > 40) return
   savingName.value = true
   nameError.value = ''
 
   const { data, error } = await supabase
     .from('profiles')
-    .update({ display_name: nameDraft.value })
+    .update({ display_name: nameDraft.value.trim() })
     .eq('id', userId.value)
     .select()
 
@@ -503,8 +517,31 @@ async function saveName() {
     return
   }
 
-  displayName.value = nameDraft.value
+  displayName.value = nameDraft.value.trim()
   editingName.value = false
+}
+
+function startEditAvatar() {
+  avatarDraft.value = avatarAnimal.value
+  avatarError.value = ''
+  editingAvatar.value = true
+}
+
+async function saveAvatar() {
+  if (savingAvatar.value || !findProfileAnimal(avatarDraft.value)) return
+  savingAvatar.value = true
+  avatarError.value = ''
+  try {
+    const { error } = await supabase.auth.updateUser({
+      data: { avatar_animal: avatarDraft.value },
+    })
+    if (error) throw error
+    editingAvatar.value = false
+  } catch {
+    avatarError.value = "Couldn't save your picture. Please try again."
+  } finally {
+    savingAvatar.value = false
+  }
 }
 
 async function logOut() {
@@ -690,20 +727,6 @@ function statusClass(status) {
 
 .logged-out {
   max-width: 640px;
-}
-
-.avatar {
-  width: 96px;
-  height: 96px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background-color: #111;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2.5rem;
-  font-weight: 700;
 }
 
 .name-edit {

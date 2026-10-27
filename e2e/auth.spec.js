@@ -17,7 +17,14 @@ test.beforeEach(async ({ page }) => {
 })
 
 async function mockBackend(page) {
-  const state = { requests: [], loginError: null, signupError: null, logoutError: null }
+  const state = {
+    requests: [],
+    loginError: null,
+    signupError: null,
+    logoutError: null,
+    user: mockUser,
+    signupSession: null,
+  }
   await page.route('**/auth/v1/**', (route) => {
     const request = route.request()
     const url = new URL(request.url())
@@ -25,12 +32,12 @@ async function mockBackend(page) {
     if (url.pathname.endsWith('/token')) {
       return state.loginError
         ? route.fulfill({ status: 400, headers: authHeaders, json: state.loginError })
-        : route.fulfill({ json: mockSession })
+        : route.fulfill({ json: { ...mockSession, user: state.user } })
     }
     if (url.pathname.endsWith('/signup')) {
       return state.signupError
         ? route.fulfill({ status: 422, headers: authHeaders, json: state.signupError })
-        : route.fulfill({ json: { ...mockUser, identities: [] } })
+        : route.fulfill({ json: state.signupSession || { ...state.user, identities: [] } })
     }
     if (url.pathname.endsWith('/logout')) {
       return state.logoutError
@@ -38,7 +45,7 @@ async function mockBackend(page) {
         : route.fulfill({ status: 204 })
     }
     if (url.pathname.endsWith('/resend')) return route.fulfill({ json: {} })
-    if (url.pathname.endsWith('/user')) return route.fulfill({ json: mockUser })
+    if (url.pathname.endsWith('/user')) return route.fulfill({ json: state.user })
     return route.fulfill({ status: 400, json: { message: 'Unexpected mock auth request' } })
   })
   await page.route('**/rest/v1/**', (route) => {
@@ -87,6 +94,27 @@ test('mismatched passwords do not send a signup request', async ({ page }) => {
   expect(state.requests).toHaveLength(0)
 })
 
+test('signup with an immediate session requires onboarding before activities', async ({ page }) => {
+  const state = await mockBackend(page)
+  state.user = { ...mockUser, user_metadata: {} }
+  state.signupSession = { ...mockSession, user: state.user }
+  await page.goto('/signup')
+  await fillSignup(page)
+  await page.getByTestId('signup-submit').click()
+  await expect(page).toHaveURL('/onboarding')
+  await page.goto('/activities')
+  await expect(page).toHaveURL('/onboarding')
+})
+
+test('login requires onboarding when the account has no animal', async ({ page }) => {
+  const state = await mockBackend(page)
+  state.user = { ...mockUser, user_metadata: { display_name: 'Demo User' } }
+  await page.goto('/login')
+  await fillLogin(page)
+  await page.getByTestId('login-submit').click()
+  await expect(page).toHaveURL('/onboarding')
+})
+
 test('signup displays errors returned by Supabase', async ({ page }) => {
   const state = await mockBackend(page)
   state.signupError = { code: 'weak_password', message: 'Password must contain a number.' }
@@ -104,8 +132,8 @@ test('login persists across refresh and redirects signed-in users away from auth
   await page.goto('/login')
   await fillLogin(page)
   await page.getByTestId('login-submit').click()
-  await expect(page).toHaveURL('/')
-  await expect(page.getByRole('link', { name: 'Explore activities' })).toBeVisible()
+  await expect(page).toHaveURL('/activities')
+  await expect(page.getByTestId('activities-page')).toBeVisible()
   expect(state.requests[0].body).toMatchObject({
     email: mockUser.email,
     password: 'DemoPassword123!',
@@ -117,9 +145,9 @@ test('login persists across refresh and redirects signed-in users away from auth
   await expect(page).toHaveURL('/profile')
   await expect(page.getByTestId('profile-email')).toHaveText(mockUser.email)
   await page.goto('/login')
-  await expect(page).toHaveURL('/')
+  await expect(page).toHaveURL('/activities')
   await page.goto('/signup')
-  await expect(page).toHaveURL('/')
+  await expect(page).toHaveURL('/activities')
   expect(state.requests.filter((request) => request.path.endsWith('/token'))).toHaveLength(1)
 })
 
@@ -172,7 +200,7 @@ test('successful confirmation links establish a session and redirect home', asyn
     type: 'signup',
   })
   await page.goto('/login#' + hash)
-  await expect(page).toHaveURL('/')
+  await expect(page).toHaveURL('/activities')
   await page.goto('/profile')
   await expect(page.getByTestId('profile-email')).toHaveText(mockUser.email)
 })
@@ -214,7 +242,7 @@ test('logout clears the session and redirects another open protected tab', async
   await page.goto('/login')
   await fillLogin(page)
   await page.getByTestId('login-submit').click()
-  await expect(page).toHaveURL('/')
+  await expect(page).toHaveURL('/activities')
   await page.goto('/profile')
   const otherTab = await context.newPage()
   await mockBackend(otherTab)
@@ -237,7 +265,7 @@ test('logout errors stay visible when Supabase clears the local session', async 
   await page.goto('/login')
   await fillLogin(page)
   await page.getByTestId('login-submit').click()
-  await expect(page).toHaveURL('/')
+  await expect(page).toHaveURL('/activities')
   await page.goto('/profile')
   await page.getByTestId('profile-logout').click()
   await expect(page).toHaveURL('/login')
@@ -258,7 +286,7 @@ test('an unavailable profile displays a clear message without inserting a row', 
   await page.goto('/login')
   await fillLogin(page)
   await page.getByTestId('login-submit').click()
-  await expect(page).toHaveURL('/')
+  await expect(page).toHaveURL('/activities')
   await page.goto('/profile')
   await expect(page.getByTestId('profile-error')).toContainText('contact the WAD2Do team')
   await expect(page.getByTestId('profile-edit-name')).toBeDisabled()
