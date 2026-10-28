@@ -200,3 +200,71 @@ export async function getTravelOptions({
   await Promise.all(Array.from({ length: concurrency }, worker))
   return results
 }
+
+// ----- Finding a place's coordinates (geocoding) -----
+
+export const ONEMAP_SEARCH_URL = 'https://www.onemap.gov.sg/api/common/elastic/search'
+
+// A stop that may or may not have saved coordinates
+export type Place = { lat?: number | null; lng?: number | null; address?: string; name?: string }
+
+const placeCache = new Map<string, Point>()
+
+// Search OneMap for one piece of text (a postal code, a name...). Returns null if nothing matched.
+async function searchOneMap(
+  text: string,
+  token: string,
+  fetchImpl: typeof fetch,
+  timeoutMs: number,
+) {
+  const cached = placeCache.get(text)
+  if (cached) return cached
+  const params = new URLSearchParams({
+    searchVal: text,
+    returnGeom: 'Y',
+    getAddrDetails: 'N',
+    pageNum: '1',
+  })
+  try {
+    const response = await fetchImpl(ONEMAP_SEARCH_URL + '?' + params, {
+      headers: { Authorization: token },
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (!response.ok) return null
+    const body = await response.json()
+    const first = body?.results?.[0]
+    const point = { lat: Number(first?.LATITUDE), lng: Number(first?.LONGITUDE) }
+    if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return null
+    placeCache.set(text, point)
+    return point
+  } catch {
+    return null // timeout, network problem, or a reply that isn't JSON
+  }
+}
+
+// Use the saved coordinates if there are any. Otherwise search OneMap for, in order:
+// the postal code, the venue part of the name, the whole name, then the street.
+export async function findPlace(
+  place: Place,
+  {
+    token,
+    fetchImpl = fetch,
+    timeoutMs = 8000,
+  }: { token: string; fetchImpl?: typeof fetch; timeoutMs?: number },
+): Promise<Point | null> {
+  if (typeof place.lat === 'number' && typeof place.lng === 'number') {
+    return { lat: place.lat, lng: place.lng }
+  }
+  const candidates = [
+    place.address?.match(/\b\d{6}\b/)?.[0], // 'Singapore 069183' -> '069183'
+    place.name?.split(' at ').pop(), // 'Hike at Chestnut Nature Park' -> 'Chestnut Nature Park'
+    place.name,
+    place.address?.split(',')[0], // '30 Prinsep Street, #01-01, ...' -> '30 Prinsep Street'
+  ]
+  for (const text of new Set(candidates)) {
+    if (!text) continue
+    const point = await searchOneMap(text.trim(), token, fetchImpl, timeoutMs)
+    if (point) return point
+  }
+  return null
+}

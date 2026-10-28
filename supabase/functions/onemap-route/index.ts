@@ -1,7 +1,7 @@
 // onemap-route Edge Function: the browser sends two stops and a departure time.
 // We ask OneMap here on the server (so the token never reaches the browser)
 // and send back all five travel options.
-import { getTravelOptions } from './routing.ts'
+import { ALL_MODES, findPlace, getTravelOptions, unavailable } from './routing.ts'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -21,6 +21,14 @@ function isSingaporePoint(point: any) {
     point.lng > 103.5 &&
     point.lng < 104.1
   )
+}
+
+// A stop from the browser: coordinates inside Singapore, or a short address/name to look up
+function isPlace(place: any) {
+  if (isSingaporePoint(place)) return true
+  const isText = (value: any) =>
+    typeof value === 'string' && value.length > 0 && value.length <= 200
+  return isText(place?.address) || isText(place?.name)
 }
 
 export function createHandler({
@@ -48,7 +56,8 @@ export function createHandler({
       return reply(503, { error: 'unavailable' })
     }
 
-    // Expect { start: { lat, lng }, end: { lat, lng }, departure: '2026-10-30T10:00' }
+    // Expect { start, end, departure: '2026-10-30T10:00' }. A stop is either { lat, lng }
+    // or { address, name } for us to look up.
     let body
     try {
       body = await req.json()
@@ -56,16 +65,29 @@ export function createHandler({
       body = null
     }
     const validTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(body?.departure ?? '')
-    if (!isSingaporePoint(body?.start) || !isSingaporePoint(body?.end) || !validTime) {
+    if (!isPlace(body?.start) || !isPlace(body?.end) || !validTime) {
       return reply(400, { error: 'invalid_input' })
+    }
+    const token = env.ONEMAP_TOKEN
+    if (!token) return reply(503, { error: 'ONEMAP_TOKEN is not set in .env' })
+
+    // Find both stops' coordinates (saved ones, or looked up by postal code / name)
+    const [start, end] = await Promise.all([
+      findPlace(body.start, { token, fetchImpl }),
+      findPlace(body.end, { token, fetchImpl }),
+    ])
+    if (!start || !end) {
+      return reply(200, {
+        options: ALL_MODES.map((mode) => unavailable(mode, 'Location not found')),
+      })
     }
 
     try {
       const options = await getTravelOptions({
-        start: body.start,
-        end: body.end,
+        start,
+        end,
         departure: body.departure,
-        token: env.ONEMAP_TOKEN,
+        token,
         fetchImpl,
       })
       return reply(200, { options })
