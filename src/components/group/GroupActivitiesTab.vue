@@ -33,7 +33,9 @@ async function loadActivities(showSpinner = true) {
     // 1. The activities shared to this group, with their details from the activities table
     const { data: shared, error: sharedError } = await supabase
       .from('group_activities')
-      .select('activity_id, shared_by, activities(id, name, image_url, price_per_person, category)')
+      .select(
+        'activity_id, shared_by, activities!group_activities_activity_id_fkey(id, name, image_url, price_per_person, category)',
+      )
       .eq('group_id', groupId)
     if (sharedError) throw sharedError
 

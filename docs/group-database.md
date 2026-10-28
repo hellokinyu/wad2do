@@ -10,14 +10,33 @@ Database changes must be announced before they are applied.
 
 The `batch_1_group_transactions` migration installed the six new functions in WAD2Do
 after a heads-up. It did not change existing app data or switch table policies.
-The updated frontend is not deployed/shared yet, so **group_members.sql remains pending**.
-The broad existing access rules therefore remain live until that coordinated switch.
+The frontend changes were merged into `main` in PR #27; the team is using localhost.
+After explicit rollout approval and a heads-up, `batch_1_group_privacy_policies` applied
+**group_members.sql to the shared WAD2Do database on 28 Oct 2026**. The restrictive
+rules are now active, including on localhost because it uses that shared database.
+Everyone must pull current `main`, restart the local app, and refresh older tabs.
 After a heads-up, `batch_1_require_invite_code` updated only the join function and its
 execute permissions. A read-only check confirmed UUID-only joins are rejected and
 anonymous/PUBLIC execution remains denied; no app data or table policies changed.
 The follow-up invite fix requires the existing invite code even when joining by URL.
 New invite links include `?invite=CODE`; old links without the code need to be copied
 again by a member, or the recipient can use the existing code on the Groups page.
+
+Read-only checks on the live database passed for member access, outsider denial,
+private profiles, member-name lookup, bounded invite previews, and admin profile
+access without access to unrelated groups. Anonymous table/function access and direct
+membership/availability writes are denied; normal preference edits remain permitted.
+Record counts across all seven affected tables were unchanged by the rollout. The
+security advisory summary was unchanged. No test records or user-data writes were made.
+Real browser create/join/save actions against the shared database remain to be checked.
+
+Post-rollout API check: the votes-to-shortlist foreign key also exposes a second
+PostgREST relationship from `group_activities` to `activities` through `votes`.
+An unqualified `activities(...)` embed returns `PGRST201` (ambiguous relationship),
+even though SQL permissions and function definitions match. The group shortlist now
+uses `activities!group_activities_activity_id_fkey(...)` to select the direct link.
+The browser mock reproduces the ambiguity to prevent this regression. The fix needs
+the updated frontend; it does not require another database migration.
 
 ## Apply it yourself
 
@@ -33,8 +52,8 @@ Do not put a database password or service-role key in `.env.local`.
 2. Run **all of [group_transactions.sql](sql/group_transactions.sql)**. This installs
    six functions and their execute permissions. It does not replace tables, delete
    existing data, or close profile access yet, so the old frontend can keep working.
-3. Deploy the updated frontend from this branch. For local testing, restart
-   `pnpm run dev` after step 2. The existing membership helper must be installed; on a
+3. Deploy or share the updated frontend from `main`. For local testing, pull current
+   `main`, restart `pnpm run dev`, and refresh open tabs after step 2. The existing membership helper must be installed; on a
    fresh database, run step 4 before opening the app.
 4. Only after the updated frontend is deployed/shared, run **all of
    [group_members.sql](sql/group_members.sql)**. It restricts group data to members,

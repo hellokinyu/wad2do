@@ -115,7 +115,17 @@ async function mockGroups(page) {
             : [{ groups: state.group }],
       })
     }
-    if (endpoint === 'group_activities')
+    if (endpoint === 'group_activities') {
+      // The votes cascade also exposes a second path to activities in PostgREST.
+      if (!url.searchParams.get('select')?.includes('activities!group_activities_activity_id_fkey(')) {
+        return route.fulfill({
+          status: 300,
+          json: {
+            code: 'PGRST201',
+            message: "Could not embed because more than one relationship was found for 'group_activities' and 'activities'",
+          },
+        })
+      }
       return route.fulfill({
         json: [
           {
@@ -130,6 +140,7 @@ async function mockGroups(page) {
           },
         ],
       })
+    }
     if (endpoint === 'availability') return route.fulfill({ json: state.availability })
     return route.fulfill({ json: [] })
   })
@@ -148,7 +159,7 @@ async function fillCreate(page) {
   await page.getByTestId('group-budget-input').fill('50')
 }
 
-test('all group pages load member names without requesting other profile fields', async ({
+test('group pages resolve activity relationships and load names without requesting other profile fields', async ({
   page,
 }) => {
   const state = await mockGroups(page)
