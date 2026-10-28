@@ -93,3 +93,109 @@ export function parseTransitRoute(mode: TravelMode, body: any): TravelOption {
     available: true,
   }
 }
+
+// ----- Calling OneMap -----
+
+export const ALL_MODES: TravelMode[] = ['MRT', 'BUS', 'TRANSIT', 'WALK', 'CYCLE']
+
+// Results we already have, so the same trip isn't asked for twice
+const cache = new Map<string, TravelOption>()
+export function clearTravelCache() {
+  cache.clear()
+}
+
+// '2026-10-30T10:07' -> '2026-10-30T10:00' (nearest 15 minutes, never past 23:45)
+export function roundTo15(departure: string) {
+  const [date, time] = departure.split('T')
+  const [hours, minutes] = time.split(':').map(Number)
+  const total = Math.min(Math.round((hours * 60 + minutes) / 15) * 15, 23 * 60 + 45)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return date + 'T' + pad(Math.floor(total / 60)) + ':' + pad(total % 60)
+}
+
+// Walk and cycle don't depend on the time, so their key leaves it out
+function cacheKey(start: Point, end: Point, mode: TravelMode, departure: string) {
+  const when = mode === 'WALK' || mode === 'CYCLE' ? '' : departure
+  return [start.lat, start.lng, end.lat, end.lng, mode, when].join('|')
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// Ask OneMap for one mode. Problems with this mode become "unavailable", except an
+// expired token, which affects every mode and is thrown so the caller can show it.
+async function fetchOption(
+  start: Point,
+  end: Point,
+  mode: TravelMode,
+  departure: string,
+  token: string,
+  fetchImpl: typeof fetch,
+  timeoutMs: number,
+): Promise<TravelOption> {
+  const url = buildRouteUrl(start, end, mode, departure)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let response
+    try {
+      response = await fetchImpl(url, {
+        headers: { Authorization: token },
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+    } catch (error) {
+      const timedOut = (error as Error)?.name === 'TimeoutError'
+      return unavailable(mode, timedOut ? 'OneMap took too long' : 'Could not reach OneMap')
+    }
+    if (response.status === 401) throw new Error('OneMap token expired, update ONEMAP_TOKEN in .env')
+    if (response.status === 429) {
+      await sleep(500 * 2 ** attempt) // wait 0.5 s, then 1 s, then 2 s
+      continue
+    }
+    const body = await response.json().catch(() => null)
+    if (response.status === 404) return unavailable(mode, body?.error || 'No route found')
+    if (!response.ok) return unavailable(mode, 'OneMap error ' + response.status)
+    return mode === 'WALK' || mode === 'CYCLE'
+      ? parseStreetRoute(mode, body)
+      : parseTransitRoute(mode, body)
+  }
+  return unavailable(mode, 'OneMap is busy, try again shortly')
+}
+
+// All five travel options between two stops, at most `concurrency` requests at a time
+export async function getTravelOptions({
+  start,
+  end,
+  departure,
+  token,
+  fetchImpl = fetch,
+  timeoutMs = 8000,
+  concurrency = 2,
+}: {
+  start: Point
+  end: Point
+  departure: string
+  token: string | undefined
+  fetchImpl?: typeof fetch
+  timeoutMs?: number
+  concurrency?: number
+}): Promise<TravelOption[]> {
+  if (!token) throw new Error('ONEMAP_TOKEN is not set in .env')
+  const when = roundTo15(departure)
+  const results: TravelOption[] = []
+  let next = 0
+
+  // Each worker keeps taking the next mode until none are left
+  async function worker() {
+    while (next < ALL_MODES.length) {
+      const index = next++
+      const mode = ALL_MODES[index]
+      const key = cacheKey(start, end, mode, when)
+      let option = cache.get(key)
+      if (!option) {
+        option = await fetchOption(start, end, mode, when, token as string, fetchImpl, timeoutMs)
+        if (option.available) cache.set(key, option) // don't remember failures
+      }
+      results[index] = option
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, worker))
+  return results
+}
