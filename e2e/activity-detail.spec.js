@@ -97,6 +97,11 @@ async function mockBackend(page, options = {}) {
   await page.route('**/functions/v1/google-place-details', async (route) => {
     state.googleRequests.push(route.request().postDataJSON())
     expect(route.request().headers().authorization).toMatch(/^Bearer /)
+    if (options.googleError)
+      return route.fulfill({
+        status: options.googleError === 'lookup_disabled' ? 503 : 429,
+        json: { error: options.googleError },
+      })
     if (options.stallGoogle && state.googleRequests.length === 1) return
     if (options.googleGate) {
       options.onGoogleRequest()
@@ -288,6 +293,27 @@ test('community activities with a Place ID use an address embed rather than a gl
   await expect(page.getByTestId('detail-tags')).toContainText('Community')
 })
 
+for (const [code, message] of [
+  ['user_limit', 'hourly Google lookup limit'],
+  ['app_limit', 'monthly Google lookup allowance'],
+  ['lookup_disabled', 'Live Google details are currently disabled'],
+]) {
+  test(`Google ${code} explains the limit and preserves saved hours and activity actions`, async ({
+    page,
+  }) => {
+    await mockBackend(page, { records: [googlePottery], googleError: code })
+    await page.goto('/activities/' + potteryId)
+    await expect(page.getByTestId('detail-google-error')).toContainText(message)
+    await expect(page.getByTestId('detail-hours-row').filter({ hasText: 'Monday' })).toContainText(
+      'Closed',
+    )
+    await expect(page.getByTestId('detail-save')).toBeEnabled()
+    await expect(page.getByTestId('detail-share')).toBeEnabled()
+    await expect(page.getByTestId('detail-description')).toContainText(pottery.description)
+    await expect(page.getByTestId('detail-map')).toHaveCount(1)
+  })
+}
+
 test('Google details replace stored ratings and hours, with review count and attribution', async ({
   page,
 }) => {
@@ -465,6 +491,50 @@ test('a stalled Google request times out and can be retried without reloading th
   await expect(page.getByTestId('detail-rating')).toContainText('4.6')
   await expect(page.getByTestId('detail-google-error')).toHaveCount(0)
   expect(state.googleRequests).toEqual([{ activityId: potteryId }, { activityId: potteryId }])
+})
+
+test('a stalled rate-limit response body times out and permits retry', async ({ page }) => {
+  await page.clock.install()
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window)
+    let stallFirst = true
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url.includes('/functions/v1/google-place-details') && stallFirst) {
+        stallFirst = false
+        return Promise.resolve(
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                window.__googleErrorBodyStarted = true
+                init?.signal?.addEventListener(
+                  'abort',
+                  () => controller.error(init.signal.reason),
+                  { once: true },
+                )
+              },
+            }),
+            { status: 429, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+      return originalFetch(input, init)
+    }
+  })
+  const state = await mockBackend(page, { records: [googlePottery] })
+  await page.goto('/activities/' + potteryId)
+  await expect(page.getByTestId('detail-google-loading')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => window.__googleErrorBodyStarted)).toBe(true)
+  await page.clock.fastForward(15000)
+
+  await expect(page.getByTestId('detail-google-error')).toBeVisible()
+  await expect(page.getByTestId('detail-google-loading')).toHaveCount(0)
+  await expect(page.getByTestId('detail-share')).toBeEnabled()
+  await expect(page.getByText('Showing saved activity hours.')).toBeVisible()
+  await page.getByTestId('detail-google-retry').click()
+  await expect(page.getByTestId('detail-rating')).toContainText('4.6')
+  await expect(page.getByTestId('detail-google-error')).toHaveCount(0)
+  expect(state.googleRequests).toEqual([{ activityId: potteryId }])
 })
 
 test('a late Google response cannot appear on another activity', async ({ page }) => {

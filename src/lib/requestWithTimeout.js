@@ -1,5 +1,9 @@
-export async function requestWithTimeout(request, controller = new AbortController()) {
-  const timeout = setTimeout(() => controller.abort(), 30000)
+export async function requestWithTimeout(
+  request,
+  controller = new AbortController(),
+  timeoutMs = 30000,
+) {
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
   let cancelWait
   const cancelled = new Promise((_, reject) => {
     cancelWait = () => reject(controller.signal.reason)

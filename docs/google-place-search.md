@@ -52,7 +52,7 @@ Only `submissions.google_place_id` and user-entered `submissions.postal_code` ar
 
 Google-returned names, addresses and provider attributions exist only in component memory. They are displayed through escaped Vue bindings in a separate preview; the form never copies them into user fields, Supabase or browser storage. The compact preview displays `Google Maps` text attribution (untranslated, unwrapped, with required typography) and provider attributions, using only safe HTTP(S) provider links. The inspect link uses Google's Maps URL with the ID and user-entered query. This feature adds no map or imported opening hours. Review the app's public Terms/Privacy pages against [Google's Places policies](https://developers.google.com/maps/documentation/places/web-service/policies) before release; those pages are outside this feature.
 
-Activity Detail already loads `google-place-details` whenever an activity has a Place ID, including `source: community`. Its source is absent from this checkout, and no connected Supabase deployment access is available here. Its live authentication, accepted sources, ID handling and key restrictions therefore remain unverified.
+Activity Detail loads `google-place-details` whenever an activity has a Place ID, including `source: community`. Audit 10 added its source and deployed version 2 on 28 Oct 2026. Details now use this same reservation RPC and share the existing app/month and user/hour allowance with search. Limits and counters were preserved. See [details deployment and checks](google-place-details.md); Google Cloud key restrictions and account billing remain unverified.
 
 ## Checks and remaining live verification
 

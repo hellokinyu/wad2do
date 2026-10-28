@@ -2,6 +2,7 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { supabase } from '@/lib/supabase'
+import { requestWithTimeout } from '@/lib/requestWithTimeout'
 import {
   formatPrice,
   formatDuration,
@@ -126,19 +127,38 @@ async function loadGoogleDetails() {
   if (!activity.value?.google_place_id || googleLoading.value) return
   googleLoading.value = true
   googleError.value = ''
+  let failureCode
 
   try {
-    const { data, error } = await supabase.functions.invoke('google-place-details', {
-      body: { activityId },
-      timeout: 15000,
-    })
+    const { data, error } = await requestWithTimeout(
+      async (signal) => {
+        const result = await supabase.functions.invoke('google-place-details', {
+          body: { activityId },
+          signal,
+        })
+        if (result.error?.context instanceof Response) {
+          failureCode = (await result.error.context.json().catch(() => null))?.error
+        }
+        return result
+      },
+      new AbortController(),
+      15000,
+    )
     if (error || !data || typeof data !== 'object' || Array.isArray(data) || data.error) {
       throw error || new Error('Invalid Google details response')
     }
     if (request === requestNumber) googleDetails.value = data
   } catch {
     if (request === requestNumber) {
-      googleError.value = "Couldn't load Google ratings and opening hours. Please try again."
+      googleError.value =
+        {
+          user_limit:
+            'You have reached the hourly Google lookup limit. Try again later. Saved activity hours are shown when available.',
+          app_limit:
+            'The app has reached its monthly Google lookup allowance. Saved activity hours are shown when available.',
+          lookup_disabled:
+            'Live Google details are currently disabled. Saved activity hours are shown when available.',
+        }[failureCode] || "Couldn't load Google ratings and opening hours. Please try again."
     }
   } finally {
     if (request === requestNumber) googleLoading.value = false
