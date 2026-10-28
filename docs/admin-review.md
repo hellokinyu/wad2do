@@ -40,7 +40,8 @@ unless they belong to this script.
   submitter name (or ID), and submission time in Singapore time. The edit form
   saves only activity fields and keeps changes on failure. Cancel discards edits.
 - **Approve** calls `approve_submission`. SQL checks the admin role, locks the
-  submission, creates a community activity, and records the decision together.
+  submission, requires a valid complete week of saved opening hours, creates a
+  community activity, and records the decision together.
   Retrying a completed approval returns the original result without duplicating
   the activity. The existing Activities cards already show the Community badge.
 - **Reject** calls `reject_submission` with a required reason (1–300 characters).
@@ -51,8 +52,17 @@ submissions is deliberately disabled. If another admin reviews a pending card,
 an attempted edit or conflicting decision fails; refresh to see its new state.
 An approval uses the latest saved details in the database.
 
-Photo URLs already stored on submissions are displayed and can be corrected in
-the edit form. This feature does not add uploads to the existing submission form.
+New submissions contain `opening_hours: {}` and show **Opening hours need admin review**. Approve stays disabled until the admin edits and saves a complete week with at least one open day. Missing days remain blank in the editor; they are never silently marked Closed. Admins should verify hours from the venue's official website or by contacting it, rather than copying Google Maps content into the database. Rejection remains available without hours.
+
+Rerun the entire [admin SQL script](sql/admin_review.sql) before deploying this frontend revision. Its insert policies require empty hours, and `approve_submission` independently validates the saved schedule before inserting an activity. It accepts overnight hours and Open 24 hours, and rejects missing days, malformed/contradictory entries, equal times and an all-closed week. Existing approved records and retry behavior are retained. The optional lookup migration contains the same approval guard; run the current admin script first if updating an older installation.
+
+Run [verify_google_place_search.sql](sql/verify_google_place_search.sql) after both scripts, with an ordinary and admin account present. It rolls back its test data and checks the actual hours insert policy and approval guard as well as venue-ID copying. Saving these files does not apply them to Supabase.
+
+Photo URLs stored on submissions are displayed and can be corrected or cleared in
+the edit form. The submission form now supports optional photo uploads; apply the
+separate [Storage setup](activity-photo-uploads.md) first. Approval copies the
+saved URL without moving or modifying the uploaded object. Browser users cannot
+replace/delete those immutable objects after approval.
 
 ## Verification
 
@@ -79,3 +89,11 @@ References: [Supabase RLS](https://supabase.com/docs/guides/database/postgres/ro
 ## Suggested Google venue links
 
 Pending submission edits reuse the optional venue picker. Inspect, replace or clear a suggested ID; editing name/address/area/postal code clears it. Lookup happens only on request. Approval now explicitly copies the saved `google_place_id`, including null, into the Community activity. Apply the additional [lookup migration and setup](google-place-search.md); normal-user restrictions and concurrent-review behavior remain in the SQL review functions. Browser publication mocks use an explicit column list and do not validate real SQL.
+
+The profile grant list includes `home_station_id` for the MRT picker. If an older copy of this script was applied and preference saves fail, run only [mrt_station_preferences.sql](sql/mrt_station_preferences.sql) to repair that column permission. No submission policies need to be reinstalled for this repair.
+
+Local revision checks (28 Oct 2026): all 84 targeted Chromium tests passed across submission, admin review and activity detail, including 375px layouts and the empty-hours → admin entry → save → approve flow. Nine mocked backend/unit tests, ESLint/Oxlint, Deno checking and the production build passed. Desktop/mobile admin screenshots were inspected. No live SQL, Google calls or deployment were performed.
+
+Audit fixes (28 Oct 2026): Save, Approve and Reject now use the same 30-second whole-operation deadline as submission saves. It also bounds stalled login refresh, preserves the current edits/rejection reason on failure, and cancels pending requests when a card unmounts or the account changes. A late response cannot apply UI changes after timeout. Review retries rely on the existing atomic, idempotent SQL functions; a timeout cannot undo a server write that already committed. The shared helper is `src/lib/requestWithTimeout.js`. These fixes add no SQL or Edge Function changes beyond the earlier hours-review migration.
+
+Audit-fix verification: 77 distinct Chromium cases passed across submissions, admin review and itinerary hours (including the corrected itinerary test setup). Tests cover committed-write retries, stalled login refresh and cancellation on card unmount. Thirteen opening-hours/backend tests, the production build, ESLint/Oxlint and diff checks passed. Browser tests intercept all backend/weather requests; live SQL, Supabase and deployment remain unchecked.

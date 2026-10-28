@@ -60,3 +60,13 @@ The two scores of 4 preserve their relative catalogue order.
 Run `pnpm exec node --test tests/activityRanking.test.js` for examples, price boundaries, free/invalid prices, aliases, missing preferences, stable ties and unchanged inputs.
 
 `e2e/activities.spec.js` uses mocked Supabase responses to check the signed-in profile ID, default ordering, filter/price-sort overrides, profile failure/retry, saving preferences through Profile, and a detail-page round trip.
+
+## MRT preference save permissions
+
+Profile and Onboarding save both `home_station_id` (the selected MRT station) and `home_area` (its catalogue area). The existing admin setup SQL omitted UPDATE permission for `home_station_id`, so Supabase can reject the entire preference save even though selecting a station works.
+
+For an existing project, run [mrt_station_preferences.sql](sql/mrt_station_preferences.sql) in Supabase SQL Editor as postgres. It adds the nullable text column if missing and grants UPDATE only for that column; existing owner-only row security and protected admin fields remain unchanged. The result should show `can_save_home_station = true` and `can_change_admin = false`. Refresh Profile, select an MRT station, save, and reload to confirm persistence. The main [admin setup](sql/admin_review.sql) now includes the column and grant, so rerunning it no longer removes the permission.
+
+`pnpm exec node --test tests/profilePermissions.test.js` checks that SQL grants cover the fields actually written by both Vue pages and exclude admin fields. This is a local script-contract check, not proof of live permissions. Existing Profile/Onboarding browser tests mock Supabase and check station/area save, retry and reload behavior.
+
+Local verification (27 Oct 2026): both permission-contract tests and all four MRT data tests passed; all 23 Chromium Profile/Onboarding tests passed; production build, non-mutating ESLint/Oxlint and `git diff --check` passed. The repair SQL was not applied to the shared Supabase database, and browser tests do not verify live grants or RLS.

@@ -3,6 +3,7 @@
 -- This file does not promote any account to admin or remove existing policies.
 begin;
 
+alter table public.profiles add column if not exists home_station_id text;
 alter table public.submissions add column if not exists google_place_id text;
 alter table public.submissions add column if not exists postal_code text;
 
@@ -22,15 +23,61 @@ $$;
 revoke all on function public.wad2do_is_admin() from public, anon;
 grant execute on function public.wad2do_is_admin() to authenticated;
 
+-- Pending submissions use {} for hours awaiting admin review, never fabricated hours.
+create or replace function public.wad2do_valid_opening_hours(p_hours jsonb)
+returns boolean
+language plpgsql immutable
+set search_path = ''
+as $$
+declare
+  days text[] := array['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  day text;
+  entry jsonb;
+  has_open_day boolean := false;
+begin
+  if jsonb_typeof(p_hours) is distinct from 'object' then
+    return false;
+  end if;
+  if not (p_hours ?& days) or p_hours - days <> '{}'::jsonb then
+    return false;
+  end if;
+  foreach day in array days loop
+    entry := p_hours -> day;
+    if jsonb_typeof(entry) is distinct from 'object' then
+      return false;
+    end if;
+    if entry = '{"closed":true}'::jsonb then
+      continue;
+    elsif entry = '{"open24h":true}'::jsonb then
+      has_open_day := true;
+    elsif jsonb_typeof(entry) = 'object'
+      and entry ?& array['open', 'close']
+      and entry - array['open', 'close'] = '{}'::jsonb
+      and jsonb_typeof(entry -> 'open') = 'string'
+      and jsonb_typeof(entry -> 'close') = 'string'
+      and entry ->> 'open' ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+      and entry ->> 'close' ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+      and entry ->> 'open' <> entry ->> 'close' then
+      has_open_day := true;
+    else
+      return false;
+    end if;
+  end loop;
+  return has_open_day;
+end;
+$$;
+revoke all on function public.wad2do_valid_opening_hours(jsonb) from public, anon;
+grant execute on function public.wad2do_valid_opening_hours(jsonb) to authenticated;
+
 -- 1. Profiles: users may edit preferences, but cannot assign admin access.
 alter table public.profiles enable row level security;
 revoke insert, update, delete on public.profiles from public, anon, authenticated;
 -- Remove any earlier column grants too; table grants and column grants are separate.
-revoke insert (id, display_name, interests, budget, home_area, company, is_admin, created_at),
-  update (id, display_name, interests, budget, home_area, company, is_admin, created_at)
+revoke insert (id, display_name, interests, budget, home_area, home_station_id, company, is_admin, created_at),
+  update (id, display_name, interests, budget, home_area, home_station_id, company, is_admin, created_at)
   on public.profiles from public, anon, authenticated;
 grant select on public.profiles to authenticated;
-grant update (display_name, interests, budget, home_area, company)
+grant update (display_name, interests, budget, home_area, home_station_id, company)
   on public.profiles to authenticated;
 
 drop policy if exists wad2do_read_profile on public.profiles;
@@ -77,13 +124,15 @@ drop policy if exists wad2do_submit_activity on public.submissions;
 create policy wad2do_submit_activity on public.submissions for insert to authenticated
   with check (submitted_by = auth.uid() and status = 'pending'
     and reject_reason is null and reviewed_by is null
-    and reviewed_at is null and activity_id is null);
+    and reviewed_at is null and activity_id is null
+    and opening_hours::jsonb = '{}'::jsonb);
 drop policy if exists wad2do_limit_submission_inserts on public.submissions;
 create policy wad2do_limit_submission_inserts on public.submissions as restrictive
   for insert to authenticated
   with check (submitted_by = auth.uid() and status = 'pending'
     and reject_reason is null and reviewed_by is null
-    and reviewed_at is null and activity_id is null);
+    and reviewed_at is null and activity_id is null
+    and opening_hours::jsonb = '{}'::jsonb);
 
 drop policy if exists wad2do_edit_pending_submission on public.submissions;
 create policy wad2do_edit_pending_submission on public.submissions for update to authenticated
@@ -136,6 +185,10 @@ begin
   end if;
   if submission.status is distinct from 'pending' then
     raise exception 'This submission has already been reviewed.';
+  end if;
+
+  if not public.wad2do_valid_opening_hours(submission.opening_hours::jsonb) then
+    raise exception 'Add valid opening hours for every day and save before approving.' using errcode = '22023';
   end if;
 
   insert into public.activities (

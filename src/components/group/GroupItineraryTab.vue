@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { supabase } from '@/lib/supabase'
+import { getVisitHoursWarnings } from '@/lib/openingHours'
 
 const itinerary = ref(null)
 const budget = computed(() => group.value?.budget_per_person ?? 0)
@@ -148,11 +149,12 @@ const displayStops = computed(() => {
 
 // Returns a list of warning messages for one stop
 function getStopWarnings(stop) {
-  const warnings = []
-  if (stop.closes && stop.end > stop.closes) {
-    warnings.push('Closes at ' + stop.closes)
-  }
-  return warnings
+  return getVisitHoursWarnings(
+    stop.opening_hours,
+    itinerary.value.date,
+    toMinutes(stop.start),
+    toMinutes(stop.end),
+  )
 }
 
 // '10:30' -> 630 (minutes since midnight)
@@ -214,17 +216,15 @@ async function saveChanges() {
       reason: s.reason,
     }))
 
-    const { error } = await supabase
-      .from('itineraries')
-      .upsert(
-        {
-          group_id: groupId,
-          stops: stopsToSave,
-          total_cost: totalCost.value,
-          updated_by: userData.user.id,
-        },
-        { onConflict: 'group_id' },
-      )
+    const { error } = await supabase.from('itineraries').upsert(
+      {
+        group_id: groupId,
+        stops: stopsToSave,
+        total_cost: totalCost.value,
+        updated_by: userData.user.id,
+      },
+      { onConflict: 'group_id' },
+    )
     if (error) throw error
     isEditing.value = false // only leave edit mode if it worked
   } catch (error) {
@@ -262,7 +262,7 @@ function addStop(activity) {
     cost: activity.cost,
     reason: 'Added by the group',
     indoor: activity.indoor,
-    closes: activity.closes,
+    opening_hours: activity.opening_hours,
   })
   recalculateTimes()
 }
@@ -297,16 +297,6 @@ function useSavedPlan(saved) {
   itinerary.value = { date, total_cost: saved.total_cost, stops }
 }
 
-// The closing time on the plan's day, as 'HH:MM'. date is '2026-10-24'.
-function getClosesOn(openingHours, date) {
-  const day = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' }) // 'Sat'
-  const hours = openingHours?.[day]
-  if (!hours) return '23:59' // no info: assume it's open
-  if (hours.closed) return '00:00' // closed all day, so it never fits
-  if (hours.close) return hours.close
-  return '23:59' // open 24 hours
-}
-
 // Load this group's votes, add them up per activity, and keep the ones with more ups than downs
 async function loadVotes() {
   const { data, error } = await supabase
@@ -317,7 +307,6 @@ async function loadVotes() {
     .eq('group_id', groupId)
   if (error) throw error
 
-  const date = group.value?.chosen_start ? toSgKey(group.value.chosen_start).slice(0, 10) : ''
   const byActivity = {} // activity_id -> the activity, with its vote total
   for (const vote of data) {
     if (!byActivity[vote.activity_id]) {
@@ -329,7 +318,7 @@ async function loadVotes() {
         image_url: a.image_url || '',
         cost: a.price_per_person ?? 0,
         indoor: a.indoor,
-        closes: getClosesOn(a.opening_hours, date),
+        opening_hours: a.opening_hours,
         duration_min: a.duration_min || 60,
         votes: 0,
       }
@@ -358,7 +347,8 @@ function buildPlan() {
   for (const activity of sorted) {
     const finish = current + activity.duration_min
     if (finish > endMinutes) continue // runs past the chosen end time
-    if (toTime(finish) > activity.closes) continue // place closes before we'd finish
+    if (getVisitHoursWarnings(activity.opening_hours, start.slice(0, 10), current, finish).length)
+      continue
     if (spent + activity.cost > budget.value) continue // over budget
     stops.push({
       activity_id: activity.activity_id,
@@ -369,7 +359,7 @@ function buildPlan() {
       cost: activity.cost,
       reason: activity.votes + ' votes in the group',
       indoor: activity.indoor,
-      closes: activity.closes,
+      opening_hours: activity.opening_hours,
     })
     spent += activity.cost
     current = finish + TRAVEL_MINUTES

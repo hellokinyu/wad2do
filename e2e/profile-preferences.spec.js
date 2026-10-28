@@ -1,6 +1,20 @@
 import { test, expect } from '@playwright/test'
 import { mockPreferences, pickMapStation } from './helpers/preferences'
 
+test('Left from Telok Blangah stays local and Up still reaches Labrador Park', async ({ page }) => {
+  const state = await mockPreferences(page, { home_station_id: 'telok-blangah' })
+  await page.goto('/profile')
+  await page.getByTestId('mrt-map-viewport').focus()
+  await page.keyboard.press('ArrowLeft')
+  await expect(page.getByTestId('mrt-marker-telok-blangah')).toBeFocused()
+  await page.keyboard.press('ArrowUp')
+  await expect(page.getByTestId('mrt-marker-labrador-park')).toBeFocused()
+  await expect(page.getByTestId('mrt-marker-telok-blangah')).toHaveAttribute('aria-pressed', 'true')
+  expect(state.saves).toHaveLength(0)
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('mrt-marker-labrador-park')).toHaveAttribute('aria-pressed', 'true')
+})
+
 test('station-only changes enable Save, Undo restores both fields and reload restores a save', async ({
   page,
 }) => {

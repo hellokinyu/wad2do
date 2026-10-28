@@ -1,6 +1,6 @@
 // Diagram coordinates measured against public/images/mrt-map.svg (viewBox 0 0 1410 1007).
 // Operating MRT snapshot reviewed 26 October 2026; home-area mappings are explicit.
-// Artwork source, revision and CC BY-SA 3.0 credits are shown in MrtStationPicker.vue.
+// Artwork source, adaptation details and CC BY-SA 3.0 license are recorded in the SVG metadata.
 export const mrtStations = [
   {
     id: 'admiralty',
@@ -1174,4 +1174,31 @@ export const mrtStations = [
 
 export function findStation(id) {
   return mrtStations.find((station) => station.id === id) || null
+}
+
+export function findStationInDirection(id, key) {
+  const current = findStation(id)
+  const direction = {
+    ArrowLeft: [-1, 0],
+    ArrowRight: [1, 0],
+    ArrowUp: [0, -1],
+    ArrowDown: [0, 1],
+  }[key]
+  if (!current || !direction) return current
+  let closest = current
+  // Limit hops to 150 diagram pixels, which still connects all current stations.
+  let closestDistance = 150
+  for (const station of mrtStations) {
+    // Compare diagram pixels because the map is wider than it is tall.
+    const dx = ((station.x - current.x) * 1410) / 100
+    const dy = ((station.y - current.y) * 1007) / 100
+    const forward = dx * direction[0] + dy * direction[1]
+    const sideways = Math.abs(dx * direction[1] - dy * direction[0])
+    const distance = Math.hypot(dx, dy)
+    if (forward > 0 && sideways <= forward && distance < closestDistance) {
+      closest = station
+      closestDistance = distance
+    }
+  }
+  return closest
 }

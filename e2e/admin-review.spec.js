@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
-import { mockUser, signInMockUser } from './helpers/auth'
+import { authStorageKey, mockSession, mockUser, signInMockUser } from './helpers/auth'
 import { mockPlaceSearch, placeCandidates } from './helpers/places'
+import { photoFile } from './helpers/photos'
 
 const submissionId = '22222222-2222-4222-8222-222222222222'
 const activityId = '33333333-3333-4333-8333-333333333333'
@@ -13,6 +14,7 @@ async function mockBackend(page, admin = true) {
     roleError: false,
     loadError: false,
     actionError: false,
+    stallResponse: false,
     requests: [],
     activities: [],
     submissions: [
@@ -45,7 +47,17 @@ async function mockBackend(page, admin = true) {
     ],
   }
   await page.route('https://images.unsplash.com/**', (route) => route.fulfill({ status: 204 }))
-  await page.route('**/rest/v1/**', (route) => {
+  async function replyAction(route, row) {
+    const response = structuredClone(row)
+    if (state.stallResponse) {
+      state.stallResponse = false
+      await new Promise((resolve) => {
+        state.releaseResponse = resolve
+      })
+    }
+    return route.fulfill({ json: response }).catch(() => {})
+  }
+  await page.route('**/rest/v1/**', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
     const endpoint = url.pathname.split('/').pop()
@@ -63,7 +75,7 @@ async function mockBackend(page, admin = true) {
         if (state.actionError)
           return route.fulfill({ status: 403, json: { message: 'Update denied' } })
         Object.assign(state.submissions[0], request.postDataJSON())
-        return route.fulfill({ json: state.submissions[0] })
+        return replyAction(route, state.submissions[0])
       }
       const status = url.searchParams.get('status')?.replace('eq.', '')
       const rows = state.submissions.filter((row) => !status || row.status === status)
@@ -82,9 +94,19 @@ async function mockBackend(page, admin = true) {
       if (state.actionError)
         return route.fulfill({ status: 403, json: { message: 'Review denied' } })
       const submission = state.submissions.find((row) => row.id === body.p_submission_id)
+      if (
+        (endpoint === 'approve_submission' && submission.status === 'approved') ||
+        (endpoint === 'reject_submission' &&
+          submission.status === 'rejected' &&
+          submission.reject_reason === body.p_reason)
+      ) {
+        return replyAction(route, submission)
+      }
+      if (submission.status !== 'pending')
+        return route.fulfill({ status: 409, json: { message: 'Already reviewed' } })
       submission.reviewed_by = mockUser.id
       submission.reviewed_at = '2026-10-23T04:00:00Z'
-      if (endpoint === 'approve_submission' && submission.status !== 'approved') {
+      if (endpoint === 'approve_submission') {
         submission.status = 'approved'
         submission.activity_id = activityId
         // Explicit approval contract; browser mocks still do not execute the real SQL.
@@ -111,7 +133,7 @@ async function mockBackend(page, admin = true) {
         submission.status = 'rejected'
         submission.reject_reason = body.p_reason
       }
-      return route.fulfill({ json: submission })
+      return replyAction(route, submission)
     }
     if (endpoint === 'activities') return route.fulfill({ json: state.activities })
     return route.fulfill({ json: [] })
@@ -201,6 +223,73 @@ test('edits name, price and hours before approval and publishes a Community acti
   await expect(page.getByTestId('activity-card')).toContainText('Corrected studio name')
   await expect(page.getByTestId('activity-card')).toContainText('Community')
 })
+
+for (const width of [1280, 375]) {
+  test(`admin must add and save hours before approving a new submission at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const state = await mockBackend(page)
+    state.submissions[0].opening_hours = {}
+    await page.goto('/admin/submissions')
+    await expect(page.getByTestId('admin-hours-required')).toBeVisible()
+    await expect(page.getByTestId('admin-approve')).toBeDisabled()
+    await page.getByTestId('admin-edit').click()
+    await expect(page.getByTestId('admin-hours-Mon-open')).toHaveValue('')
+    await page.getByTestId('admin-save-edits').click()
+    await expect(page.getByTestId('admin-hours-Mon-open')).toBeFocused()
+    expect(state.requests).toHaveLength(0)
+    for (const day of days) await page.getByTestId(`admin-hours-${day}-mode`).selectOption('closed')
+    await page.getByTestId('admin-save-edits').click()
+    await expect(page.getByTestId('admin-action-error')).toContainText('open on at least one day')
+    expect(state.requests).toHaveLength(0)
+    await page.getByTestId('admin-hours-Sat-mode').selectOption('open')
+    await page.getByTestId('admin-hours-Sat-open').fill('10:00')
+    await page.getByTestId('admin-hours-Sat-close').fill('18:00')
+    await page.getByTestId('admin-hours-Sun-mode').selectOption('24h')
+    await expect(page.locator('body')).toHaveJSProperty('scrollWidth', width)
+    await page
+      .getByTestId('admin-edit-form')
+      .screenshot({ path: test.info().outputPath('admin-hours.png') })
+    await page.getByTestId('admin-save-edits').click()
+    await expect(page.getByTestId('admin-hours-required')).toHaveCount(0)
+    await expect(page.getByTestId('admin-approve')).toBeEnabled()
+    await page.getByTestId('admin-approve').click()
+    await expect(page.getByTestId('admin-empty')).toBeVisible()
+    expect(state.activities).toHaveLength(1)
+    expect(state.activities[0].opening_hours).toEqual({
+      Mon: { closed: true },
+      Tue: { closed: true },
+      Wed: { closed: true },
+      Thu: { closed: true },
+      Fri: { closed: true },
+      Sat: { open: '10:00', close: '18:00' },
+      Sun: { open24h: true },
+    })
+  })
+}
+
+for (const openingHours of [
+  null,
+  { Mon: { open24h: true } },
+  Object.fromEntries(days.map((day) => [day, { closed: true }])),
+  Object.fromEntries(days.map((day) => [day, { open: '09:00', close: '09:00' }])),
+]) {
+  test(`incomplete or invalid saved hours block approval: ${JSON.stringify(openingHours)}`, async ({
+    page,
+  }) => {
+    const state = await mockBackend(page)
+    state.submissions[0].opening_hours = openingHours
+    await page.goto('/admin/submissions')
+    await expect(page.getByTestId('admin-approve')).toBeDisabled()
+    await expect(page.getByTestId('admin-hours-required')).toBeVisible()
+    await page.getByTestId('admin-reject').click()
+    await page.getByTestId('admin-reject-reason').fill('Could not verify this venue')
+    await page.getByTestId('admin-confirm-reject').click()
+    await expect(page.getByTestId('admin-empty')).toBeVisible()
+    expect(state.activities).toHaveLength(0)
+  })
+}
 
 test('requires a rejection reason and shows it in the submitter profile', async ({ page }) => {
   const state = await mockBackend(page)
@@ -364,3 +453,185 @@ for (const options of [
     expect(state.activities[0].google_place_id).toBe('ChIJ_original')
   })
 }
+
+test('reviews a submitted photo and publishes the same image in the card and detail page', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  const imageUrl =
+    'https://example.supabase.co/storage/v1/object/public/activity-images/owner/submission/photo.png'
+  state.submissions[0].image_url = imageUrl
+  state.submissions[0].google_place_id = null
+  const image = await photoFile(page)
+  const storageWrites = []
+  await page.route('**/storage/v1/**', (route) => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({ contentType: image.mimeType, body: image.buffer })
+    }
+    storageWrites.push(route.request().method())
+    return route.abort()
+  })
+  await page.goto('/admin/submissions')
+  await expect(page.getByRole('img', { name: 'Weekend art studio' })).toHaveJSProperty(
+    'naturalWidth',
+    2,
+  )
+  await page.getByTestId('admin-approve').click()
+  await expect(page.getByTestId('admin-empty')).toBeVisible()
+  expect(state.activities).toHaveLength(1)
+  expect(state.activities[0].image_url).toBe(imageUrl)
+  await page.goto('/activities')
+  await expect(page.getByTestId('activity-card').getByRole('img')).toHaveAttribute('src', imageUrl)
+  await expect(page.getByTestId('activity-card').getByRole('img')).toHaveJSProperty(
+    'naturalWidth',
+    2,
+  )
+  await page.getByTestId('activity-photo-link').click()
+  await expect(page.getByTestId('detail-photo')).toHaveAttribute('src', imageUrl)
+  await expect(page.getByTestId('detail-photo')).toHaveJSProperty('naturalWidth', 2)
+  expect(storageWrites).toHaveLength(0)
+})
+
+test('a broken submitted photo uses the fallback and rejection never publishes it', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  state.submissions[0].image_url =
+    'https://example.supabase.co/storage/v1/object/public/activity-images/missing.png'
+  await page.route('**/storage/v1/**', (route) => route.fulfill({ status: 404 }))
+  await page.goto('/admin/submissions')
+  await expect(page.getByText('Photo unavailable', { exact: true })).toBeVisible()
+  await page.getByTestId('admin-reject').click()
+  await page.getByTestId('admin-reject-reason').fill('Activity could not be verified')
+  await page.getByTestId('admin-confirm-reject').click()
+  await expect(page.getByTestId('admin-empty')).toBeVisible()
+  expect(state.activities).toHaveLength(0)
+  expect(state.submissions[0].status).toBe('rejected')
+})
+
+const stalledActions = [
+  {
+    action: 'edit',
+    button: 'admin-save-edits',
+    errorText: "Couldn't save changes",
+    success: 'admin-approve',
+    activityCount: 0,
+    expected: { name: 'Newer saved draft', status: 'pending' },
+    prepare: async (page) => {
+      await page.getByTestId('admin-edit').click()
+      await page.getByTestId('admin-edit-name').fill('Draft saved before timeout')
+    },
+    checkDraft: async (page) => {
+      await expect(page.getByTestId('admin-edit-name')).toHaveValue('Draft saved before timeout')
+      await page.getByTestId('admin-edit-name').fill('Newer saved draft')
+    },
+  },
+  {
+    action: 'approve_submission',
+    button: 'admin-approve',
+    errorText: "Couldn't approve",
+    success: 'admin-empty',
+    activityCount: 1,
+    expected: { status: 'approved' },
+    prepare: async () => {},
+    checkDraft: async () => {},
+  },
+  {
+    action: 'reject_submission',
+    button: 'admin-confirm-reject',
+    errorText: "Couldn't reject",
+    success: 'admin-empty',
+    activityCount: 0,
+    expected: { status: 'rejected', reject_reason: 'Duplicate venue' },
+    prepare: async (page) => {
+      await page.getByTestId('admin-reject').click()
+      await page.getByTestId('admin-reject-reason').fill('Duplicate venue')
+    },
+    checkDraft: async (page) => {
+      await expect(page.getByTestId('admin-reject-reason')).toHaveValue('Duplicate venue')
+    },
+  },
+]
+for (const scenario of stalledActions) {
+  test(`a stalled ${scenario.action} unlocks after 30 seconds and retries an already committed write safely`, async ({
+    page,
+  }) => {
+    const state = await mockBackend(page)
+    await page.clock.install()
+    await page.goto('/admin/submissions')
+    await scenario.prepare(page)
+    state.stallResponse = true
+    await page.getByTestId(scenario.button).click()
+    await expect.poll(() => state.requests.length).toBe(1)
+    await expect(page.getByTestId(scenario.button)).toBeDisabled()
+    await page.clock.fastForward(30001)
+    await expect(page.getByTestId('admin-action-error')).toContainText(scenario.errorText)
+    await expect(page.getByTestId(scenario.button)).toBeEnabled()
+    await scenario.checkDraft(page)
+    await page.getByTestId(scenario.button).click()
+    await expect(page.getByTestId(scenario.success)).toBeVisible()
+    state.releaseResponse()
+    expect(state.activities).toHaveLength(scenario.activityCount)
+    expect(state.submissions[0]).toMatchObject(scenario.expected)
+    await expect(page.getByTestId('admin-action-error')).toHaveCount(0)
+  })
+}
+
+test('admin hours save times out while login refresh stalls and sends no late write', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  await page.clock.install()
+  await page.goto('/admin/submissions')
+  await page.getByTestId('admin-edit').click()
+  await page.getByTestId('admin-hours-Mon-open').fill('11:00')
+  let pendingRefresh
+  await page.route('**/auth/v1/token**', (route) => {
+    pendingRefresh = route
+  })
+  await page.evaluate((key) => {
+    const session = JSON.parse(localStorage.getItem(key))
+    session.expires_at = Math.floor(Date.now() / 1000) - 1
+    localStorage.setItem(key, JSON.stringify(session))
+  }, authStorageKey())
+  const refreshing = page.waitForRequest('**/auth/v1/token**')
+  await page.getByTestId('admin-save-edits').click()
+  await refreshing
+  await page.clock.fastForward(30001)
+  await expect(page.getByTestId('admin-action-error')).toContainText("Couldn't save changes")
+  await expect(page.getByTestId('admin-hours-Mon-open')).toHaveValue('11:00')
+  await expect(page.getByTestId('admin-save-edits')).toBeEnabled()
+  expect(state.requests).toHaveLength(0)
+  await pendingRefresh.fulfill({ json: mockSession })
+  await page.getByTestId('admin-save-edits').click()
+  await expect(page.getByRole('status')).toContainText('Changes saved')
+  expect(state.requests).toHaveLength(1)
+  expect(state.submissions[0].opening_hours.Mon.open).toBe('11:00')
+})
+
+test('leaving a card while login refresh stalls cancels its pending hours save', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  await page.goto('/admin/submissions')
+  await page.getByTestId('admin-edit').click()
+  await page.getByTestId('admin-hours-Mon-open').fill('11:00')
+  let pendingRefresh
+  await page.route('**/auth/v1/token**', (route) => {
+    pendingRefresh = route
+  })
+  await page.evaluate((key) => {
+    const session = JSON.parse(localStorage.getItem(key))
+    session.expires_at = Math.floor(Date.now() / 1000) - 1
+    localStorage.setItem(key, JSON.stringify(session))
+  }, authStorageKey())
+  const refreshing = page.waitForRequest('**/auth/v1/token**')
+  await page.getByTestId('admin-save-edits').click()
+  await refreshing
+  await page.getByTestId('admin-tab-approved').click()
+  await expect(page.getByTestId('admin-edit-form')).toHaveCount(0)
+  await pendingRefresh.fulfill({ json: mockSession })
+  await expect(page.getByTestId('admin-empty')).toHaveText('No approved submissions yet.')
+  expect(state.requests).toHaveLength(0)
+  expect(state.submissions[0].opening_hours.Mon.open).toBe('10:00')
+})

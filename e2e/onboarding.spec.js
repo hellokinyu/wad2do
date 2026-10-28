@@ -96,13 +96,13 @@ test('keyboard map selection reaches Next without tabbing through every marker',
   await page.keyboard.press('Home')
   await expect(page.getByTestId('mrt-marker-admiralty')).toBeFocused()
   await page.keyboard.press('ArrowRight')
-  const marker = page.getByTestId('mrt-marker-aljunied')
+  const marker = page.getByTestId('mrt-marker-sembawang')
   await expect(marker).toBeFocused()
   await expect(page.getByTestId('onboarding-next')).toBeDisabled()
   await marker.press('Enter')
   await expect(marker).toHaveAttribute('aria-pressed', 'true')
   await expect(marker).toBeFocused()
-  await expect(page.getByTestId('home-area')).toHaveValue('Geylang')
+  await expect(page.getByTestId('home-area')).toHaveValue('Sembawang')
   await expect(page.getByTestId('onboarding-step-area')).toBeVisible()
   const focused = []
   for (let index = 0; index < 12; index++) {
@@ -112,6 +112,37 @@ test('keyboard map selection reaches Next without tabbing through every marker',
   expect(focused).toContain('onboarding-next')
   expect(focused.some((id) => id?.startsWith('mrt-marker-'))).toBe(false)
 })
+
+for (const [route, openPage] of [
+  ['/onboarding', openLocationStep],
+  ['/profile', (page) => page.goto('/profile')],
+]) {
+  test(`arrow keys move around Jurong East without changing selection until Enter on ${route}`, async ({
+    page,
+  }) => {
+    const state = await mockPreferences(page, {
+      home_station_id: 'jurong-east',
+      home_area: 'Jurong East',
+    })
+    await openPage(page)
+    await page.getByTestId('mrt-map-viewport').focus()
+    for (const [key, station] of [
+      ['ArrowRight', 'clementi'],
+      ['ArrowLeft', 'jurong-east'],
+      ['ArrowUp', 'bukit-batok'],
+      ['ArrowDown', 'jurong-east'],
+      ['ArrowLeft', 'chinese-garden'],
+    ]) {
+      await page.keyboard.press(key)
+      await expect(page.getByTestId('mrt-marker-' + station)).toBeFocused()
+      await expect(page.getByTestId('mrt-marker-jurong-east')).toHaveAttribute('aria-pressed', 'true')
+    }
+    expect(state.saves).toHaveLength(0)
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('mrt-marker-chinese-garden')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('mrt-confirmation')).toContainText('Chinese Garden MRT')
+  })
+}
 
 test('failed onboarding save preserves the selected station for retry', async ({ page }) => {
   const state = await mockPreferences(page)

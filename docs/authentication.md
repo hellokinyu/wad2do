@@ -88,7 +88,7 @@ from **Edit name**. Onboarding finishes at Activities.
 Supabase Auth users and `public.profiles` are separate:
 
 - `ProfileView.vue` reads and updates `display_name`, `interests`, `budget`,
-  `home_area`, and `company`, matching `profiles.id` to the Auth user's ID.
+  `home_area`, `home_station_id`, and `company`, matching `profiles.id` to the Auth user's ID.
 - `OnboardingView.vue` reads and updates preferences on an existing row.
 - Signup creates an Auth account, without inserting a profile from the frontend.
 
@@ -120,7 +120,9 @@ the live browser check was not run.
 The profile page displays an error and disables saving when no row is visible.
 If a row exists in the SQL Editor but the page still cannot load it, inspect the
 existing SELECT RLS policy and table grants. The signed-in user must also be
-allowed to UPDATE their profile to save preferences.
+allowed to UPDATE their profile to save preferences. MRT selection also requires a column-level
+UPDATE grant on `home_station_id`; use [the small MRT repair script](sql/mrt_station_preferences.sql)
+if the map works but saving fails after applying the admin setup.
 
 ## Files
 

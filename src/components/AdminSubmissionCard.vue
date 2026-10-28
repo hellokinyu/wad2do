@@ -1,7 +1,10 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/composables/useAuth'
+import { requestWithTimeout as timedRequest } from '@/lib/requestWithTimeout'
 import GooglePlacePicker from '@/components/GooglePlacePicker.vue'
+import { hasCompleteOpeningHours } from '@/lib/openingHours'
 import {
   formatPrice,
   formatDuration,
@@ -35,6 +38,25 @@ const categories = [
 const weeklyHours = computed(() => getWeeklyHours(props.submission.opening_hours).rows)
 const websiteUrl = computed(() => getWebsiteUrl(props.submission))
 const pending = computed(() => props.submission.status === 'pending')
+const hoursReady = computed(() => hasCompleteOpeningHours(props.submission.opening_hours))
+const { user } = useAuth()
+let requestController
+watch(
+  () => user.value?.id,
+  () => requestController?.abort(),
+  { flush: 'sync' },
+)
+onUnmounted(() => requestController?.abort())
+
+async function requestWithTimeout(request) {
+  const controller = new AbortController()
+  requestController = controller
+  try {
+    return await timedRequest(request, controller)
+  } finally {
+    if (requestController === controller) requestController = undefined
+  }
+}
 
 function formatDate(value) {
   if (!value) return 'Date unavailable'
@@ -153,27 +175,30 @@ async function saveEdits() {
   busy.value = true
   try {
     // Only editable activity details are sent. Review fields are set by SQL functions.
-    const { data, error } = await supabase
-      .from('submissions')
-      .update({
-        name: form.name.trim(),
-        category: form.category.trim(),
-        price_per_person: form.price_per_person,
-        duration_min: form.duration_min,
-        indoor: form.indoor,
-        address: form.address.trim(),
-        postal_code: form.postal_code || null,
-        google_place_id: form.google_place_id,
-        area: form.area.trim(),
-        description: form.description.trim() || null,
-        website: form.website.trim() || null,
-        image_url: form.image_url.trim() || null,
-        opening_hours: openingHours,
-      })
-      .eq('id', props.submission.id)
-      .eq('status', 'pending')
-      .select('*')
-      .single()
+    const { data, error } = await requestWithTimeout((signal) =>
+      supabase
+        .from('submissions')
+        .update({
+          name: form.name.trim(),
+          category: form.category.trim(),
+          price_per_person: form.price_per_person,
+          duration_min: form.duration_min,
+          indoor: form.indoor,
+          address: form.address.trim(),
+          postal_code: form.postal_code || null,
+          google_place_id: form.google_place_id,
+          area: form.area.trim(),
+          description: form.description.trim() || null,
+          website: form.website.trim() || null,
+          image_url: form.image_url.trim() || null,
+          opening_hours: openingHours,
+        })
+        .eq('id', props.submission.id)
+        .eq('status', 'pending')
+        .select('*')
+        .single()
+        .abortSignal(signal),
+    )
     if (error) throw error
     emit('saved', data)
     editing.value = false
@@ -188,17 +213,20 @@ async function saveEdits() {
 }
 
 async function approve() {
-  if (busy.value) return
+  if (busy.value || !hoursReady.value) return
   busy.value = true
   errorMessage.value = ''
   try {
     // One database call creates the activity and marks the submission approved.
     // rpc() means "run a database function"
-    const { data, error } = await supabase
-      .rpc('approve_submission', {
-        p_submission_id: props.submission.id,
-      })
-      .single()
+    const { data, error } = await requestWithTimeout((signal) =>
+      supabase
+        .rpc('approve_submission', {
+          p_submission_id: props.submission.id,
+        })
+        .single()
+        .abortSignal(signal),
+    )
     if (error) throw error
     emit('reviewed', data)
   } catch {
@@ -219,13 +247,16 @@ async function reject() {
   busy.value = true
   errorMessage.value = ''
   try {
-    const { data, error } = await supabase
-    // rpc() means run a database function
-      .rpc('reject_submission', {
-        p_submission_id: props.submission.id,
-        p_reason: reason,
-      })
-      .single()
+    const { data, error } = await requestWithTimeout((signal) =>
+      supabase
+        // rpc() means run a database function
+        .rpc('reject_submission', {
+          p_submission_id: props.submission.id,
+          p_reason: reason,
+        })
+        .single()
+        .abortSignal(signal),
+    )
     if (error) throw error
     emit('reviewed', data)
   } catch {
@@ -303,6 +334,15 @@ async function reject() {
             <li v-for="day in weeklyHours" :key="day.day">{{ day.day }}: {{ day.hours }}</li>
           </ul>
         </details>
+        <p
+          v-if="pending && !hoursReady"
+          class="alert alert-warning mt-3 mb-0"
+          :id="`hours-required-${submission.id}`"
+          data-testid="admin-hours-required"
+        >
+          Opening hours need admin review. Select Edit to add a complete week and save before
+          approving.
+        </p>
         <p v-if="submission.reviewed_at" class="small text-secondary mt-3 mb-0">
           Reviewed {{ formatDate(submission.reviewed_at) }}
         </p>
@@ -327,7 +367,8 @@ async function reject() {
           </button>
           <button
             class="btn btn-dark"
-            :disabled="busy"
+            :disabled="busy || !hoursReady"
+            :aria-describedby="!hoursReady ? `hours-required-${submission.id}` : undefined"
             data-testid="admin-approve"
             @click="approve"
           >
@@ -390,8 +431,11 @@ async function reject() {
           Save your changes before approving. Fields marked * are required.
         </p>
         <GooglePlacePicker
-          v-model="form.google_place_id" v-model:postal-code="form.postal_code"
-          :name="form.name" :address="form.address" :area="form.area"
+          v-model="form.google_place_id"
+          v-model:postal-code="form.postal_code"
+          :name="form.name"
+          :address="form.address"
+          :area="form.area"
           class="mb-3"
         />
         <div class="row g-3">
@@ -514,7 +558,8 @@ async function reject() {
         </div>
         <h3 class="h6 mt-4">Opening hours (Singapore time) *</h3>
         <p class="small text-secondary">
-          A closing time earlier than opening means the following day.
+          Check the venue's official website or contact the venue, then enter its hours here. A
+          closing time earlier than opening means the following day.
         </p>
         <div v-for="day in days" :key="day" class="row g-2 align-items-end mb-3">
           <div class="col-12 col-sm-2 fw-semibold">{{ day }}</div>

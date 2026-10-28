@@ -8,6 +8,7 @@ declare
   suggestion_id uuid := gen_random_uuid();
   result public.submissions;
   first_activity uuid;
+  invalid_hours jsonb;
   marker text := 'Place lookup SQL verification ' || suggestion_id;
 begin
   select id into owner_id from public.profiles where not coalesce(is_admin, false) limit 1;
@@ -16,7 +17,9 @@ begin
     raise exception 'Create an ordinary account and an admin account first.';
   end if;
 
-  if not has_column_privilege('authenticated', 'public.submissions', 'google_place_id', 'INSERT')
+  if not has_column_privilege('authenticated', 'public.profiles', 'home_station_id', 'UPDATE')
+    or has_column_privilege('authenticated', 'public.profiles', 'is_admin', 'UPDATE')
+    or not has_column_privilege('authenticated', 'public.submissions', 'google_place_id', 'INSERT')
     or not has_column_privilege('authenticated', 'public.submissions', 'postal_code', 'UPDATE')
     or has_column_privilege('authenticated', 'public.submissions', 'status', 'UPDATE')
     or has_column_privilege('authenticated', 'public.activities', 'name', 'INSERT')
@@ -30,8 +33,15 @@ begin
     duration_min, indoor, address, area, opening_hours, status, google_place_id, postal_code)
     values (suggestion_id, owner_id, marker, 'Arts and culture', 20,
       60, true, '10 Orchard Road', 'Orchard',
-      '{"Mon":{"open24h":true},"Tue":{"closed":true},"Wed":{"closed":true},"Thu":{"closed":true},"Fri":{"closed":true},"Sat":{"closed":true},"Sun":{"closed":true}}',
+      '{}',
       'pending', 'ChIJ_sql_test', '012345');
+  begin
+    insert into public.submissions (id, submitted_by, name, category, price_per_person,
+      duration_min, indoor, address, area, opening_hours, status)
+      values (gen_random_uuid(), owner_id, marker || ' forbidden hours', 'Arts and culture', 20,
+        60, true, '10 Orchard Road', 'Orchard', '{"Mon":{"open24h":true}}', 'pending');
+    raise exception 'Normal user supplied opening hours.';
+  exception when insufficient_privilege then null; end;
   begin
     update public.submissions set status = 'approved' where id = suggestion_id;
     raise exception 'Normal user changed review status.';
@@ -46,12 +56,36 @@ begin
 
   perform set_config('request.jwt.claims', json_build_object('sub', admin_id, 'role', 'authenticated')::text, true);
   execute 'set local role authenticated';
+  -- SQL must reject missing/invalid hours even if the browser button is bypassed.
+  for invalid_hours in select value from jsonb_array_elements('[
+    {}, null, [],
+    {"Mon":{"open24h":true}},
+    {"Mon":{"closed":true},"Tue":{"closed":true},"Wed":{"closed":true},"Thu":{"closed":true},"Fri":{"closed":true},"Sat":{"closed":true},"Sun":{"closed":true}},
+    {"Mon":{"open":"24:00","close":"02:00"},"Tue":{"closed":true},"Wed":{"closed":true},"Thu":{"closed":true},"Fri":{"closed":true},"Sat":{"closed":true},"Sun":{"closed":true}},
+    {"Mon":{"open":"09:00","close":"09:00"},"Tue":{"closed":true},"Wed":{"closed":true},"Thu":{"closed":true},"Fri":{"closed":true},"Sat":{"closed":true},"Sun":{"closed":true}},
+    {"Mon":{"closed":true,"open24h":true},"Tue":{"closed":true},"Wed":{"closed":true},"Thu":{"closed":true},"Fri":{"closed":true},"Sat":{"closed":true},"Sun":{"closed":true}}
+  ]'::jsonb) loop
+    if public.wad2do_valid_opening_hours(invalid_hours) then
+      raise exception 'Invalid opening hours passed validation: %', invalid_hours;
+    end if;
+  end loop;
+  begin
+    perform public.approve_submission(suggestion_id);
+    raise exception 'Admin published a submission without hours.';
+  exception when invalid_parameter_value then null; end;
+  if exists (select 1 from public.activities where name = marker) then
+    raise exception 'Failed approval left a published activity.';
+  end if;
+  update public.submissions set opening_hours =
+    '{"Mon":{"open":"20:00","close":"02:00"},"Tue":{"closed":true},"Wed":{"closed":true},"Thu":{"closed":true},"Fri":{"closed":true},"Sat":{"closed":true},"Sun":{"open24h":true}}'
+    where id = suggestion_id;
   update public.submissions set google_place_id = 'ChIJ_corrected' where id = suggestion_id;
   if not found then raise exception 'Admin edit was blocked.'; end if;
   select * into result from public.approve_submission(suggestion_id);
   first_activity := result.activity_id;
   if not exists (select 1 from public.activities where id = first_activity
-    and source = 'community' and google_place_id = 'ChIJ_corrected') then
+    and source = 'community' and google_place_id = 'ChIJ_corrected'
+    and opening_hours::jsonb = result.opening_hours::jsonb) then
     raise exception 'Approval did not copy the exact ID.';
   end if;
   select * into result from public.approve_submission(suggestion_id);
@@ -74,6 +108,6 @@ begin
     raise exception 'Approval without an ID failed.';
   end if;
   execute 'reset role';
-  raise notice 'PASS: column grants, ordinary-user restrictions, admin correction, exact approval copy, null ID and duplicate approval.';
+  raise notice 'PASS: column grants, ordinary-user restrictions, admin-only hours, hours validation, admin correction, exact approval copy, null ID and duplicate approval.';
 end $$;
 rollback;
