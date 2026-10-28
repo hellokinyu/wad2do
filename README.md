@@ -34,6 +34,8 @@ Then open http://localhost:5173. The page reloads by itself when you save a file
 
 See [Authentication setup](docs/authentication.md) for email confirmation redirect
 URLs, session behavior, changed files, and the profile creation checks still needed.
+Before using the updated group forms, follow [Group database setup](docs/group-database.md)
+to install the atomic writes and names-only member lookup, then close shared profile access.
 
 ## Run the tests
 

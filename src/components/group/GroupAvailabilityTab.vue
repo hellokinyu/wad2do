@@ -134,6 +134,10 @@
         </div>
       </div>
       <p v-if="saving" class="text-muted small mt-1">Saving...</p>
+      <div v-if="saveError" class="alert alert-danger mt-2" role="alert" data-testid="availability-save-error">
+        {{ saveError }}
+        <button class="btn btn-sm btn-outline-danger ms-2" :disabled="saving" @click="saveMySlots">Try again</button>
+      </div>
 
       <!-- LEGEND: one swatch per shade so the colours are easy to read -->
       <div v-if="mode === 'heatmap'" class="small text-muted d-flex flex-wrap align-items-center gap-2 mt-2">
@@ -199,6 +203,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 // Shared Supabase client (handbook: src/lib/supabase.js). If it is a default export, use: import supabase from ...
 import { supabase } from '../../lib/supabase'
+import { requestWithTimeout } from '@/lib/requestWithTimeout'
 
 const route = useRoute()
 const router = useRouter()
@@ -209,6 +214,10 @@ const groupId = computed(() => route.params.id)
 const loading = ref(true)
 const errorMsg = ref('')
 const saving = ref(false)
+const saveError = ref('')
+let saveQueued = false
+let saveController
+let disposed = false
 const planning = ref(false)
 
 const userId = ref(null) // current logged-in user
@@ -443,7 +452,7 @@ function maybeShowPopup() {
   if (!everyoneCanMeet.value) return
   try {
     if (!localStorage.getItem(popupStorageKey())) showPopup.value = true
-  } catch (err) {
+  } catch {
     // if localStorage is unavailable, just skip the popup
   }
 }
@@ -451,7 +460,7 @@ function closePopup() {
   showPopup.value = false
   try {
     localStorage.setItem(popupStorageKey(), '1')
-  } catch (err) {
+  } catch {
     // ignore
   }
 }
@@ -485,21 +494,11 @@ async function loadAll() {
     group.value = g
 
     // 2. the members and their display names
-    const { data: gm, error: e2 } = await supabase
-      .from('group_members')
-      .select('user_id')
-      .eq('group_id', groupId.value)
-    if (e2) throw e2
-    const ids = gm.map((m) => m.user_id)
-    const { data: profs, error: e3 } = await supabase
-      .from('profiles')
-      .select('id, display_name')
-      .in('id', ids)
-    if (e3) throw e3
-    members.value = ids.map((id) => {
-      const p = profs.find((x) => x.id === id)
-      return { id, name: p ? p.display_name : 'Member' }
+    const { data: gm, error: e2 } = await supabase.rpc('get_group_member_names', {
+      p_group_id: groupId.value,
     })
+    if (e2) throw e2
+    members.value = gm.map((member) => ({ id: member.id, name: member.display_name || 'Member' }))
 
     // 3. everyone's saved availability
     const { data: av, error: e4 } = await supabase
@@ -507,7 +506,9 @@ async function loadAll() {
       .select('user_id, slot_start')
       .eq('group_id', groupId.value)
     if (e4) throw e4
-    allSlots.value = av.map((r) => ({ user_id: r.user_id, key: fromDb(r.slot_start) }))
+    allSlots.value = av
+      .map((r) => ({ user_id: r.user_id, key: fromDb(r.slot_start) }))
+      .filter((row) => days.value.includes(row.key.slice(0, 10)) && times.value.includes(row.key.slice(11)))
 
     // 4. split out my own slots so the "My availability" grid is pre-filled
     const mine = {}
@@ -518,7 +519,7 @@ async function loadAll() {
 
     selectedDay.value = days.value[0]
     maybeShowPopup()
-  } catch (err) {
+  } catch {
     errorMsg.value = "Couldn't load availability"
   } finally {
     loading.value = false
@@ -553,37 +554,52 @@ async function onMouseUp() {
   await saveMySlots()
 }
 onMounted(() => window.addEventListener('mouseup', onMouseUp))
-onUnmounted(() => window.removeEventListener('mouseup', onMouseUp))
+onUnmounted(() => {
+  disposed = true
+  saveQueued = false
+  saveController?.abort()
+  window.removeEventListener('mouseup', onMouseUp)
+})
 
-// Save: delete my old rows for this group, then insert the current ones
+// Queue later drags; the database replaces one member's slots in a single transaction.
 async function saveMySlots() {
-  saving.value = true
-  const keys = Object.keys(mySlots.value)
-  const { error: delErr } = await supabase
-    .from('availability')
-    .delete()
-    .eq('group_id', groupId.value)
-    .eq('user_id', userId.value)
-  if (delErr) {
-    errorMsg.value = "Couldn't save your availability"
-    saving.value = false
+  if (disposed) return
+  if (saving.value) {
+    saveQueued = true
     return
   }
-  if (keys.length > 0) {
-    const rows = keys.map((k) => ({
-      group_id: groupId.value,
-      user_id: userId.value,
-      slot_start: toDb(k),
-    }))
-    const { error: insErr } = await supabase.from('availability').insert(rows)
-    if (insErr) errorMsg.value = "Couldn't save your availability"
+  saving.value = true
+  saveError.value = ''
+  const savedGroupId = groupId.value
+  const savedUserId = userId.value
+  try {
+    do {
+      saveQueued = false
+      if (disposed || groupId.value !== savedGroupId || userId.value !== savedUserId) return
+      const keys = Object.keys(mySlots.value)
+      saveController = new AbortController()
+      const { error } = await requestWithTimeout((signal) =>
+        supabase.rpc('replace_group_availability', {
+          p_group_id: savedGroupId,
+          p_slots: keys.map(toDb),
+          p_expected_user_id: savedUserId,
+        }).abortSignal(signal),
+        saveController,
+      )
+      if (disposed || groupId.value !== savedGroupId || userId.value !== savedUserId) return
+      if (error) throw error
+      allSlots.value = allSlots.value
+        .filter((row) => row.user_id !== savedUserId)
+        .concat(keys.map((key) => ({ user_id: savedUserId, key })))
+    } while (saveQueued)
+    maybeShowPopup()
+  } catch {
+    if (!disposed) saveError.value = "Couldn't confirm your availability was saved. Your selection is still here. Try again."
+  } finally {
+    saveController = undefined
+    saveQueued = false
+    saving.value = false
   }
-  // keep the heatmap in sync without reloading everything
-  allSlots.value = allSlots.value
-    .filter((r) => r.user_id !== userId.value)
-    .concat(keys.map((k) => ({ user_id: userId.value, key: k })))
-  saving.value = false
-  maybeShowPopup() // you might have been the last person to respond
 }
 
 // ---------- picking a slot on the heatmap ----------
@@ -639,7 +655,7 @@ async function onPlan() {
     // and save the result to the itineraries table.
     await new Promise((resolve) => setTimeout(resolve, 500)) // placeholder, remove later
     router.push('/groups/' + groupId.value + '/itinerary') // open the Itinerary tab
-  } catch (err) {
+  } catch {
     errorMsg.value = "Couldn't build the plan"
   } finally {
     planning.value = false

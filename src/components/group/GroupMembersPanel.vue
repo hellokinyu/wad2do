@@ -20,23 +20,11 @@ async function loadMembers() {
     const { data: auth } = await supabase.auth.getUser()
     userId.value = auth.user.id
 
-    const { data: rows, error } = await supabase
-      .from('group_members')
-      .select('user_id')
-      .eq('group_id', props.group.id)
-    if (error) throw error
-
-    const ids = rows.map((r) => r.user_id)
-    const { data: profiles, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, display_name')
-      .in('id', ids)
-    if (profileError) throw profileError
-
-    members.value = ids.map((id) => {
-      const p = profiles.find((x) => x.id === id)
-      return { id, name: p ? p.display_name : 'Member' }
+    const { data: rows, error } = await supabase.rpc('get_group_member_names', {
+      p_group_id: props.group.id,
     })
+    if (error) throw error
+    members.value = rows.map((member) => ({ id: member.id, name: member.display_name || 'Member' }))
   } catch (error) {
     console.log(error)
     memberError.value = "Couldn't load the members."

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import GroupSettingsForm from '@/components/group/GroupSettingsForm.vue'
@@ -7,6 +7,7 @@ import GroupMembersPanel from '@/components/group/GroupMembersPanel.vue'
 
 const route = useRoute()
 const groupId = route.params.id
+const inviteCode = computed(() => typeof route.query.invite === 'string' ? route.query.invite : '')
 
 const group = ref(null) // the group's details, or null if we couldn't find it
 const isMember = ref(false) // false means we show the "Join group" screen
@@ -37,31 +38,13 @@ async function loadGroup() {
       return
     }
 
-    // 1. Get the group. group_members(count) counts the members.
-    const { data, error } = await supabase
-      .from('groups')
-      .select(
-        'id, name, start_date, end_date, budget_per_person, invite_code, chosen_start, group_members(count)',
-      )
-      .eq('id', groupId)
-      .maybeSingle()
+    const { data, error } = await supabase.rpc('wad2do_group_details', { p_group_id: groupId })
 
     // Error code 22P02 means the id in the URL isn't a real id, so treat it as "not found"
     if (error && error.code !== '22P02') throw error
     group.value = data
 
-    if (!group.value) return
-
-    // 2. Check if this user is a member
-    const { data: membership, error: memberError } = await supabase
-      .from('group_members')
-      .select('user_id')
-      .eq('group_id', groupId)
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    if (memberError) throw memberError
-    isMember.value = membership !== null
+    isMember.value = data?.is_member === true
   } catch (error) {
     console.log(error)
     errorMessage.value = "Couldn't load this group. Please try again."
@@ -77,7 +60,7 @@ function getMemberCount() {
 }
 
 function getInviteLink() {
-  return window.location.origin + '/groups/' + groupId
+  return window.location.origin + '/groups/' + groupId + '?invite=' + encodeURIComponent(group.value.invite_code)
 }
 
 async function copyInviteLink() {
@@ -88,16 +71,18 @@ async function copyInviteLink() {
 // For someone who opened an invite link but isn't in the group yet
 async function joinGroup() {
   joinError.value = ''
+  if (!inviteCode.value) return
 
   try {
-    const user = await getUser()
-
-    const { error } = await supabase
-      .from('group_members')
-      .insert({ group_id: groupId, user_id: user.id })
-
-    // Error code 23505 means they are already in the group, which is fine
-    if (error && error.code !== '23505') throw error
+    const { error } = await supabase.rpc('wad2do_join_group', {
+      p_group_id: groupId,
+      p_invite_code: inviteCode.value,
+    })
+    if (error?.code === 'P0002') {
+      joinError.value = 'This invite link is invalid. Ask a member for a new link or join using the group code.'
+      return
+    }
+    if (error) throw error
 
     // Reload so the header shows the new member count and the tabs appear
     loadGroup()
@@ -138,7 +123,8 @@ function onSettingsSaved() {
         <p>{{ getMemberCount() }} members</p>
 
         <p v-if="joinError" class="text-danger">{{ joinError }}</p>
-        <button class="btn btn-primary" data-testid="join-this-group" @click="joinGroup">
+        <p v-if="!inviteCode">Ask a member for a new invite link or join using the group code.</p>
+        <button class="btn btn-primary" data-testid="join-this-group" :disabled="!inviteCode" @click="joinGroup">
           Join group
         </button>
       </div>
