@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { getVisitHoursWarnings } from '@/lib/openingHours'
 import { fetchTravelOptions } from '@/lib/travelOptions'
+import ItineraryTravelOptions from '@/components/group/ItineraryTravelOptions.vue'
 
 const itinerary = ref(null)
 const budget = computed(() => group.value?.budget_per_person ?? 0)
@@ -408,6 +409,13 @@ function legKey(from, to) {
   return from.activity_id + '>' + to.activity_id
 }
 
+// The travel after the stop at this position, or null for the last stop
+function legAfter(index) {
+  const stops = itinerary.value.stops
+  if (index >= stops.length - 1) return null
+  return travelByLeg.value[legKey(stops[index], stops[index + 1])] || { loading: true }
+}
+
 // What the Edge Function needs to find a stop: saved coordinates, or its address and name
 function placeOf(stop) {
   if (stop.lat != null && stop.lng != null) return { lat: stop.lat, lng: stop.lng }
@@ -522,100 +530,103 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id + '@' + s.end).join(
       <p v-if="saveError" class="text-danger" data-testid="itinerary-save-error">{{ saveError }}</p>
 
       <ol class="list-unstyled" data-testid="itinerary-timeline">
-        <li
-          v-for="(stop, index) in displayStops"
-          :key="stop.original.activity_id"
-          class="card mb-2"
-          :class="{ 'border-info border-2': stop.isRainyView }"
-          data-testid="itinerary-stop"
-        >
-          <div class="card-body d-flex gap-3">
-            <div class="fw-bold text-nowrap">{{ stop.start }}–{{ stop.end }}</div>
-            <img
-              v-if="stop.image_url"
-              :src="stop.image_url"
-              :alt="stop.name"
-              class="rounded"
-              width="80"
-              height="80"
-            />
-            <div class="flex-grow-1">
-              <h3 class="h6 mb-1">{{ index + 1 }}. {{ stop.name }}</h3>
-              <p class="mb-1">${{ stop.cost }} per person</p>
-              <p class="text-muted small mb-0">{{ stop.reason }}</p>
-              <span
-                v-for="warning in getStopWarnings(stop)"
-                :key="warning"
-                class="badge text-bg-warning me-1"
-                data-testid="itinerary-stop-warning"
-              >
-                {{ warning }}
-              </span>
-              <span v-if="isRainy && !stop.original.indoor" class="badge text-bg-warning me-1"
-                >Rain forecast</span
-              >
-              <div
-                v-if="stop.isRainyView"
-                class="small text-info mt-1"
-                data-testid="itinerary-rain-alternative"
-              >
-                🌧️ Instead of {{ stop.original.name }}
-                <button
-                  v-if="isEditing"
-                  class="btn btn-sm btn-outline-dark ms-2"
-                  data-testid="itinerary-swap"
-                  @click="swapStop(index, getRainAlternative(stop.original))"
+        <template v-for="(stop, index) in displayStops" :key="stop.original.activity_id">
+          <li
+            class="card"
+            :class="{ 'border-info border-2': stop.isRainyView }"
+            data-testid="itinerary-stop"
+          >
+            <div class="card-body d-flex gap-3">
+              <div class="fw-bold text-nowrap">{{ stop.start }}–{{ stop.end }}</div>
+              <img
+                v-if="stop.image_url"
+                :src="stop.image_url"
+                :alt="stop.name"
+                class="rounded"
+                width="80"
+                height="80"
+              />
+              <div class="flex-grow-1">
+                <h3 class="h6 mb-1">{{ index + 1 }}. {{ stop.name }}</h3>
+                <p class="mb-1">${{ stop.cost }} per person</p>
+                <p class="text-muted small mb-0">{{ stop.reason }}</p>
+                <span
+                  v-for="warning in getStopWarnings(stop)"
+                  :key="warning"
+                  class="badge text-bg-warning me-1"
+                  data-testid="itinerary-stop-warning"
                 >
-                  Swap
+                  {{ warning }}
+                </span>
+                <span v-if="isRainy && !stop.original.indoor" class="badge text-bg-warning me-1"
+                  >Rain forecast</span
+                >
+                <div
+                  v-if="stop.isRainyView"
+                  class="small text-info mt-1"
+                  data-testid="itinerary-rain-alternative"
+                >
+                  🌧️ Instead of {{ stop.original.name }}
+                  <button
+                    v-if="isEditing"
+                    class="btn btn-sm btn-outline-dark ms-2"
+                    data-testid="itinerary-swap"
+                    @click="swapStop(index, getRainAlternative(stop.original))"
+                  >
+                    Swap
+                  </button>
+                </div>
+              </div>
+              <div
+                v-if="getRainAlternative(stop.original)"
+                class="form-check form-switch text-nowrap"
+              >
+                <input
+                  :id="'rainy-' + stop.original.activity_id"
+                  class="form-check-input"
+                  type="checkbox"
+                  :checked="showingRainy.includes(stop.original.activity_id)"
+                  data-testid="itinerary-rainy-toggle"
+                  @change="toggleRainy(stop.original)"
+                />
+                <label class="form-check-label" :for="'rainy-' + stop.original.activity_id"
+                  >🌧️ Rainy option</label
+                >
+              </div>
+              <div v-if="isEditing" class="d-flex flex-column gap-1">
+                <button
+                  class="btn btn-sm btn-outline-secondary"
+                  :disabled="index === 0"
+                  aria-label="Move up"
+                  data-testid="itinerary-move-up"
+                  @click="moveStop(index, -1)"
+                >
+                  ↑
+                </button>
+                <button
+                  class="btn btn-sm btn-outline-danger"
+                  aria-label="Remove stop"
+                  data-testid="itinerary-remove"
+                  @click="removeStop(index)"
+                >
+                  ✕
+                </button>
+                <button
+                  class="btn btn-sm btn-outline-secondary"
+                  :disabled="index === itinerary.stops.length - 1"
+                  aria-label="Move down"
+                  data-testid="itinerary-move-down"
+                  @click="moveStop(index, 1)"
+                >
+                  ↓
                 </button>
               </div>
             </div>
-            <div
-              v-if="getRainAlternative(stop.original)"
-              class="form-check form-switch text-nowrap"
-            >
-              <input
-                :id="'rainy-' + stop.original.activity_id"
-                class="form-check-input"
-                type="checkbox"
-                :checked="showingRainy.includes(stop.original.activity_id)"
-                data-testid="itinerary-rainy-toggle"
-                @change="toggleRainy(stop.original)"
-              />
-              <label class="form-check-label" :for="'rainy-' + stop.original.activity_id"
-                >🌧️ Rainy option</label
-              >
-            </div>
-            <div v-if="isEditing" class="d-flex flex-column gap-1">
-              <button
-                class="btn btn-sm btn-outline-secondary"
-                :disabled="index === 0"
-                aria-label="Move up"
-                data-testid="itinerary-move-up"
-                @click="moveStop(index, -1)"
-              >
-                ↑
-              </button>
-              <button
-                class="btn btn-sm btn-outline-danger"
-                aria-label="Remove stop"
-                data-testid="itinerary-remove"
-                @click="removeStop(index)"
-              >
-                ✕
-              </button>
-              <button
-                class="btn btn-sm btn-outline-secondary"
-                :disabled="index === itinerary.stops.length - 1"
-                aria-label="Move down"
-                data-testid="itinerary-move-down"
-                @click="moveStop(index, 1)"
-              >
-                ↓
-              </button>
-            </div>
-          </div>
-        </li>
+          </li>
+          <li v-if="index < displayStops.length - 1">
+            <ItineraryTravelOptions :leg="legAfter(index)" />
+          </li>
+        </template>
       </ol>
       <div v-if="notInPlan.length" class="mt-4" data-testid="itinerary-not-in-plan">
         <h3 class="h6">Also voted for, but not in the plan</h3>
