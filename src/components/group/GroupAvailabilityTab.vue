@@ -15,6 +15,20 @@
     </div>
 
     <div v-else>
+      <!-- CELEBRATION POPUP: shown once per group when everyone has responded and a common time exists -->
+      <div v-if="showPopup" class="popup-backdrop" data-testid="celebration-popup" @click.self="closePopup">
+        <div class="popup-card">
+          <div class="popup-emoji">🎉</div>
+          <h3 class="h5">Everyone has responded!</h3>
+          <p class="mb-3">
+            Found {{ fullWindows.length }} time window{{ fullWindows.length === 1 ? '' : 's' }}
+            where all {{ members.length }} of you are free.
+          </p>
+          <button class="btn btn-success" data-testid="popup-view" @click="viewHeatmap">See the heatmap</button>
+          <button class="btn btn-link text-muted" @click="closePopup">Close</button>
+        </div>
+      </div>
+
       <!-- CHOSEN SLOT: shown above the grid once the group has confirmed a time -->
       <div v-if="group.chosen_start" class="alert alert-success" data-testid="chosen-slot">
         Chosen time: <strong>{{ chosenLabel }}</strong>
