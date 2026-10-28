@@ -1,0 +1,10 @@
+{
+  "status_message": "Found route between points",
+  "status": 0,
+  "route_summary": {
+    "start_point": "",
+    "end_point": "",
+    "total_time": 1845,
+    "total_distance": 2562
+  }
+}

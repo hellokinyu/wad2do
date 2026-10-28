@@ -1,0 +1,26 @@
+{
+  "plan": {
+    "itineraries": [
+      {
+        "duration": 55,
+        "walkDistance": 77,
+        "transfers": 0,
+        "legs": [
+          {
+            "mode": "WALK",
+            "transitLeg": false,
+            "distance": 77,
+            "duration": 55,
+            "from": {
+              "name": "Origin"
+            },
+            "to": {
+              "name": "Destination"
+            },
+            "intermediateStops": []
+          }
+        ]
+      }
+    ]
+  }
+}

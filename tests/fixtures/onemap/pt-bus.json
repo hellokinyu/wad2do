@@ -1,0 +1,95 @@
+{
+  "plan": {
+    "itineraries": [
+      {
+        "duration": 1660,
+        "walkDistance": 560.93,
+        "transfers": 1,
+        "legs": [
+          {
+            "mode": "WALK",
+            "transitLeg": false,
+            "distance": 203.62,
+            "duration": 242,
+            "from": {
+              "name": "Origin"
+            },
+            "to": {
+              "name": "BAYFRONT STN EXIT B/MBS"
+            },
+            "intermediateStops": []
+          },
+          {
+            "mode": "BUS",
+            "transitLeg": true,
+            "distance": 2350.89,
+            "duration": 524,
+            "routeShortName": "106",
+            "routeLongName": "TTS BUS 106",
+            "from": {
+              "name": "BAYFRONT STN EXIT B/MBS"
+            },
+            "to": {
+              "name": "SHENTON WAY TER"
+            },
+            "intermediateStops": [
+              {
+                "name": "BAYFRONT STN EXIT A"
+              },
+              {
+                "name": "MARINA BAY STN"
+              },
+              {
+                "name": "DOWNTOWN STN"
+              },
+              {
+                "name": "UIC BLDG"
+              },
+              {
+                "name": "PRINCE EDWARD RD STN EXIT 2"
+              }
+            ]
+          },
+          {
+            "mode": "BUS",
+            "transitLeg": true,
+            "distance": 2316.07,
+            "duration": 378,
+            "routeShortName": "186",
+            "routeLongName": "SBST BUS 186",
+            "from": {
+              "name": "SHENTON WAY TER"
+            },
+            "to": {
+              "name": "OPP CHINATOWN STN"
+            },
+            "intermediateStops": [
+              {
+                "name": "TANJONG PAGAR STN EXIT C"
+              },
+              {
+                "name": "AFT TELOK AYER ST"
+              },
+              {
+                "name": "TELOK AYER STN EXIT A"
+              }
+            ]
+          },
+          {
+            "mode": "WALK",
+            "transitLeg": false,
+            "distance": 357.31,
+            "duration": 326,
+            "from": {
+              "name": "OPP CHINATOWN STN"
+            },
+            "to": {
+              "name": "Destination"
+            },
+            "intermediateStops": []
+          }
+        ]
+      }
+    ]
+  }
+}

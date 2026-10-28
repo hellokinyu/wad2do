@@ -1,0 +1,10 @@
+{
+  "status_message": "Found route between points",
+  "status": 0,
+  "route_summary": {
+    "start_point": "SHEARES AVENUE",
+    "end_point": "PAGODA STREET",
+    "total_time": 1325,
+    "total_distance": 3460
+  }
+}

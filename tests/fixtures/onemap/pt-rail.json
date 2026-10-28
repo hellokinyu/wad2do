@@ -1,0 +1,61 @@
+{
+  "plan": {
+    "itineraries": [
+      {
+        "duration": 920,
+        "walkDistance": 716.57,
+        "transfers": 0,
+        "legs": [
+          {
+            "mode": "WALK",
+            "transitLeg": false,
+            "distance": 366.15,
+            "duration": 370,
+            "from": {
+              "name": "Origin"
+            },
+            "to": {
+              "name": "BAYFRONT MRT STATION"
+            },
+            "intermediateStops": []
+          },
+          {
+            "mode": "SUBWAY",
+            "transitLeg": true,
+            "distance": 1977.52,
+            "duration": 223,
+            "routeShortName": "DT",
+            "routeLongName": "DOWNTOWN LINE",
+            "from": {
+              "name": "BAYFRONT MRT STATION"
+            },
+            "to": {
+              "name": "CHINATOWN MRT STATION"
+            },
+            "intermediateStops": [
+              {
+                "name": "DOWNTOWN MRT STATION"
+              },
+              {
+                "name": "TELOK AYER MRT STATION"
+              }
+            ]
+          },
+          {
+            "mode": "WALK",
+            "transitLeg": false,
+            "distance": 350.42,
+            "duration": 327,
+            "from": {
+              "name": "CHINATOWN MRT STATION"
+            },
+            "to": {
+              "name": "Destination"
+            },
+            "intermediateStops": []
+          }
+        ]
+      }
+    ]
+  }
+}
