@@ -144,7 +144,8 @@ async function fetchOption(
       const timedOut = (error as Error)?.name === 'TimeoutError'
       return unavailable(mode, timedOut ? 'OneMap took too long' : 'Could not reach OneMap')
     }
-    if (response.status === 401) throw new Error('OneMap token expired, update ONEMAP_TOKEN in .env')
+    if (response.status === 401)
+      throw new Error('OneMap token expired, update ONEMAP_TOKEN in .env')
     if (response.status === 429) {
       await sleep(500 * 2 ** attempt) // wait 0.5 s, then 1 s, then 2 s
       continue
