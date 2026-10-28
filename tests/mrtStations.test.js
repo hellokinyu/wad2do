@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { homeAreas } from '../src/data/homeAreas.js'
-import { findStation, mrtStations } from '../src/data/mrtStations.js'
+import { findStation, findStationInDirection, mrtStations } from '../src/data/mrtStations.js'
 
 test('all 146 open physical MRT stations have unique IDs/codes and supported areas', () => {
   assert.equal(mrtStations.length, 146)
@@ -79,5 +79,50 @@ test('coordinates remain attached to the exact local artwork', () => {
       ),
       station.name,
     )
+  }
+})
+
+test('arrow navigation follows nearby diagram positions and stops at map edges', () => {
+  for (const [from, key, expected] of [
+    ['jurong-east', 'ArrowLeft', 'chinese-garden'],
+    ['jurong-east', 'ArrowRight', 'clementi'],
+    ['jurong-east', 'ArrowUp', 'bukit-batok'],
+    ['jurong-east', 'ArrowDown', 'jurong-east'],
+    ['telok-blangah', 'ArrowLeft', 'telok-blangah'],
+    ['labrador-park', 'ArrowLeft', 'labrador-park'],
+    ['canberra', 'ArrowRight', 'canberra'],
+    ['admiralty', 'ArrowRight', 'sembawang'],
+    ['woodlands-north', 'ArrowUp', 'woodlands-north'],
+    ['tuas-link', 'ArrowLeft', 'tuas-link'],
+    ['marina-south-pier', 'ArrowDown', 'marina-south-pier'],
+  ]) {
+    assert.equal(findStationInDirection(from, key).id, expected, `${from}: ${key}`)
+  }
+  assert.equal(findStationInDirection('missing', 'ArrowRight'), null)
+  assert.equal(findStationInDirection('jurong-east', 'Tab'), findStation('jurong-east'))
+})
+
+test('all arrow hops stay local and every station is reachable from every starting station', () => {
+  const neighbours = new Map(mrtStations.map((station) => [station.id,
+    ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].map((key) => {
+      const next = findStationInDirection(station.id, key)
+      const dx = ((next.x - station.x) * 1410) / 100
+      const dy = ((next.y - station.y) * 1007) / 100
+      assert.ok(Math.hypot(dx, dy) <= 150, `${station.name}: ${key}`)
+      return next.id
+    }),
+  ]))
+  for (const start of mrtStations) {
+    const reached = new Set([start.id])
+    const queue = [start.id]
+    for (const id of queue) {
+      for (const next of neighbours.get(id)) {
+        if (!reached.has(next)) {
+          reached.add(next)
+          queue.push(next)
+        }
+      }
+    }
+    assert.equal(reached.size, mrtStations.length, start.name)
   }
 })

@@ -3,6 +3,7 @@ import { onUnmounted, reactive, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/composables/useAuth'
 import GooglePlacePicker from '@/components/GooglePlacePicker.vue'
+import { requestWithTimeout as timedRequest } from '@/lib/requestWithTimeout'
 
 const { user } = useAuth()
 const submitting = ref(false)
@@ -139,7 +140,6 @@ const durations = [
   { value: 180, label: '3 hours' },
   { value: 240, label: 'Half day (4 hours)' },
 ]
-const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const form = reactive({
   name: '',
   category: '',
@@ -154,10 +154,6 @@ const form = reactive({
   description: '',
   website: '',
 })
-const hours = reactive(
-  Object.fromEntries(days.map((day) => [day, { mode: 'open', open: '', close: '' }])),
-)
-
 function submissionDetails(submittedBy) {
   const price = form.free ? 0 : form.price
   if (
@@ -178,29 +174,6 @@ function submissionDetails(submittedBy) {
 
   if (form.postal_code && !/^\d{6}$/.test(form.postal_code)) {
     errorMessage.value = 'Enter a six-digit postal code or leave it blank.'
-    return
-  }
-
-  const openingHours = {}
-  for (const day of days) {
-    const entry = hours[day]
-    if (entry.mode === 'closed') openingHours[day] = { closed: true }
-    else if (entry.mode === '24h') openingHours[day] = { open24h: true }
-    else {
-      const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/
-      if (
-        !timePattern.test(entry.open) ||
-        !timePattern.test(entry.close) ||
-        entry.open === entry.close
-      ) {
-        errorMessage.value = `Enter different opening and closing times for ${day}, or choose Closed or Open 24 hours.`
-        return
-      }
-      openingHours[day] = { open: entry.open, close: entry.close }
-    }
-  }
-  if (days.every((day) => hours[day].mode === 'closed')) {
-    errorMessage.value = 'The activity must be open on at least one day.'
     return
   }
 
@@ -226,7 +199,7 @@ function submissionDetails(submittedBy) {
     postal_code: form.postal_code || null,
     google_place_id: form.google_place_id,
     area: form.area,
-    opening_hours: openingHours,
+    opening_hours: {},
     description: form.description.trim() || null,
     website: website || null,
     status: 'pending',
@@ -237,18 +210,9 @@ function submissionDetails(submittedBy) {
 async function requestWithTimeout(request) {
   const controller = new AbortController()
   requestController = controller
-  const timeout = setTimeout(() => controller.abort(), 30000)
-  let cancelWait
-  const cancelled = new Promise((_, reject) => {
-    cancelWait = () => reject(controller.signal.reason)
-    controller.signal.addEventListener('abort', cancelWait, { once: true })
-  })
   try {
-    // Also stop waiting if SDK authentication stalls before it can send an abortable request.
-    return await Promise.race([request(controller.signal), cancelled])
+    return await timedRequest(request, controller)
   } finally {
-    clearTimeout(timeout)
-    controller.signal.removeEventListener('abort', cancelWait)
     if (requestController === controller) requestController = undefined
   }
 }
@@ -498,60 +462,9 @@ async function submitActivity() {
           :area="form.area"
         />
 
-        <fieldset class="mt-4">
-          <legend class="h5">Opening hours *</legend>
-          <p id="hours-help" class="text-secondary small">
-            Use Singapore time. A closing time earlier than opening means the following day.
-          </p>
-          <div v-for="day in days" :key="day" class="row g-2 align-items-end mb-3">
-            <div class="col-12 col-sm-2 fw-semibold">{{ day }}</div>
-            <div class="col-12 col-sm-4">
-              <label :for="`hours-${day}-mode`" class="visually-hidden"
-                >{{ day }} opening status</label
-              >
-              <select
-                :id="`hours-${day}-mode`"
-                v-model="hours[day].mode"
-                class="form-select"
-                :data-testid="`hours-${day}-mode`"
-              >
-                <option value="open">Set hours</option>
-                <option value="closed">Closed</option>
-                <option value="24h">Open 24 hours</option>
-              </select>
-            </div>
-            <template v-if="hours[day].mode === 'open'">
-              <div class="col-6 col-sm-3">
-                <label :for="`hours-${day}-open`" class="form-label small mb-1"
-                  >{{ day }} opens</label
-                >
-                <input
-                  :id="`hours-${day}-open`"
-                  v-model="hours[day].open"
-                  type="time"
-                  class="form-control"
-                  required
-                  aria-describedby="hours-help"
-                  :data-testid="`hours-${day}-open`"
-                />
-              </div>
-              <div class="col-6 col-sm-3">
-                <label :for="`hours-${day}-close`" class="form-label small mb-1"
-                  >{{ day }} closes</label
-                >
-                <input
-                  :id="`hours-${day}-close`"
-                  v-model="hours[day].close"
-                  type="time"
-                  class="form-control"
-                  required
-                  aria-describedby="hours-help"
-                  :data-testid="`hours-${day}-close`"
-                />
-              </div>
-            </template>
-          </div>
-        </fieldset>
+        <p class="text-secondary small mt-3" data-testid="submission-hours-note">
+          Our team will verify and add opening hours before publishing your activity.
+        </p>
 
         <div class="mt-4">
           <label for="submission-description" class="form-label">Description (optional)</label>

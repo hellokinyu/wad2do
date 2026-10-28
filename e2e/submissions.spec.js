@@ -5,8 +5,6 @@ import { test, expect } from '@playwright/test'
 import { mockSession, mockUser, signInMockUser } from './helpers/auth'
 import { mockPlaceSearch, placeCandidates } from './helpers/places'
 
-const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-
 async function mockBackend(page, failures = 0) {
   const state = {
     attempts: [],
@@ -99,11 +97,6 @@ async function fillActivity(page) {
   await page.getByTestId('submission-setting').selectOption('indoor')
   await page.getByTestId('submission-address').fill('  10 Orchard Road  ')
   await page.getByTestId('submission-area').selectOption('Orchard')
-  for (const day of days) await page.getByTestId(`hours-${day}-mode`).selectOption('closed')
-  await page.getByTestId('hours-Sat-mode').selectOption('open')
-  await page.getByTestId('hours-Sat-open').fill('10:00')
-  await page.getByTestId('hours-Sat-close').fill('18:00')
-  await page.getByTestId('hours-Sun-mode').selectOption('24h')
 }
 
 for (const width of [1280, 375]) {
@@ -115,6 +108,9 @@ for (const width of [1280, 375]) {
     await expect(page).toHaveURL(/\/activities\/submit$/)
     await expect(page.getByRole('main')).toHaveCount(1)
     await fillActivity(page)
+    await expect(page.getByRole('group', { name: 'Opening hours' })).toHaveCount(0)
+    await expect(page.locator('input[type=time]')).toHaveCount(0)
+    await expect(page.getByTestId('submission-hours-note')).toContainText('before publishing')
     const free = width === 375
     await page.getByTestId('submission-free').setChecked(free)
     await expect(page.getByTestId('submission-price')).toHaveJSProperty('disabled', free)
@@ -123,8 +119,6 @@ for (const width of [1280, 375]) {
       .getByTestId('submission-description')
       .fill(free ? '' : '  Try a weekend art session.  ')
     await page.getByTestId('submission-website').fill(free ? '' : 'https://example.com/studio')
-    await page.getByTestId('hours-Sat-open').fill(free ? '10:00' : '20:00')
-    await page.getByTestId('hours-Sat-close').fill(free ? '18:00' : '02:00')
     await expect(page.locator('body')).toHaveJSProperty('scrollWidth', width)
     await page.getByTestId('submission-submit').click()
     await expect(page.getByTestId('submission-success')).toBeVisible()
@@ -145,15 +139,7 @@ for (const width of [1280, 375]) {
       postal_code: null,
       google_place_id: null,
       area: 'Orchard',
-      opening_hours: {
-        Mon: { closed: true },
-        Tue: { closed: true },
-        Wed: { closed: true },
-        Thu: { closed: true },
-        Fri: { closed: true },
-        Sat: { open: free ? '10:00' : '20:00', close: free ? '18:00' : '02:00' },
-        Sun: { open24h: true },
-      },
+      opening_hours: {},
       description: free ? null : 'Try a weekend art session.',
       website: free ? null : 'https://example.com/studio',
       image_url: null,
@@ -174,7 +160,6 @@ test('keeps entries after a failed save and allows retry', async ({ page }) => {
   await page.getByTestId('submission-submit').click()
   await expect(page.getByTestId('submission-error')).toContainText("Couldn't submit")
   await expect(page.getByTestId('submission-name')).toHaveValue('  Weekend art studio  ')
-  await expect(page.getByTestId('hours-Sat-open')).toHaveValue('10:00')
   await expect(page.getByTestId('submission-submit')).toBeEnabled()
   await page.getByTestId('submission-name').fill('Updated art studio')
   await page.getByTestId('submission-submit').click()
@@ -245,9 +230,7 @@ test('a duplicate error without a saved record does not show success', async ({ 
   await expect(page.getByTestId('submission-name')).toHaveValue('  Weekend art studio  ')
 })
 
-test('rejects missing fields, blank names, ambiguous hours and unsafe websites', async ({
-  page,
-}) => {
+test('rejects missing fields, blank names and unsafe websites', async ({ page }) => {
   const state = await mockBackend(page)
   await page.goto('/activities/submit')
   await page.getByTestId('submission-submit').click()
@@ -257,19 +240,9 @@ test('rejects missing fields, blank names, ambiguous hours and unsafe websites',
   await page.getByTestId('submission-submit').click()
   await expect(page.getByTestId('submission-error')).toContainText('Complete all required fields')
   await page.getByTestId('submission-name').fill('Art studio')
-  await page.getByTestId('hours-Sat-close').fill('10:00')
-  await page.getByTestId('submission-submit').click()
-  await expect(page.getByTestId('submission-error')).toContainText(
-    'different opening and closing times',
-  )
-  await page.getByTestId('hours-Sat-close').fill('18:00')
   await page.getByTestId('submission-website').fill('javascript:alert(1)')
   await page.getByTestId('submission-submit').click()
   await expect(page.getByTestId('submission-error')).toContainText('https:// or http://')
-  await page.getByTestId('submission-website').fill('')
-  for (const day of days) await page.getByTestId(`hours-${day}-mode`).selectOption('closed')
-  await page.getByTestId('submission-submit').click()
-  await expect(page.getByTestId('submission-error')).toContainText('open on at least one day')
   expect(state.attempts).toHaveLength(0)
 })
 
@@ -309,6 +282,8 @@ for (const width of [1280, 375]) {
       postal_code: '012345',
       name: 'Weekend art studio',
     })
+    expect(state.saved[0].opening_hours).toEqual({})
+    expect(lookup.requests).toHaveLength(1)
     expect(JSON.stringify(state.saved)).not.toContain('Google studio')
   })
 }
@@ -342,7 +317,6 @@ for (const options of [
     await page.getByTestId('place-find').click()
     await expect(page.getByTestId('place-find')).toBeEnabled()
     await expect(page.getByTestId('submission-name')).toHaveValue('  Weekend art studio  ')
-    await expect(page.getByTestId('hours-Sat-open')).toHaveValue('10:00')
     await expect(page.getByTestId('place-candidate')).toHaveCount(0)
     await page.getByTestId('submission-submit').click()
     await expect(page.getByTestId('submission-success')).toBeVisible()

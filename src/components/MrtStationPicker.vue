@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, useId, watch } from 'vue'
-import { findStation, mrtStations } from '@/data/mrtStations'
+import { findStation, findStationInDirection, mrtStations } from '@/data/mrtStations'
 
 const props = defineProps({
   modelValue: { type: String, default: null },
@@ -23,16 +23,11 @@ function moveStationFocus(event) {
   if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'].includes(event.key))
     return
   event.preventDefault()
-  const currentId = event.target.dataset.stationId || selected.value?.id
-  const currentIndex = Math.max(
-    0,
-    mrtStations.findIndex((station) => station.id === currentId),
-  )
-  const direction = ['ArrowRight', 'ArrowDown'].includes(event.key) ? 1 : -1
-  let nextIndex = (currentIndex + direction + mrtStations.length) % mrtStations.length
-  if (event.key === 'Home') nextIndex = 0
-  if (event.key === 'End') nextIndex = mrtStations.length - 1
-  viewport.value.querySelector(`[data-station-id="${mrtStations[nextIndex].id}"]`).focus()
+  const currentId = event.target.dataset.stationId || selected.value?.id || 'dhoby-ghaut'
+  let next = findStationInDirection(currentId, event.key)
+  if (event.key === 'Home') next = mrtStations[0]
+  if (event.key === 'End') next = mrtStations[mrtStations.length - 1]
+  viewport.value.querySelector(`[data-station-id="${next.id}"]`).focus()
 }
 
 async function revealStation() {
@@ -85,9 +80,9 @@ watch([() => props.modelValue, zoom], revealStation)
         </button>
       </div>
       <p :id="id + '-help'" class="small text-muted">
-        Scroll or swipe to move the map. Only open MRT stations have clickable markers; LRT and
-        future stations are excluded. Use arrow keys to browse stations alphabetically, then Enter
-        to choose.
+        Scroll or swipe to move the map. Choose an MRT station using its marker; LRT stops
+        are shown for reference. Use arrow keys to move to nearby stations in that direction,
+        then Enter to choose. If no station is nearby in that direction, focus stays put.
       </p>
       <div
         ref="viewport"
@@ -151,24 +146,6 @@ watch([() => props.modelValue, zoom], revealStation)
     >
       Clear starting location
     </button>
-    <details class="small text-muted mt-2" data-testid="mrt-credits">
-      <summary>Map credits</summary>
-      <p class="mt-2 mb-0">
-        Map:
-        <a
-          href="https://commons.wikimedia.org/wiki/File:Singapore_MRT_and_LRT_System_Map.svg"
-          target="_blank"
-          rel="noopener noreferrer"
-          >Aforl and Wikimedia Commons contributors</a
-        >,
-        <a
-          href="https://creativecommons.org/licenses/by-sa/3.0/"
-          target="_blank"
-          rel="noopener noreferrer"
-          >CC BY-SA 3.0</a
-        >. Artwork unchanged, 17 Aug 2026 revision; WAD2Do adds selection markers.
-      </p>
-    </details>
   </div>
 </template>
 

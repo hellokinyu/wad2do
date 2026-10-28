@@ -3,8 +3,9 @@ begin;
 
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname = 'public'
-    and tablename = 'submissions' and policyname = 'wad2do_limit_submission_updates') then
-    raise exception 'Run docs/sql/admin_review.sql first to install protected review policies.';
+    and tablename = 'submissions' and policyname = 'wad2do_limit_submission_updates')
+    or to_regprocedure('public.wad2do_valid_opening_hours(jsonb)') is null then
+    raise exception 'Run the current docs/sql/admin_review.sql first to install protected review policies and hours validation.';
   end if;
 end $$;
 
@@ -45,6 +46,10 @@ begin
   end if;
   if submission.status is distinct from 'pending' then
     raise exception 'This submission has already been reviewed.';
+  end if;
+
+  if not public.wad2do_valid_opening_hours(submission.opening_hours::jsonb) then
+    raise exception 'Add valid opening hours for every day and save before approving.' using errcode = '22023';
   end if;
 
   insert into public.activities (

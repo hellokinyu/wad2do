@@ -97,6 +97,7 @@ test('rejects malformed, oversized and caller-controlled input before reserving 
     { name: 'Studio', address: 'Road', postalCode: '12345x' },
     { name: 'Studio', address: 'Road', fieldMask: '*' },
     { url: 'https://evil.example' },
+    { placeId: 'ChIJ_example' },
     { name: 'x'.repeat(5000), address: 'Road' },
   ]
   for (const body of invalid) {

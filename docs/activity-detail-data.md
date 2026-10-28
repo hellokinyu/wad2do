@@ -29,7 +29,7 @@ Opening hours can use a weekday map. Example structure only — these are not ve
 }
 ~~~
 
-Long weekday names and provider weekday_text arrays such as ["Monday: Closed", "Tuesday: 10:00–18:00"] are also accepted. Provider descriptions can use full names or three-letter weekday abbreviations, case-insensitively (for example, "Sun: 18:00–06:00"). Missing days are shown as Hours unavailable. The highlighted day uses Asia/Singapore time. This helper formats display text; it does not implement the team's opening-hours checks for Plan.
+Long weekday names and provider weekday_text arrays such as ["Monday: Closed", "Tuesday: 10:00–18:00"] are also accepted. Provider descriptions can use full names or three-letter weekday abbreviations, case-insensitively (for example, "Sun: 18:00–06:00"). Missing days are shown as Hours unavailable. The highlighted day uses Asia/Singapore time. This display helper formats text. Plan checks the stored short-weekday map separately using `src/lib/openingHours.js`.
 
 Rating is displayed only when a valid value is available. Activities with a `google_place_id` now call the deployed `google-place-details` Edge Function using `supabase.functions.invoke('google-place-details', { body: { activityId: activity.id } })`. The signed-in session is sent by the shared client; the Google API key stays in the Edge Function's `GOOGLE_MAPS_API_KEY` secret. The function must validate the user, read the activity's Place ID under RLS, and return Google Place Details fields. No Google key or service-role key belongs in the frontend.
 
@@ -54,3 +54,5 @@ Code:
 
 
 Community submissions can now carry a suggested `google_place_id` through admin review and transactional approval. The existing detail view invokes Google details based on ID presence regardless of `source`. The deployed details source is unavailable locally: verify a newly published Community activity against the live function as described in [lookup setup](google-place-search.md).
+
+Plan hours fix (28 Oct 2026): initial eligibility and edit/rain-swap warnings now use the same visit interval check. Visits must start at or after opening and finish at or before closing. A closing time earlier than opening belongs to the next day; the previous day's overnight period remains usable after midnight even if today's row is Closed. Continuous opening periods, including adjacent Open 24 hours days, join across midnight. Day selection uses the plan's Singapore calendar date rather than the browser's time zone. Missing catalogue days keep the existing open assumption; new community approvals still require a complete verified week. This fix does not fetch or persist Google hours.
