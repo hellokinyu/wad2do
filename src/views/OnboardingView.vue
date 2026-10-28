@@ -136,6 +136,7 @@
           </section>
 
           <section v-else-if="step === 6" key="done" data-testid="onboarding-step-done">
+            <OnboardingCelebration :animal="avatarAnimal" />
             <p class="eyebrow mb-3">All done</p>
             <h1 class="display-5 fw-bold title mb-3">You're all <span class="hl">set.</span></h1>
             <p class="lead-text mb-4">Here's what we'll use to find your next hangout.</p>
@@ -230,6 +231,7 @@ import { supabase } from '@/lib/supabase'
 import MrtStationPicker from '@/components/MrtStationPicker.vue'
 import AnimalAvatar from '@/components/AnimalAvatar.vue'
 import AnimalAvatarPicker from '@/components/AnimalAvatarPicker.vue'
+import OnboardingCelebration from '@/components/OnboardingCelebration.vue'
 import { findProfileAnimal } from '@/data/profileAnimals'
 import { homeAreas } from '@/data/homeAreas'
 import { findStation } from '@/data/mrtStations'

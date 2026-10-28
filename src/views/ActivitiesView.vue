@@ -121,6 +121,7 @@ const requestedPage = ref(
   Number.isSafeInteger(previousFilters.page) && previousFilters.page > 0 ? previousFilters.page : 1,
 )
 const resultsSummary = ref(null)
+const filtersPanel = ref(null)
 
 watch([keyword, selectedCategory, selectedSetting, selectedArea, selectedPrice, sortBy], () => {
   requestedPage.value = 1
@@ -248,7 +249,12 @@ const visiblePages = computed(() => {
 async function changePage(page) {
   requestedPage.value = page
   await nextTick()
-  resultsSummary.value?.focus()
+  resultsSummary.value?.focus({ preventScroll: true })
+  if (resultsSummary.value) {
+    const filterHeight = filtersPanel.value?.getBoundingClientRect().height ?? 0
+    const navbarHeight = filtersPanel.value ? parseFloat(getComputedStyle(filtersPanel.value).top) || 0 : 0
+    resultsSummary.value.style.scrollMarginTop = `${navbarHeight + filterHeight + 16}px`
+  }
   resultsSummary.value?.scrollIntoView({ block: 'start' })
 }
 
@@ -408,10 +414,14 @@ onMounted(loadActivities)
 
     <section
       id="activity-filters"
+      ref="filtersPanel"
       class="filters-panel mb-4"
       :class="{ 'is-open': filtersOpen }"
       aria-label="Activity filters"
     >
+      <div class="d-flex justify-content-end d-md-none mb-2">
+        <button type="button" class="btn-close" aria-label="Close filters" @click="filtersOpen = false"></button>
+      </div>
       <div class="row g-3 align-items-end">
         <div class="col-12 col-md-4">
           <label for="category-filter" class="form-label">Category</label>
@@ -731,7 +741,16 @@ onMounted(loadActivities)
 }
 
 .filters-panel {
+  position: sticky;
+  top: var(--navbar-height, 0px);
+  z-index: 10;
+  max-height: min(45vh, calc(100vh - var(--navbar-height, 0px)));
+  max-height: min(45dvh, calc(100dvh - var(--navbar-height, 0px)));
+  overflow-y: auto;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
   padding: 20px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 6%);
 }
 
 .form-label {
