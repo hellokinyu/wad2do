@@ -6,7 +6,7 @@ const cache = new Map()
 // Ask the onemap-route Edge Function for the five travel options between two stops.
 // start and end are { lat, lng }. departure is Singapore time, e.g. '2026-10-30T10:00'.
 export async function fetchTravelOptions(start, end, departure) {
-  const key = [start.lat, start.lng, end.lat, end.lng, departure].join('|')
+  const key = JSON.stringify([start, end, departure]) // the whole stop, so address-only stops differ
   if (cache.has(key)) return cache.get(key)
 
   const { data, error } = await supabase.functions.invoke('onemap-route', {

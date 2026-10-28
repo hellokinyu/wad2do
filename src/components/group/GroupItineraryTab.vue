@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { getVisitHoursWarnings } from '@/lib/openingHours'
+import { fetchTravelOptions } from '@/lib/travelOptions'
 
 const itinerary = ref(null)
 const budget = computed(() => group.value?.budget_per_person ?? 0)
@@ -263,6 +264,9 @@ function addStop(activity) {
     reason: 'Added by the group',
     indoor: activity.indoor,
     opening_hours: activity.opening_hours,
+    address: activity.address,
+    lat: activity.lat,
+    lng: activity.lng,
   })
   recalculateTimes()
 }
@@ -302,7 +306,7 @@ async function loadVotes() {
   const { data, error } = await supabase
     .from('votes')
     .select(
-      'activity_id, value, activities(name, image_url, price_per_person, indoor, opening_hours, duration_min)',
+      'activity_id, value, activities(name, image_url, price_per_person, indoor, opening_hours, duration_min, address, lat, lng)',
     )
     .eq('group_id', groupId)
   if (error) throw error
@@ -319,6 +323,9 @@ async function loadVotes() {
         cost: a.price_per_person ?? 0,
         indoor: a.indoor,
         opening_hours: a.opening_hours,
+        address: a.address || '',
+        lat: a.lat,
+        lng: a.lng,
         duration_min: a.duration_min || 60,
         votes: 0,
       }
@@ -360,6 +367,9 @@ function buildPlan() {
       reason: activity.votes + ' votes in the group',
       indoor: activity.indoor,
       opening_hours: activity.opening_hours,
+      address: activity.address,
+      lat: activity.lat,
+      lng: activity.lng,
     })
     spent += activity.cost
     current = finish + TRAVEL_MINUTES
@@ -391,6 +401,39 @@ async function loadPage() {
 }
 
 onMounted(loadPage)
+// ----- Travel between stops (OneMap, through the onemap-route Edge Function) -----
+const travelByLeg = ref({}) // 'fromId>toId' -> { loading: true } or { options } or { error }
+
+function legKey(from, to) {
+  return from.activity_id + '>' + to.activity_id
+}
+
+// What the Edge Function needs to find a stop: saved coordinates, or its address and name
+function placeOf(stop) {
+  if (stop.lat != null && stop.lng != null) return { lat: stop.lat, lng: stop.lng }
+  return { address: stop.address || '', name: stop.name || '' }
+}
+
+// Load the travel options for every pair of stops, one pair at a time
+async function loadTravel() {
+  const stops = itinerary.value?.stops || []
+  for (let i = 0; i < stops.length - 1; i++) {
+    const from = stops[i]
+    const to = stops[i + 1]
+    const key = legKey(from, to)
+    travelByLeg.value[key] = { loading: true }
+    try {
+      const departure = itinerary.value.date + 'T' + from.end // leave when this stop ends
+      const options = await fetchTravelOptions(placeOf(from), placeOf(to), departure)
+      travelByLeg.value[key] = { options }
+    } catch (error) {
+      travelByLeg.value[key] = { error: error.message }
+    }
+  }
+}
+
+// Reload whenever the stops or their times change (new plan, move, remove, swap, start time)
+watch(() => itinerary.value?.stops.map((s) => s.activity_id + '@' + s.end).join(','), loadTravel)
 </script>
 
 <template>
