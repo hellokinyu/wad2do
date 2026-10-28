@@ -41,12 +41,14 @@ async function mockItinerary(
     chosen_start: start,
     chosen_end: end,
     group_members: [{ count: 1 }],
+    is_member: true,
   }
   await page.route('**/rest/v1/**', (route) => {
     const request = route.request()
     const table = new URL(request.url()).pathname.split('/').pop()
     if (table === 'profiles') return route.fulfill({ json: { is_admin: false } })
     if (table === 'groups') return route.fulfill({ json: group })
+    if (table === 'wad2do_group_details') return route.fulfill({ json: group })
     if (table === 'group_members') return route.fulfill({ json: { user_id: mockUser.id } })
     if (table === 'votes') return route.fulfill({ json: state.votes })
     if (table === 'itineraries') {

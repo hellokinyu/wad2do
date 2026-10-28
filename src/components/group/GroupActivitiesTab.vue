@@ -49,9 +49,7 @@ async function loadActivities(showSpinner = true) {
     const names = {}
     if (sharerIds.length > 0) {
       const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, display_name')
-        .in('id', sharerIds)
+        .rpc('get_group_member_names', { p_group_id: groupId })
       if (profilesError) throw profilesError
       for (const p of profiles) names[p.id] = p.display_name
     }

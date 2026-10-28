@@ -28,6 +28,10 @@ policy that denies admins, that policy must also be adjusted in Supabase; adding
 a permissive policy cannot override it. No existing policies are deleted by name
 unless they belong to this script.
 
+The [group database privacy setup](group-database.md) replaces full-profile sharing
+between group members with a names-only function. Its restrictive profile read policy
+preserves own-profile and admin access, including the submitter-name join on this page.
+
 ## How the code works
 
 - `useAuth.js`: reads the signed-in user's `profiles.is_admin`. Failed checks deny

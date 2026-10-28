@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
+import { requestWithTimeout } from '@/lib/requestWithTimeout'
 
 const router = useRouter()
 
@@ -17,6 +18,8 @@ const endDate = ref('')
 const budget = ref('')
 const createError = ref('')
 const newGroup = ref(null) // the group we just made, so we can show its invite code
+const creating = ref(false)
+let newGroupId = crypto.randomUUID()
 
 // Join group form
 const showJoinForm = ref(false)
@@ -81,24 +84,26 @@ function getMemberCount(group) {
 function makeInviteCode() {
   const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let code = ''
+  const bytes = crypto.getRandomValues(new Uint8Array(6))
   for (let i = 0; i < 6; i++) {
-    code += letters[Math.floor(Math.random() * letters.length)]
+    code += letters[bytes[i] % letters.length]
   }
   return code
 }
 
-function getInviteLink(groupId) {
-  return window.location.origin + '/groups/' + groupId
+function getInviteLink(group) {
+  return window.location.origin + '/groups/' + group.id + '?invite=' + encodeURIComponent(group.invite_code)
 }
 
 async function copyInviteLink() {
-  await navigator.clipboard.writeText(getInviteLink(newGroup.value.id))
+  await navigator.clipboard.writeText(getInviteLink(newGroup.value))
   copyMessage.value = 'Link copied!'
 }
 
 // ----- Create a group -----
 
 function openCreateForm() {
+  if (creating.value) return
   showCreateForm.value = true
   showJoinForm.value = false
   groupName.value = ''
@@ -107,10 +112,12 @@ function openCreateForm() {
   budget.value = ''
   createError.value = ''
   newGroup.value = null
+  newGroupId = crypto.randomUUID()
   copyMessage.value = ''
 }
 
 async function createGroup() {
+  if (creating.value) return
   createError.value = ''
 
   // Check the form first
@@ -126,42 +133,33 @@ async function createGroup() {
     createError.value = 'The end date must be after the start date.'
     return
   }
-  if (budget.value === '' || budget.value < 0) {
+  if (typeof budget.value !== 'number' || !Number.isFinite(budget.value) || budget.value < 0) {
     createError.value = 'Please enter a budget of $0 or more.'
     return
   }
 
+  creating.value = true
   try {
-    const user = await getUser()
-
-    // 1. Add the group. .select().single() gives us back the new row (with its id).
-    const { data, error } = await supabase
-      .from('groups')
-      .insert({
-        name: groupName.value.trim(),
-        start_date: startDate.value,
-        end_date: endDate.value,
-        budget_per_person: budget.value,
-        invite_code: makeInviteCode(),
-        created_by: user.id,
-      })
-      .select()
-      .single()
+    const { data, error } = await requestWithTimeout((signal) =>
+      supabase.rpc('create_group', {
+        p_group_id: newGroupId,
+        p_name: groupName.value.trim(),
+        p_start_date: startDate.value,
+        p_end_date: endDate.value,
+        p_budget_per_person: budget.value,
+        p_invite_code: makeInviteCode(),
+      }).single().abortSignal(signal),
+    )
 
     if (error) throw error
-
-    // 2. Add the creator as the first member
-    const { error: memberError } = await supabase
-      .from('group_members')
-      .insert({ group_id: data.id, user_id: user.id })
-
-    if (memberError) throw memberError
 
     newGroup.value = data // shows the invite panel
     loadGroups()
   } catch (error) {
     console.log(error)
     createError.value = "Couldn't create the group. Please try again."
+  } finally {
+    creating.value = false
   }
 }
 
@@ -179,31 +177,15 @@ async function joinGroup() {
   const code = joinCode.value.trim().toUpperCase()
 
   try {
-    const user = await getUser()
-
-    // 1. Find the group with this code
-    const { data: group, error } = await supabase
-      .from('groups')
-      .select('id')
-      .eq('invite_code', code)
-      .maybeSingle()
-
-    if (error) throw error
-    if (!group) {
+    const { data: joinedId, error } = await requestWithTimeout((signal) =>
+      supabase.rpc('wad2do_join_group', { p_invite_code: code }).abortSignal(signal),
+    )
+    if (error?.code === 'P0002') {
       joinError.value = 'No group with that code.'
       return
     }
-
-    // 2. Add the user to the group
-    const { error: memberError } = await supabase
-      .from('group_members')
-      .insert({ group_id: group.id, user_id: user.id })
-
-    // Error code 23505 means they are already in the group, which is fine
-    if (memberError && memberError.code !== '23505') throw memberError
-
-    // 3. Open the group
-    router.push('/groups/' + group.id)
+    if (error) throw error
+    router.push('/groups/' + joinedId)
   } catch (error) {
     console.log(error)
     joinError.value = "Couldn't join the group. Please try again."
@@ -234,7 +216,7 @@ async function joinGroup() {
             <input
               id="invite-link"
               class="form-control"
-              :value="getInviteLink(newGroup.id)"
+              :value="getInviteLink(newGroup)"
               readonly
               data-testid="invite-link"
             />
@@ -259,54 +241,56 @@ async function joinGroup() {
 
         <!-- Before creating: the form -->
         <form v-else @submit.prevent="createGroup">
-          <h2 class="h5">Create a group</h2>
+          <fieldset :disabled="creating">
+            <h2 class="h5">Create a group</h2>
 
-          <label for="group-name" class="form-label">Group name</label>
-          <input
-            id="group-name"
-            v-model="groupName"
-            class="form-control mb-2"
-            data-testid="group-name-input"
-          />
+            <label for="group-name" class="form-label">Group name</label>
+            <input
+              id="group-name"
+              v-model="groupName"
+              class="form-control mb-2"
+              data-testid="group-name-input"
+            />
 
-          <label for="start-date" class="form-label">Start date</label>
-          <input
-            id="start-date"
-            v-model="startDate"
-            type="date"
-            class="form-control mb-2"
-            data-testid="group-start-input"
-          />
+            <label for="start-date" class="form-label">Start date</label>
+            <input
+              id="start-date"
+              v-model="startDate"
+              type="date"
+              class="form-control mb-2"
+              data-testid="group-start-input"
+            />
 
-          <label for="end-date" class="form-label">End date</label>
-          <input
-            id="end-date"
-            v-model="endDate"
-            type="date"
-            class="form-control mb-2"
-            data-testid="group-end-input"
-          />
+            <label for="end-date" class="form-label">End date</label>
+            <input
+              id="end-date"
+              v-model="endDate"
+              type="date"
+              class="form-control mb-2"
+              data-testid="group-end-input"
+            />
 
-          <label for="budget" class="form-label">Budget per person ($)</label>
-          <input
-            id="budget"
-            v-model.number="budget"
-            type="number"
-            min="0"
-            class="form-control mb-2"
-            data-testid="group-budget-input"
-          />
+            <label for="budget" class="form-label">Budget per person ($)</label>
+            <input
+              id="budget"
+              v-model.number="budget"
+              type="number"
+              min="0"
+              class="form-control mb-2"
+              data-testid="group-budget-input"
+            />
 
-          <p v-if="createError" class="text-danger" data-testid="create-group-error">
-            {{ createError }}
-          </p>
+            <p v-if="createError" class="text-danger" data-testid="create-group-error">
+              {{ createError }}
+            </p>
 
-          <button type="submit" class="btn btn-primary me-2" data-testid="create-group-submit">
-            Create
-          </button>
-          <button type="button" class="btn btn-secondary" @click="showCreateForm = false">
-            Cancel
-          </button>
+            <button type="submit" class="btn btn-primary me-2" data-testid="create-group-submit">
+              Create
+            </button>
+            <button type="button" class="btn btn-secondary" @click="showCreateForm = false">
+              Cancel
+            </button>
+          </fieldset>
         </form>
       </div>
     </div>
