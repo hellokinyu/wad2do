@@ -7,6 +7,20 @@ alter table public.profiles add column if not exists home_station_id text;
 alter table public.submissions add column if not exists google_place_id text;
 alter table public.submissions add column if not exists postal_code text;
 
+-- Keep existing field checks; pending/rejected submissions may await verified hours.
+alter table public.submissions drop constraint if exists submissions_required_fields_check;
+alter table public.submissions add constraint submissions_required_fields_check check (
+  submitted_by is not null and length(btrim(name)) > 0
+  and category is not null and length(btrim(category)) > 0
+  and price_per_person is not null and price_per_person >= 0
+  and duration_min is not null and duration_min > 0
+  and indoor is not null
+  and address is not null and length(btrim(address)) > 0
+  and area is not null and length(btrim(area)) > 0
+  and opening_hours is not null and jsonb_typeof(opening_hours) = 'object'
+  and (description is null or length(description) <= 300)
+) not valid;
+
 -- A helper for policies: checks only the signed-in user's own admin flag.
 -- SECURITY DEFINER lets this read profiles without recursively applying its policies.
 create or replace function public.wad2do_is_admin()

@@ -87,7 +87,7 @@ async function mockBackend(page, options = {}) {
   )
 
   // Keep iframe checks repeatable without relying on Google Maps or the network.
-  await page.route(pottery.map_embed_url, (route) =>
+  await page.route('https://www.google.com/maps**', (route) =>
     route.fulfill({
       contentType: 'text/html',
       body: '<!doctype html><title>Mock activity map</title><p>Pottery map preview</p>',
@@ -249,7 +249,9 @@ test('direct visit handles missing metadata and has a safe Back destination', as
   await expect(page.getByTestId('detail-rating')).toHaveCount(0)
   await expect(page.getByTestId('detail-rating-source')).toHaveCount(0)
   await expect(page.getByTestId('detail-website')).toHaveCount(0)
-  await expect(page.getByTestId('detail-map')).toHaveCount(0)
+  const map = new URL(await page.getByTestId('detail-map').getAttribute('src'))
+  expect(map.searchParams.get('q')).toBe('8 Marina Gardens Dr, Singapore')
+  expect(map.searchParams.get('output')).toBe('embed')
   await expect(page.getByTestId('detail-tags').getByText('Outdoor', { exact: true })).toHaveCount(1)
   await expect(page.getByTestId('detail-location')).toContainText('8 Marina Gardens Dr')
   await expect(page.getByTestId('detail-location')).toContainText('Marina Bay')
@@ -257,6 +259,33 @@ test('direct visit handles missing metadata and has a safe Back destination', as
 
   await page.getByTestId('activity-back').click()
   await expect(page.getByTestId('activities-page')).toBeVisible()
+})
+
+test('community activities with a Place ID use an address embed rather than a globe', async ({
+  page,
+}) => {
+  const placeId = 'ChIJ6etOYDQZ2jERlLhZt3ShWI8'
+  await mockBackend(page, {
+    records: [
+      {
+        ...pottery,
+        name: 'Sim Racing at Funan mall',
+        source: 'community',
+        google_place_id: placeId,
+        address: '107 North Bridge Road',
+        area: 'City / Downtown',
+        map_embed_url: null,
+      },
+    ],
+  })
+  await page.goto('/activities/' + potteryId)
+  const map = page.getByTestId('detail-map')
+  const url = new URL(await map.getAttribute('src'))
+  expect(url.searchParams.get('q')).toBe('107 North Bridge Road, Singapore')
+  expect(url.searchParams.get('z')).toBe('16')
+  expect(url.searchParams.get('output')).toBe('embed')
+  await expect(map).toHaveAttribute('title', 'Map showing Sim Racing at Funan mall')
+  await expect(page.getByTestId('detail-tags')).toContainText('Community')
 })
 
 test('Google details replace stored ratings and hours, with review count and attribution', async ({

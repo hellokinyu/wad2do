@@ -9,6 +9,7 @@ declare
   result public.submissions;
   first_activity uuid;
   invalid_hours jsonb;
+  invalid_price numeric;
   marker text := 'Place lookup SQL verification ' || suggestion_id;
 begin
   select id into owner_id from public.profiles where not coalesce(is_admin, false) limit 1;
@@ -35,6 +36,16 @@ begin
       60, true, '10 Orchard Road', 'Orchard',
       '{}',
       'pending', 'ChIJ_sql_test', '012345');
+  -- Allowing empty hours must not weaken the other required-field checks.
+  for invalid_price in select unnest(array[null, -1]::numeric[]) loop
+    begin
+      insert into public.submissions (submitted_by, name, category, price_per_person,
+        duration_min, indoor, address, area, opening_hours, status)
+        values (owner_id, marker, 'Arts and culture', invalid_price,
+          60, true, '10 Orchard Road', 'Orchard', '{}', 'pending');
+      raise exception 'Missing or negative price was accepted.';
+    exception when check_violation then null; end;
+  end loop;
   begin
     insert into public.submissions (id, submitted_by, name, category, price_per_person,
       duration_min, indoor, address, area, opening_hours, status)

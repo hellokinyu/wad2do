@@ -5,8 +5,20 @@ import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import process from 'node:process'
+import { fileURLToPath } from 'node:url'
 const run = promisify(execFile)
 const database = process.env.WAD2DO_DISPOSABLE_DATABASE_URL
+
+test(
+  'submission SQL accepts pending empty hours and enforces admin-only validated approval',
+  { skip: !database },
+  async () => {
+    await run('psql', [
+      database, '-X', '-v', 'ON_ERROR_STOP=1', '-f',
+      fileURLToPath(new URL('../docs/sql/verify_google_place_search.sql', import.meta.url)),
+    ])
+  },
+)
 
 test(
   'real PostgreSQL serializes concurrent app and per-user reservations',

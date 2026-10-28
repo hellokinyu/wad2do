@@ -70,6 +70,32 @@ replace/delete those immutable objects after approval.
 
 ## Verification
 
+### Shared database repair — 28 Oct 2026
+
+Migration `repair_submission_pending_hours_and_approval` is applied to WAD2Do.
+It removes only the nonempty-hours requirement from
+`submissions_required_fields_check`, retains every other required-field check,
+and installs `wad2do_valid_opening_hours` plus the guarded `approve_submission`.
+The constraint stays `NOT VALID`, as before, so historical rows are preserved;
+new inserts and updates still have to pass it. Approval requires a complete week
+with at least one open day. Rejection can still accept hours awaiting review.
+
+The targeted live patch did not rerun the broader setup, alter table grants or
+policies, or change records. Before/after fingerprints matched for all 12 public
+tables, table/column grants and public/Storage policies. Live read-only checks
+confirmed the validator, approval guard and anonymous denial. Security advisory
+counts were unchanged. No live test records or Google calls were made.
+
+Both the targeted patch and rerunnable setup passed in disposable PGlite/PostgreSQL
+using a copy of the live schema and fake accounts. Checks covered the original
+failure, empty-hours inserts, invalid prices, ordinary-user restrictions, malformed
+hours, valid overnight/24-hour schedules, exact activity copying, duplicate approval
+retries and preservation of historical rows. The opt-in test is now included in
+`tests/googlePlaceSearch.database.test.js`; run it only with
+`WAD2DO_DISPOSABLE_DATABASE_URL` pointing to an isolated database with the admin
+and lookup scripts applied. Real browser writes against shared Supabase remain
+untested; browser tests use intercepted responses.
+
 Automated browser tests mock Supabase; they do not apply SQL or verify live RLS.
 The production build and ESLint checks passed. Chrome checks passed for 9 admin,
 23 authentication, 7 submission, and 2 landing/navbar tests (41 total).

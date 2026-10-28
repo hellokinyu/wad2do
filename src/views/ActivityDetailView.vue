@@ -10,6 +10,7 @@ import {
   getRating,
   getSetting,
   getLocation,
+  getMapEmbedUrl,
 } from '@/lib/activityDisplay'
 import { useActivityActions } from '@/composables/useActivityActions'
 
@@ -55,6 +56,7 @@ const googleAttributions = computed(() =>
 )
 const setting = computed(() => getSetting(activity.value?.indoor))
 const location = computed(() => getLocation(activity.value))
+const mapEmbedUrl = computed(() => getMapEmbedUrl(activity.value))
 
 // A category such as Outdoor already describes the setting, so show one tag.
 const showSettingTag = computed(
@@ -413,8 +415,8 @@ onUnmounted(() => {
             </p>
             <p v-if="location.area" class="text-secondary">{{ location.area }}</p>
             <iframe
-              v-if="activity.map_embed_url"
-              :src="activity.map_embed_url"
+              v-if="mapEmbedUrl"
+              :src="mapEmbedUrl"
               :title="`Map showing ${activity.name}`"
               data-testid="detail-map"
               width="100%"

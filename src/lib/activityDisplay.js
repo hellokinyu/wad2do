@@ -96,8 +96,10 @@ export function getWebsiteUrl(activity) {
   }
 }
 
-export function getMapUrl(activity) {
+export function getMapEmbedUrl(activity) {
   if (!activity) return null
+  if (activity.map_embed_url) return activity.map_embed_url
+  // shortcut: keyless embeds use addresses/coordinates; use the Embed API for exact Place ID pins.
   const lat = Number(activity.lat)
   const lng = Number(activity.lng)
   const hasCoordinates =
@@ -110,11 +112,10 @@ export function getMapUrl(activity) {
     Number.isFinite(lng) &&
     Math.abs(lng) <= 180
 
-  const location = getLocation(activity)
-  const address = [location.address, location.area].filter(Boolean).join(', ')
+  const address = activity.address?.trim() || activity.area?.trim() || ''
   if (!hasCoordinates && !address) return null
   const query = hasCoordinates ? lat + ',' + lng : address + ', Singapore'
-  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(query)
+  return 'https://www.google.com/maps?q=' + encodeURIComponent(query) + '&z=16&output=embed'
 }
 
 export function getRating(activity) {

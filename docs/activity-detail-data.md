@@ -45,6 +45,8 @@ Save uses favourites(user_id, activity_id). Share lists the authenticated user's
 
 Back returns to the previous route, or Activities for a direct visit. The Activities page remembers search, category, setting, area, price band and sorting in this browser tab so a detail-page round trip preserves the filter choices.
 
+Maps (28 Oct 2026): the detail view preserves a saved `map_embed_url`. When it is absent, `getMapEmbedUrl` builds a keyless Google Maps iframe URL from valid coordinates or the saved Singapore address, falling back to area only if the address is absent. It sets zoom 16. Do not pass `place_id:` to this keyless endpoint: that rendered a globe for the Funan sim-racing entry, even though the normal Maps URL resolved correctly. Exact Place ID pins require the official Maps Embed API. New Community activities get an address map without database changes; with no address/area/coordinates, the map stays hidden. The Funan correction was visually verified in a real, unmocked iframe showing the 107 North Bridge Road pin. Automated unit/browser checks cover the corrected address URL and preservation of saved embeds; those browser tests intercept map content.
+
 Cards show the activity's `description` below the price when available. Optional `price_note` text appears below the price on the detail page only, explaining the selected experience, fees and concessions. See [Activity prices and areas](activity-prices.md) for the 34-location price research and `supabase/seed-activity-prices.sql`, which adds this nullable column and fills missing prices/areas.
 
 Code:
