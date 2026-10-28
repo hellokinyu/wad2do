@@ -102,7 +102,7 @@ async function logIn() {
     })
     if (error) throw error
     password.value = ''
-    await router.replace('/')
+    await router.replace({ name: 'activities' })
   } catch (error) {
     errorMessage.value = authErrorMessage(error)
   } finally {

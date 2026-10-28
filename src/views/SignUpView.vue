@@ -113,10 +113,10 @@ async function signUp() {
 
     // With email confirmation required, signup succeeds without signing the user in.
     if (data.session) {
-      await router.replace('/onboarding')
+      await router.replace({ name: 'onboarding' })
     } else {
       message.value =
-        'Check your inbox and spam folder for a confirmation email. Confirm your email to continue to onboarding. If you already have an account, log in instead.'
+        'Check your inbox and spam folder for a confirmation email. Confirm your email to complete your profile and explore activities. If you already have an account, log in instead.'
     }
   } catch (error) {
     errorMessage.value = authErrorMessage(error)

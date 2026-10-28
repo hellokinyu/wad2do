@@ -7,6 +7,7 @@ export const mockUser = {
   email: 'demo@example.com',
   aud: 'authenticated',
   role: 'authenticated',
+  user_metadata: { display_name: 'Demo User', avatar_animal: 'dog' },
 }
 
 const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
@@ -28,18 +29,28 @@ export function authStorageKey() {
   return 'sb-' + new URL(url).hostname.split('.')[0] + '-auth-token'
 }
 
-export async function signInMockUser(page) {
+export async function signInMockUser(page, userOverrides = {}) {
+  const state = { user: { ...mockUser, ...userOverrides }, updates: [], failUpdate: false }
   // Fake credentials are used only with intercepted Supabase endpoints.
   await page.addInitScript(
     ({ key, value }) => {
-      localStorage.setItem(key, JSON.stringify(value))
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(value))
     },
-    { key: authStorageKey(), value: mockSession },
+    { key: authStorageKey(), value: { ...mockSession, user: state.user } },
   )
   await page.route('**/auth/v1/**', (route) => {
     if (new URL(route.request().url()).pathname.endsWith('/user')) {
-      return route.fulfill({ json: mockUser })
+      if (route.request().method() === 'PUT') {
+        const body = route.request().postDataJSON()
+        state.updates.push(body)
+        if (state.failUpdate) {
+          return route.fulfill({ status: 500, json: { message: 'Could not save account details' } })
+        }
+        state.user = { ...state.user, user_metadata: { ...state.user.user_metadata, ...body.data } }
+      }
+      return route.fulfill({ json: state.user })
     }
     return route.fulfill({ status: 400, json: { message: 'Unexpected mock auth request' } })
   })
+  return state
 }

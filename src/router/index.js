@@ -21,7 +21,7 @@ import GroupAvailabilityTab from '@/components/group/GroupAvailabilityTab.vue'
 import GroupItineraryTab from '@/components/group/GroupItineraryTab.vue'
 
 const routes = [
-  { path: '/', name: 'landing', component: LandingView },
+  { path: '/', name: 'landing', component: LandingView, meta: { guestOnly: true } },
   { path: '/signup', name: 'signup', component: SignUpView, meta: { guestOnly: true } },
   { path: '/login', name: 'login', component: LoginView, meta: { guestOnly: true } },
   {
@@ -91,13 +91,14 @@ const router = createRouter({
   },
 })
 
-const { user, isAdmin, initializeAuth, loadAdminStatus } = useAuth()
+const { user, isAdmin, needsOnboarding, initializeAuth, loadAdminStatus } = useAuth()
 
 router.beforeEach(async (to) => {
   // Wait for the saved session before deciding whether to redirect after a refresh.
   await initializeAuth()
   if (to.meta.requiresAuth && !user.value) return { name: 'login' }
-  if (to.meta.guestOnly && user.value) return { name: 'landing' }
+  if (needsOnboarding.value && to.name !== 'onboarding') return { name: 'onboarding' }
+  if (to.meta.guestOnly && user.value) return { name: 'activities' }
   if (to.name !== 'admin-access') await loadAdminStatus()
   if (to.meta.requiresAdmin && !isAdmin.value) return { name: 'admin-access' }
 })
@@ -106,7 +107,11 @@ router.beforeEach(async (to) => {
 const stopWatching = watch(user, (currentUser) => {
   const route = router.currentRoute.value
   if (!currentUser && route.meta.requiresAuth) router.replace({ name: 'login' })
-  if (currentUser && route.meta.guestOnly) router.replace({ name: 'landing' })
+  if (currentUser && needsOnboarding.value && route.name !== 'onboarding') {
+    router.replace({ name: 'onboarding' })
+  } else if (currentUser && route.meta.guestOnly) {
+    router.replace({ name: 'activities' })
+  }
 })
 
 if (import.meta.hot) import.meta.hot.dispose(stopWatching)

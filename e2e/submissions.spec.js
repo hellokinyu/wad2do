@@ -119,7 +119,10 @@ for (const width of [1280, 375]) {
       .getByTestId('submission-description')
       .fill(free ? '' : '  Try a weekend art session.  ')
     await page.getByTestId('submission-website').fill(free ? '' : 'https://example.com/studio')
-    await expect(page.locator('body')).toHaveJSProperty('scrollWidth', width)
+    await expect(page.locator('body')).toHaveJSProperty(
+      'scrollWidth',
+      await page.evaluate(() => document.documentElement.clientWidth),
+    )
     await page.getByTestId('submission-submit').click()
     await expect(page.getByTestId('submission-success')).toBeVisible()
     await expect(page.getByTestId('submission-form')).toHaveCount(0)
@@ -274,7 +277,10 @@ for (const width of [1280, 375]) {
     await expect(page.getByTestId('place-selected')).toContainText('Google studio two')
     await expect(page.getByTestId('submission-name')).toHaveValue('  Weekend art studio  ')
     await expect(page.getByTestId('submission-address')).toHaveValue('  10 Orchard Road  ')
-    await expect(page.locator('body')).toHaveJSProperty('scrollWidth', width)
+    await expect(page.locator('body')).toHaveJSProperty(
+      'scrollWidth',
+      await page.evaluate(() => document.documentElement.clientWidth),
+    )
     await page.getByTestId('submission-submit').click()
     await expect(page.getByTestId('submission-success')).toBeVisible()
     expect(state.saved[0]).toMatchObject({

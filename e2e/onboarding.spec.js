@@ -27,6 +27,7 @@ test('map selection saves both fields and reloads without redundant station inpu
     {
       owner: 'eq.' + mockUser.id,
       body: {
+        display_name: 'Demo User',
         interests: ['Food', 'Cafes', 'Outdoors'],
         budget: '20-50',
         home_area: 'Tampines',
@@ -49,6 +50,7 @@ test('Skip Location clears both saved fields and shows Not set in the summary', 
   const state = await mockPreferences(page, { home_station_id: 'tampines', home_area: 'Tampines' })
   await openLocationStep(page)
   await page.getByTestId('onboarding-skip').click()
+  await page.getByTestId('onboarding-next').click()
   await page.getByTestId('onboarding-next').click()
   await expect(page.getByTestId('summary-area')).toHaveText('Not set')
   expect(state.saves[0].body).toMatchObject({ home_station_id: null, home_area: null })
@@ -149,6 +151,7 @@ test('failed onboarding save preserves the selected station for retry', async ({
   await pickMapStation(page, 'bishan')
   await finishOnboarding(page)
   await expect(page.getByTestId('onboarding-error')).toBeVisible()
+  await page.getByTestId('onboarding-back').click()
   await page.getByTestId('onboarding-back').click()
   await expect(page.getByTestId('mrt-marker-bishan')).toHaveAttribute('aria-pressed', 'true')
   state.failSave = false

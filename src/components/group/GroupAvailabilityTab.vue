@@ -15,9 +15,39 @@
     </div>
 
     <div v-else>
+      <!-- CELEBRATION POPUP: shown once per group when everyone has responded and a common time exists -->
+      <div v-if="showPopup" class="popup-backdrop" data-testid="celebration-popup" @click.self="closePopup">
+        <div class="popup-card">
+          <div class="popup-emoji">🎉</div>
+          <h3 class="h5">Everyone has responded!</h3>
+          <p class="mb-3">
+            Found {{ fullWindows.length }} time window{{ fullWindows.length === 1 ? '' : 's' }}
+            where all {{ members.length }} of you are free.
+          </p>
+          <button class="btn btn-success" data-testid="popup-view" @click="viewHeatmap">See the heatmap</button>
+          <button class="btn btn-link text-muted" @click="closePopup">Close</button>
+        </div>
+      </div>
+
       <!-- CHOSEN SLOT: shown above the grid once the group has confirmed a time -->
       <div v-if="group.chosen_start" class="alert alert-success" data-testid="chosen-slot">
         Chosen time: <strong>{{ chosenLabel }}</strong>
+      </div>
+
+      <!-- ALL-FREE BANNER: lists every window where all members are free; click one to select it -->
+      <div v-if="everyoneCanMeet" class="alert alert-success celebrate" data-testid="all-free-banner">
+        <strong>🎉 Everyone is free at these times:</strong>
+        <div class="d-flex flex-wrap gap-2 mt-2">
+          <button
+            v-for="w in fullWindows"
+            :key="w.startKey"
+            class="btn btn-sm btn-warning"
+            @click="useWindow(w)"
+          >
+            {{ w.label }}
+          </button>
+        </div>
+        <div class="small mt-2">Tap a time to select it, then press "Confirm time".</div>
       </div>
 
       <!-- MODE TOGGLE: "My availability" / "Group heatmap" -->
@@ -44,8 +74,8 @@
       <div v-if="noOverlap" class="alert alert-warning" data-testid="no-overlap">
         <strong>No time works for everyone.</strong>
         <span v-if="bestSlot">
-          Best slot: {{ formatDay(bestSlot.day) }} {{ formatTime(bestSlot.time) }}
-          ({{ bestSlot.count }} of {{ members.length }} free).
+          Best slots (⭐): {{ bestSlot.count }} of {{ members.length }} free, e.g.
+          {{ formatDay(bestSlot.day) }} {{ formatTime(bestSlot.time) }}.
         </span>
         <button class="btn btn-sm btn-outline-dark ms-2" data-testid="extend-range" @click="extendDateRange">
           Extend date range
@@ -98,18 +128,19 @@
               @mousedown.prevent="onCellDown(day, t)"
               @mouseenter="onCellEnter(day, t)"
             >
-              {{ slotSticker(day, t) }}
+              {{ slotLabel(day, t) }}
             </div>
           </div>
         </div>
       </div>
       <p v-if="saving" class="text-muted small mt-1">Saving...</p>
 
-      <!-- LEGEND: explains the heatmap colours -->
-      <div v-if="mode === 'heatmap'" class="small text-muted d-flex align-items-center gap-2 mt-2">
-        <span>Nobody free</span>
-        <span class="legend-bar"></span>
-        <span>Everyone free 🎉</span>
+      <!-- LEGEND: one swatch per shade so the colours are easy to read -->
+      <div v-if="mode === 'heatmap'" class="small text-muted d-flex flex-wrap align-items-center gap-2 mt-2">
+        <span>Nobody</span>
+        <span v-for="c in shadeColors" :key="c" class="swatch" :style="{ backgroundColor: c }"></span>
+        <span>Everyone 🎉</span>
+        <span class="ms-2">Number = people free · ⭐ = best slot</span>
       </div>
 
       <!-- HEATMAP: hover/tap info, e.g. "4 of 5 free" and who is missing -->
@@ -191,10 +222,15 @@ const selectedDay = ref(null) // which day is shown on phones
 const hoveredKey = ref(null) // slot being hovered/tapped in the heatmap
 const pickStart = ref(null) // first slot picked on the heatmap
 const pickEnd = ref(null) // second slot picked on the heatmap
+const showPopup = ref(false) // celebration popup
 
 // dragging state for "tap or drag to mark free slots"
 const isDragging = ref(false)
 const paintValue = ref(true) // true = marking free, false = unmarking
+
+// ---------- heatmap shades ----------
+// 6 clearly different colours: index 0 = nobody free ... index 5 = everyone free
+const shadeColors = ['#ffffff', '#f3f9c8', '#c5e8a5', '#7ccf8a', '#2f9e6a', '#0b5d3b']
 
 // ---------- slot keys and time helpers ----------
 // A slot is identified by a string like "2026-10-17T14:00" (Singapore time).
@@ -290,26 +326,22 @@ const freeBySlot = computed(() => {
 function freeCount(day, t) {
   return (freeBySlot.value[makeKey(day, t)] || []).length
 }
-// Darker colour = more members free. Slots with at least 1 person get a minimum tint (0.2)
-// so a single free person is still visible, instead of looking empty.
+// True when ALL members are free at this slot
+function isEveryoneFree(day, t) {
+  return members.value.length > 0 && freeCount(day, t) === members.value.length
+}
+// Heatmap colour: the more members free, the darker the shade (5 steps, easy to tell apart)
 function cellStyle(day, t) {
   if (mode.value !== 'heatmap') return {}
   const n = freeCount(day, t)
   if (n === 0) return {}
-  const ratio = n / (members.value.length || 1)
-  return { backgroundColor: 'rgba(25, 135, 84, ' + (0.2 + 0.8 * ratio) + ')' }
-}
-// True when ALL members are free at this slot (used for the glow and the party sticker)
-function isEveryoneFree(day, t) {
-  return members.value.length > 0 && freeCount(day, t) === members.value.length
-}
-// Which emoji sticker (if any) to show inside a slot
-function slotSticker(day, t) {
-  if (mode.value !== 'heatmap') return ''
-  if (isEveryoneFree(day, t)) return '🎉'
-  // when nobody fully overlaps, mark the best slot with a star
-  if (noOverlap.value && bestSlot.value && bestSlot.value.day === day && bestSlot.value.time === t) return '⭐'
-  return ''
+  const total = members.value.length || 1
+  // everyone free = darkest shade; otherwise split the rest into 4 steps
+  const level = n === total ? 5 : Math.max(1, Math.min(4, Math.ceil((n / total) * 4)))
+  return {
+    backgroundColor: shadeColors[level],
+    color: level >= 4 ? '#fff' : '#212529', // white text on dark shades
+  }
 }
 // Info for the hovered slot: "4 of 5 free" + who is missing
 const inspect = computed(() => {
@@ -341,6 +373,52 @@ const bestSlot = computed(() => {
 const noOverlap = computed(
   () => allResponded.value && (!bestSlot.value || bestSlot.value.count < members.value.length)
 )
+// ⭐ goes on EVERY slot tied for the most people free (only when nobody overlaps fully)
+function isBestSlot(day, t) {
+  return noOverlap.value && bestSlot.value && freeCount(day, t) === bestSlot.value.count
+}
+
+// What to print inside a heatmap cell: 🎉 everyone, ⭐ best slot, otherwise the number of people free
+function slotLabel(day, t) {
+  if (mode.value !== 'heatmap') return ''
+  const n = freeCount(day, t)
+  if (n === 0) return ''
+  if (isEveryoneFree(day, t)) return '🎉'
+  if (isBestSlot(day, t)) return '⭐'
+  return n
+}
+
+// ---------- computed: windows where EVERYONE is free ----------
+// Joins consecutive all-free slots into one window, e.g. "Sat 18 Oct, 2pm to 5pm"
+function makeWindow(day, startT, lastT) {
+  const lastKey = makeKey(day, lastT)
+  const endT = nextSlotKey(lastKey).split('T')[1]
+  return {
+    startKey: makeKey(day, startT),
+    endKey: lastKey,
+    label: formatDay(day) + ', ' + formatTime(startT) + ' to ' + formatTime(endT),
+  }
+}
+const fullWindows = computed(() => {
+  const out = []
+  for (const day of days.value) {
+    let start = null
+    let last = null
+    for (const t of times.value) {
+      if (isEveryoneFree(day, t)) {
+        if (!start) start = t
+        last = t
+      } else if (start) {
+        out.push(makeWindow(day, start, last))
+        start = null
+      }
+    }
+    if (start) out.push(makeWindow(day, start, last))
+  }
+  return out
+})
+// Everyone has answered AND at least one common window exists
+const everyoneCanMeet = computed(() => allResponded.value && fullWindows.value.length > 0)
 
 // ---------- computed: labels ----------
 const chosenLabel = computed(() =>
@@ -355,6 +433,38 @@ function isInPick(key) {
   if (!pickStart.value) return false
   const end = pickEnd.value || pickStart.value
   return key >= pickStart.value && key <= end
+}
+
+// ---------- celebration popup (shown once per group, remembered with localStorage) ----------
+function popupStorageKey() {
+  return 'avail-popup-seen-' + groupId.value
+}
+function maybeShowPopup() {
+  if (!everyoneCanMeet.value) return
+  try {
+    if (!localStorage.getItem(popupStorageKey())) showPopup.value = true
+  } catch (err) {
+    // if localStorage is unavailable, just skip the popup
+  }
+}
+function closePopup() {
+  showPopup.value = false
+  try {
+    localStorage.setItem(popupStorageKey(), '1')
+  } catch (err) {
+    // ignore
+  }
+}
+function viewHeatmap() {
+  mode.value = 'heatmap'
+  closePopup()
+}
+// Clicking a window chip pre-selects that range on the heatmap
+function useWindow(w) {
+  mode.value = 'heatmap'
+  pickStart.value = w.startKey
+  pickEnd.value = w.endKey === w.startKey ? null : w.endKey
+  selectedDay.value = w.startKey.split('T')[0]
 }
 
 // ---------- loading data from Supabase ----------
@@ -397,10 +507,7 @@ async function loadAll() {
       .select('user_id, slot_start')
       .eq('group_id', groupId.value)
     if (e4) throw e4
-    // Skip slots outside the date range (e.g. after the dates were changed in Settings)
-    allSlots.value = av
-      .map((r) => ({ user_id: r.user_id, key: fromDb(r.slot_start) }))
-      .filter((s) => days.value.includes(s.key.split('T')[0]))
+    allSlots.value = av.map((r) => ({ user_id: r.user_id, key: fromDb(r.slot_start) }))
 
     // 4. split out my own slots so the "My availability" grid is pre-filled
     const mine = {}
@@ -410,6 +517,7 @@ async function loadAll() {
     mySlots.value = mine
 
     selectedDay.value = days.value[0]
+    maybeShowPopup()
   } catch (err) {
     errorMsg.value = "Couldn't load availability"
   } finally {
@@ -475,6 +583,7 @@ async function saveMySlots() {
     .filter((r) => r.user_id !== userId.value)
     .concat(keys.map((k) => ({ user_id: userId.value, key: k })))
   saving.value = false
+  maybeShowPopup() // you might have been the last person to respond
 }
 
 // ---------- picking a slot on the heatmap ----------
@@ -526,12 +635,11 @@ async function extendDateRange() {
 async function onPlan() {
   planning.value = true
   try {
-    // Delete the group's old plan, so the Itinerary tab builds a fresh one for the new time
-    const { error } = await supabase.from('itineraries').delete().eq('group_id', groupId.value)
-    if (error) throw error
+    // TODO: call your Plan function here (votes + chosen slot + budget + OneMap travel time)
+    // and save the result to the itineraries table.
+    await new Promise((resolve) => setTimeout(resolve, 500)) // placeholder, remove later
     router.push('/groups/' + groupId.value + '/itinerary') // open the Itinerary tab
   } catch (err) {
-    console.log(err)
     errorMsg.value = "Couldn't build the plan"
   } finally {
     planning.value = false
@@ -590,13 +698,14 @@ onMounted(loadAll)
 .slot {
   height: 1.5rem;
   margin: 1px;
-  border: 1px solid #eef0f2;
+  border: 1px solid #dfe3e6;
   border-radius: 6px;
   background-color: #fff;
-  display: flex; /* centres the emoji sticker */
+  display: flex; /* centres the number / emoji */
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 600;
   line-height: 1;
   cursor: pointer;
   transition: background-color 0.25s ease, transform 0.1s ease, box-shadow 0.1s ease;
@@ -620,8 +729,9 @@ onMounted(loadAll)
   100% { transform: scale(1); }
 }
 
-/* Everyone free: gentle golden glow that pulses */
+/* Everyone free: thick gold line on the left (joins up into one long line for consecutive slots) + a pulsing glow */
 .slot-all {
+  border-left: 4px solid #ffc107;
   animation: glow 1.8s ease-in-out infinite;
 }
 @keyframes glow {
@@ -631,16 +741,55 @@ onMounted(loadAll)
 
 /* The range being picked */
 .slot-picked {
-  outline: 2px solid #0d6efd;
+  outline: 3px solid #0d6efd;
   outline-offset: -2px;
 }
 
-/* Legend colour bar (same green as the heatmap, light to dark) */
-.legend-bar {
-  width: 8rem;
-  height: 0.6rem;
-  border-radius: 99px;
-  background: linear-gradient(to right, rgba(25, 135, 84, 0.2), rgba(25, 135, 84, 1));
+/* Legend swatches (same colours as the heatmap) */
+.swatch {
+  width: 1.4rem;
+  height: 0.9rem;
+  border-radius: 4px;
+  border: 1px solid #dfe3e6;
+}
+
+/* Banner that bounces in when everyone is free */
+.celebrate {
+  animation: bounce-in 0.5s ease;
+}
+
+/* Celebration popup */
+.popup-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fade-in 0.2s ease;
+}
+.popup-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 1.5rem 2rem;
+  text-align: center;
+  max-width: 22rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  animation: bounce-in 0.5s ease;
+}
+.popup-emoji {
+  font-size: 3rem;
+  animation: wiggle 1s ease-in-out infinite;
+}
+@keyframes bounce-in {
+  0%   { transform: scale(0.5); opacity: 0; }
+  70%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-8deg); }
+  50%      { transform: rotate(8deg); }
 }
 
 /* Accessibility: turn animations off for people who prefer reduced motion */
@@ -648,7 +797,11 @@ onMounted(loadAll)
   .slot,
   .slot-free,
   .slot-all,
-  .grid-scroll {
+  .grid-scroll,
+  .celebrate,
+  .popup-backdrop,
+  .popup-card,
+  .popup-emoji {
     animation: none;
     transition: none;
   }

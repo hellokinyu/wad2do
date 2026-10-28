@@ -103,7 +103,8 @@ test('25% map fills the Profile panel after resizing and keeps stations aligned 
       })
       .toBeLessThanOrEqual(1)
     const geometry = await measureGeometry()
-    expect(geometry.width).toBe(Math.max(900, geometry.viewportWidth))
+    // clientWidth is rounded to an integer; getBoundingClientRect preserves subpixels.
+    expect(Math.abs(geometry.width - Math.max(900, geometry.viewportWidth))).toBeLessThanOrEqual(1)
     expect(geometry.imageWidth).toBe(geometry.width)
     expect(geometry.imageHeight).toBeCloseTo(geometry.height, 1)
     expect(geometry.xError).toBeLessThan(0.1)

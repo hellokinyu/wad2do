@@ -1,7 +1,7 @@
 import { signInMockUser, mockUser } from './auth'
 
-export async function mockPreferences(page, values = {}) {
-  await signInMockUser(page)
+export async function mockPreferences(page, values = {}, userOverrides = {}) {
+  const auth = await signInMockUser(page, userOverrides)
   const state = {
     profile: {
       id: mockUser.id,
@@ -17,6 +17,7 @@ export async function mockPreferences(page, values = {}) {
     failSave: false,
     failLoad: false,
     saveGate: null,
+    auth,
   }
   await page.route('**/rest/v1/**', async (route) => {
     const request = route.request()
@@ -46,6 +47,7 @@ export async function openLocationStep(page) {
 }
 
 export async function finishOnboarding(page) {
+  await page.getByTestId('onboarding-next').click()
   await page.getByTestId('onboarding-next').click()
   await page.getByTestId('onboarding-next').click()
 }

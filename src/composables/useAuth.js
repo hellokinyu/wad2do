@@ -1,9 +1,16 @@
 import { computed, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { findProfileAnimal, hasProfileIdentity } from '@/data/profileAnimals'
 
 // These refs are shared by every component that calls useAuth().
 const session = ref(null)
 const user = computed(() => session.value?.user ?? null)
+const avatarAnimal = computed(
+  () => findProfileAnimal(user.value?.user_metadata?.avatar_animal)?.id || '',
+)
+const needsOnboarding = computed(
+  () => !!user.value && !hasProfileIdentity(user.value.user_metadata),
+)
 const authError = ref('')
 const isAdmin = ref(false)
 const adminError = ref('')
@@ -85,5 +92,14 @@ function initializeAuth() {
 }
 
 export function useAuth() {
-  return { user, authError, isAdmin, adminError, initializeAuth, loadAdminStatus }
+  return {
+    user,
+    avatarAnimal,
+    needsOnboarding,
+    authError,
+    isAdmin,
+    adminError,
+    initializeAuth,
+    loadAdminStatus,
+  }
 }

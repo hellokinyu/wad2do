@@ -36,8 +36,8 @@ configured in Supabase still apply.
 Signup success with no session means the user must check their email; it does not
 grant access to protected pages. Signup with an immediate session goes directly
 to `/onboarding`; email confirmation goes there once a session is established.
-Ordinary login redirects to `/`, where signed-in users see activity and group
-links. No query parameter or extra redirect helper is needed.
+Ordinary login redirects to `/activities`. Signed-in visits to `/`, `/login`, and
+`/signup` also go to Activities once the user's required identity is complete.
 
 The pages use the same basic patterns as the Week 6 course examples:
 `<script setup>`, `ref`, and `async/await` with `try/catch/finally`. Signup uses a direct
@@ -60,6 +60,28 @@ The admin route also checks `profiles.is_admin`, and the navbar shows Admin only
 for admin accounts. Roles are checked on navigation. Frontend guards control
 navigation; database permissions and review functions must also be installed
 using the [admin setup instructions](admin-review.md).
+
+## Required name and animal avatar
+
+Onboarding has five steps. The final step requires a non-blank display name of
+at most 40 characters and one of Dog, Cat, Duck, Goldfish, or Panda. This step
+cannot be skipped. The earlier preference steps can still be skipped.
+
+Finishing first saves `display_name` and the preferences to `public.profiles`.
+Only after that succeeds does it save `display_name` and `avatar_animal` to the
+current Supabase Auth user's metadata with `auth.updateUser`. This uses existing
+Supabase Auth storage; no new database column or migration is required. If either
+save fails, the user stays on onboarding and can retry with the same answers.
+
+The router requires a valid name and one of the five animal IDs in the restored
+user's metadata before opening other pages. This includes existing accounts that
+have not chosen an avatar yet. Profile names already saved are prefilled during
+onboarding. This is a navigation requirement, not a database authorization rule.
+
+The navbar and profile page read the animal from the shared auth session, so
+changes appear immediately and persist after a refresh. Users can change their
+animal from **Profile > Change picture** and can continue editing their name
+from **Edit name**. Onboarding finishes at Activities.
 
 ## Profile creation
 
