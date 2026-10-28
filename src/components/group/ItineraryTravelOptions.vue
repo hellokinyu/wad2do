@@ -57,7 +57,9 @@ function choose(mode) {
 
 // 150 -> '2 h 30 min'
 function formatMinutes(minutes) {
-  return minutes >= 60 ? Math.floor(minutes / 60) + ' h ' + (minutes % 60) + ' min' : minutes + ' min'
+  return minutes >= 60
+    ? Math.floor(minutes / 60) + ' h ' + (minutes % 60) + ' min'
+    : minutes + ' min'
 }
 
 // 2694 -> '2.7 km', 450 -> '450 m'
@@ -93,7 +95,7 @@ function formatDistance(meters) {
             {{ tab.option?.available ? formatMinutes(tab.option.durationMinutes) : '–' }}
           </button>
         </div>
-                <div v-if="isPublic && editable" class="btn-group btn-group-sm mb-2">
+        <div v-if="isPublic && editable" class="btn-group btn-group-sm mb-2">
           <button
             v-for="mode in PUBLIC_MODES"
             :key="mode"

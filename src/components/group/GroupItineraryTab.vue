@@ -175,18 +175,18 @@ function toTime(totalMinutes) {
 // ----- Edit mode -----
 const isEditing = ref(false)
 let savedCopy = null // the plan as it was before editing, for Discard
-const TRAVEL_MINUTES = 30 // fake travel time between stops. Later: OneMap.
 const dayStart = ref('10:00') // when the first stop begins
 
-// Give every stop a new start and end, in order, keeping each one's duration
+// Give every stop a new start and end, in order, keeping each one's duration.
+// The gap after each stop is the real travel time of the chosen (or fastest) mode.
 function recalculateTimes() {
   let current = toMinutes(dayStart.value)
-  for (const stop of itinerary.value.stops) {
+  itinerary.value.stops.forEach((stop, index) => {
     const duration = toMinutes(stop.end) - toMinutes(stop.start)
     stop.start = toTime(current)
     stop.end = toTime(current + duration)
-    current = current + duration + TRAVEL_MINUTES
-  }
+    current = current + duration + travelMinutesAfter(index)
+  })
 }
 
 function startEditing() {
@@ -216,6 +216,7 @@ async function saveChanges() {
       end: s.end,
       cost: s.cost,
       reason: s.reason,
+      travel_mode: s.travel_mode || null,
     }))
 
     const { error } = await supabase.from('itineraries').upsert(
@@ -300,6 +301,7 @@ function useSavedPlan(saved) {
   })
   const date = group.value?.chosen_start ? toSgKey(group.value.chosen_start).slice(0, 10) : ''
   itinerary.value = { date, total_cost: saved.total_cost, stops }
+  dayStart.value = stops[0]?.start || dayStart.value
 }
 
 // Load this group's votes, add them up per activity, and keep the ones with more ups than downs
@@ -377,6 +379,7 @@ function buildPlan() {
   }
 
   itinerary.value = { date: start.slice(0, 10), total_cost: spent, stops }
+  dayStart.value = stops[0]?.start || dayStart.value
 }
 
 // Runs when the tab opens: the group first, then the weather (which needs the date)
@@ -416,6 +419,27 @@ function legAfter(index) {
   return travelByLeg.value[legKey(stops[index], stops[index + 1])] || { loading: true }
 }
 
+// Minutes from stop `index` to the next one: the chosen mode's real time,
+// or the fastest mode's, or 30 minutes while we don't know yet
+function travelMinutesAfter(index) {
+  const stops = itinerary.value.stops
+  if (index >= stops.length - 1) return 0
+  const options = travelByLeg.value[legKey(stops[index], stops[index + 1])]?.options
+  const available = (options || []).filter((option) => option.available)
+  if (available.length === 0) return TRAVEL_MINUTES
+  const chosen = available.find((option) => option.mode === stops[index].travel_mode)
+  const fastest = available.reduce((best, option) =>
+    option.durationMinutes < best.durationMinutes ? option : best,
+  )
+  return (chosen || fastest).durationMinutes
+}
+
+// A tab was clicked in edit mode: remember the choice and move the later stops
+function chooseTravelMode(index, mode) {
+  itinerary.value.stops[index].travel_mode = mode
+  recalculateTimes()
+}
+
 // What the Edge Function needs to find a stop: saved coordinates, or its address and name
 function placeOf(stop) {
   if (stop.lat != null && stop.lng != null) return { lat: stop.lat, lng: stop.lng }
@@ -424,6 +448,7 @@ function placeOf(stop) {
 
 // Load the travel options for every pair of stops, one pair at a time
 async function loadTravel() {
+  if (!itinerary.value) return // no plan, so nothing to travel between
   const stops = itinerary.value?.stops || []
   for (let i = 0; i < stops.length - 1; i++) {
     const from = stops[i]
@@ -438,10 +463,11 @@ async function loadTravel() {
       travelByLeg.value[key] = { error: error.message }
     }
   }
+  recalculateTimes() // now that we know the real travel times, move the stops to match
 }
 
-// Reload whenever the stops or their times change (new plan, move, remove, swap, start time)
-watch(() => itinerary.value?.stops.map((s) => s.activity_id + '@' + s.end).join(','), loadTravel)
+// Reload travel when the stops or their order change (new plan, move, remove, swap)
+watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), loadTravel)
 </script>
 
 <template>
@@ -624,7 +650,12 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id + '@' + s.end).join(
             </div>
           </li>
           <li v-if="index < displayStops.length - 1">
-            <ItineraryTravelOptions :leg="legAfter(index)" />
+            <ItineraryTravelOptions
+              :leg="legAfter(index)"
+              :mode="itinerary.stops[index].travel_mode"
+              :editable="isEditing"
+              @choose="chooseTravelMode(index, $event)"
+            />
           </li>
         </template>
       </ol>
