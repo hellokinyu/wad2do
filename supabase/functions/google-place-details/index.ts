@@ -1,6 +1,6 @@
 // Details and venue search share the existing server-only allowance.
 export const GOOGLE_FIELD_MASK =
-  'rating,userRatingCount,currentOpeningHours,regularOpeningHours,attributions'
+  'rating,userRatingCount,currentOpeningHours,regularOpeningHours,attributions,location,formattedAddress,displayName'
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':

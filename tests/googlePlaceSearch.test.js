@@ -14,6 +14,8 @@ const env = {
 }
 const venue = {
   id: 'ChIJ_example',
+  types: ['establishment', 'point_of_interest'],
+  location: { latitude: 1.29, longitude: 103.85 },
   displayName: { text: 'Studio' },
   formattedAddress: 'Singapore 012345',
   addressComponents: [{ types: ['country'], shortText: 'SG' }],
@@ -98,6 +100,10 @@ test('rejects malformed, oversized and caller-controlled input before reserving 
     { name: 'Studio', address: 'Road', fieldMask: '*' },
     { url: 'https://evil.example' },
     { placeId: 'ChIJ_example' },
+    { query: '' },
+    { query: 123456 },
+    { query: 'x'.repeat(501) },
+    { query: 'Funan', fieldMask: '*' },
     { name: 'x'.repeat(5000), address: 'Road' },
   ]
   for (const body of invalid) {
@@ -139,6 +145,7 @@ test('reserves first, preserves leading zero and uses a fixed endpoint, mask and
       id: venue.id,
       name: 'Studio',
       address: 'Singapore 012345',
+      location: venue.location,
       attributions: venue.attributions,
     },
   ])
@@ -199,5 +206,26 @@ test('timeout and upstream failures are safe and never refund reserved attempts'
     assert.ok(response.status >= 500)
     assert.deepEqual(await response.json(), { error: 'unavailable' })
     assert.equal(calls.length, 3)
+  }
+})
+
+test('single location query is independent of the activity title', async () => {
+  const { handler, calls } = setup()
+  const response = await handler(request({ query: 'Funan' }))
+  assert.equal(response.status, 200)
+  assert.equal(JSON.parse(calls[2].body).textQuery, 'Funan, Singapore')
+})
+
+test('broad areas, missing pins and malformed coordinates cannot masquerade as precise venues', async () => {
+  for (const invalid of [
+    { types: ['postal_code'] },
+    { types: ['locality', 'political'] },
+    { types: null },
+    { location: null },
+    { location: { latitude: 100, longitude: 103.85 } },
+    { location: { latitude: '1.29', longitude: 103.85 } },
+  ]) {
+    const { handler } = setup({ data: { places: [{ ...venue, ...invalid }] } })
+    assert.deepEqual(await (await handler(request())).json(), { candidates: [] })
   }
 })

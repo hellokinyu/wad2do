@@ -97,6 +97,7 @@ async function fillActivity(page) {
   await page.getByTestId('submission-setting').selectOption('indoor')
   await page.getByTestId('submission-address').fill('  10 Orchard Road  ')
   await page.getByTestId('submission-area').selectOption('Orchard')
+  await page.getByTestId('submission-manual-location').check()
 }
 
 for (const width of [1280, 375]) {
@@ -267,15 +268,12 @@ for (const width of [1280, 375]) {
     const lookup = await mockPlaceSearch(page)
     await page.goto('/activities/submit')
     await fillActivity(page)
-    await page.getByTestId('place-postal-code').fill('012345')
     await page.getByTestId('place-find').focus()
     await page.keyboard.press('Enter')
     await expect(page.getByTestId('place-candidate')).toHaveCount(2)
     await expect(page.getByTestId('place-link')).toHaveCount(0)
     expect(state.attempts).toHaveLength(0)
-    expect(lookup.requests).toEqual([
-      { name: 'Weekend art studio', address: '10 Orchard Road', postalCode: '012345' },
-    ])
+    expect(lookup.requests).toEqual([{ query: '10 Orchard Road' }])
     await expect(page.getByText('Google Maps', { exact: true })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Example provider' })).toHaveAttribute(
       'href',
@@ -294,7 +292,7 @@ for (const width of [1280, 375]) {
     await expect(page.getByTestId('submission-success')).toBeVisible()
     expect(state.saved[0]).toMatchObject({
       google_place_id: placeCandidates[1].id,
-      postal_code: '012345',
+      postal_code: null,
       name: 'Weekend art studio',
     })
     expect(state.saved[0].opening_hours).toEqual({})
@@ -303,17 +301,27 @@ for (const width of [1280, 375]) {
   })
 }
 
-test('invalid postal code cannot trigger a lookup or a submission', async ({ page }) => {
+test('a typed location cannot submit until a venue or manual review is explicitly chosen', async ({
+  page,
+}) => {
   const state = await mockBackend(page)
-  const lookup = await mockPlaceSearch(page)
+  await mockPlaceSearch(page)
   await page.goto('/activities/submit')
   await fillActivity(page)
-  await page.getByTestId('place-postal-code').fill('12345x')
-  await page.getByTestId('place-find').click()
-  await expect(page.getByTestId('place-error')).toContainText('six-digit')
+  await page.getByTestId('submission-manual-location').uncheck()
   await page.getByTestId('submission-submit').click()
-  expect(lookup.requests).toHaveLength(0)
+  await expect(page.getByTestId('submission-location-error')).toContainText('Choose a location')
   expect(state.attempts).toHaveLength(0)
+  await page.getByTestId('place-find').click()
+  await page.getByTestId('place-candidate').first().click()
+  await expect(page.getByTestId('place-map')).toHaveAttribute('src', /q=1.2914%2C103.8501/)
+  await expect(page.getByTestId('submission-manual-location')).not.toBeChecked()
+  await page.getByTestId('submission-name').fill('A better activity title')
+  await expect(page.getByTestId('place-selected')).toContainText('Google studio one')
+  await page.getByTestId('submission-submit').click()
+  await expect(page.getByTestId('submission-success')).toBeVisible()
+  expect(state.saved[0].google_place_id).toBe(placeCandidates[0].id)
+  expect(state.saved[0]).not.toHaveProperty('location')
 })
 
 for (const options of [
@@ -356,27 +364,22 @@ test('a stalled lookup times out and leaves the complete form usable', async ({ 
   await expect(page.getByTestId('submission-success')).toBeVisible()
 })
 
-test('editing each location input clears selection, and Clear never submits', async ({ page }) => {
+test('editing the venue clears selection, and Clear never submits', async ({ page }) => {
   const state = await mockBackend(page)
   await mockPlaceSearch(page)
   await page.goto('/activities/submit')
   await fillActivity(page)
-  for (const [field, value] of [
-    ['submission-name', 'Another studio'],
-    ['submission-address', '20 Orchard Road'],
-    ['place-postal-code', '012346'],
-  ]) {
-    await page.getByTestId('place-find').click()
-    await page.getByTestId('place-candidate').first().click()
-    await page.getByTestId(field).fill(value)
-    await expect(page.getByTestId('place-link')).toHaveCount(0)
-    await expect(page.getByTestId('place-candidate')).toHaveCount(0)
-  }
+  await page.getByTestId('place-find').click()
+  await page.getByTestId('place-candidate').first().click()
+  await page.getByTestId('submission-address').fill('20 Orchard Road')
+  await expect(page.getByTestId('place-link')).toHaveCount(0)
+  await expect(page.getByTestId('place-candidate')).toHaveCount(0)
   await page.getByTestId('place-find').click()
   await page.getByTestId('place-candidate').first().click()
   await page.getByTestId('place-clear').click()
   await expect(page.getByTestId('place-link')).toHaveCount(0)
   expect(state.attempts).toHaveLength(0)
+  await page.getByTestId('submission-manual-location').check()
   await page.getByTestId('submission-submit').click()
   await expect(page.getByTestId('submission-success')).toBeVisible()
   expect(state.saved[0].google_place_id).toBeNull()
@@ -396,7 +399,7 @@ test('old requests cannot restore results after input changes, newer searches or
   const first = page.waitForRequest('**/functions/v1/google-place-search')
   await page.getByTestId('place-find').click()
   await first
-  await page.getByTestId('submission-name').fill('New studio')
+  await page.getByTestId('submission-address').fill('New studio')
   const second = page.waitForRequest('**/functions/v1/google-place-search')
   await page.getByTestId('place-find').click()
   await second
@@ -1059,4 +1062,45 @@ test('a duplicate insert is recovered only when the exact owned submission can b
   await page.getByTestId('submission-submit').click()
   await expect(page.getByTestId('submission-recovered')).toContainText('were not submitted')
   expect(state.saved).toHaveLength(1)
+})
+
+test('a stalled lookup error body times out and permits retry', async ({ page }) => {
+  await page.clock.install()
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window)
+    let stallFirst = true
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url.includes('/functions/v1/google-place-search') && stallFirst) {
+        stallFirst = false
+        return Promise.resolve(
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                window.__googleErrorBodyStarted = true
+                init?.signal?.addEventListener(
+                  'abort',
+                  () => controller.error(init.signal.reason),
+                  { once: true },
+                )
+              },
+            }),
+            { status: 429, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+      return originalFetch(input, init)
+    }
+  })
+  await mockBackend(page)
+  await mockPlaceSearch(page)
+  await page.goto('/activities/submit')
+  await fillActivity(page)
+  await page.getByTestId('place-find').click()
+  await expect.poll(() => page.evaluate(() => window.__googleErrorBodyStarted)).toBe(true)
+  await page.clock.fastForward(12001)
+  await expect(page.getByTestId('place-error')).toBeVisible()
+  await expect(page.getByTestId('place-find')).toBeEnabled()
+  await page.getByTestId('place-find').click()
+  await expect(page.getByTestId('place-candidate')).toHaveCount(2)
 })
