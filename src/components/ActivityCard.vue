@@ -127,7 +127,11 @@ watch(
     <div class="card-body d-flex flex-column">
       <div class="d-flex align-items-start gap-2">
         <h2 class="activity-name">
-          <RouterLink :to="`/activities/${activity.id}`" data-testid="activity-name-link">
+          <RouterLink
+            :to="`/activities/${activity.id}`"
+            :title="activity.name"
+            data-testid="activity-name-link"
+          >
             {{ activity.name }}
           </RouterLink>
         </h2>
@@ -138,27 +142,29 @@ watch(
       </p>
       <p
         v-if="activity.description?.trim()"
-        class="text-secondary small mb-2"
+        class="activity-description text-secondary small mb-2"
         data-testid="activity-description"
       >
         {{ activity.description }}
       </p>
 
-      <p class="text-secondary small mb-1">
-        {{ activity.area || 'Area unavailable' }}
-      </p>
+      <div class="activity-metadata mt-auto pt-2">
+        <p class="text-secondary small mb-1">
+          {{ activity.area || 'Area unavailable' }}
+        </p>
 
-      <p class="text-secondary small mb-3">
-        <span v-if="showSetting">
-          <span
-            v-if="activity.indoor !== null && activity.indoor !== undefined"
-            aria-hidden="true"
-            >{{ activity.indoor ? '⌂' : '☀' }}</span
-          >
-          {{ setting }} ·
-        </span>
-        {{ duration }}
-      </p>
+        <p class="text-secondary small mb-0">
+          <span v-if="showSetting">
+            <span
+              v-if="activity.indoor !== null && activity.indoor !== undefined"
+              aria-hidden="true"
+              >{{ activity.indoor ? '⌂' : '☀' }}</span
+            >
+            {{ setting }} ·
+          </span>
+          {{ duration }}
+        </p>
+      </div>
     </div>
   </article>
 </template>
@@ -220,7 +226,20 @@ watch(
   transform: scale(1.03);
 }
 
+.activity-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .activity-name {
+  height: 2.6em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
   flex: 1;
   margin-bottom: 8px;
   font-size: 1.2rem;
