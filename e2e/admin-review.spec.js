@@ -135,6 +135,27 @@ async function mockBackend(page, admin = true) {
       }
       return replyAction(route, submission)
     }
+    if (endpoint === 'edit_approved_submission' || endpoint === 'delete_submission') {
+      const body = request.postDataJSON()
+      state.requests.push({ action: endpoint, body })
+      if (state.actionError || !state.admin)
+        return route.fulfill({ status: 403, json: { message: 'Admin action denied' } })
+      const submission = state.submissions.find((row) => row.id === body.p_submission_id)
+      if (endpoint === 'delete_submission') {
+        if (submission && submission.status !== body.p_expected_status)
+          return route.fulfill({ status: 409, json: { message: 'Status changed' } })
+        state.submissions = state.submissions.filter((row) => row.id !== body.p_submission_id)
+        state.activities = state.activities.filter((row) => row.id !== submission?.activity_id)
+        return replyAction(route, body.p_submission_id)
+      }
+      if (submission?.status !== 'approved')
+        return route.fulfill({ status: 409, json: { message: 'Not approved' } })
+      Object.assign(submission, body.p_details)
+      const activity = state.activities.find((row) => row.id === submission.activity_id)
+      const { postal_code: _postalCode, ...details } = body.p_details
+      Object.assign(activity, details)
+      return replyAction(route, submission)
+    }
     if (endpoint === 'activities') return route.fulfill({ json: state.activities })
     return route.fulfill({ json: [] })
   })
@@ -148,6 +169,148 @@ test('ordinary users cannot open the admin page or see its navigation link', asy
   await expect(page.getByTestId('nav-admin')).toHaveCount(0)
   await expect(page.getByText('Admin access required')).toBeVisible()
   expect(state.requests).toHaveLength(0)
+})
+
+for (const width of [1280, 375]) {
+  test(`edits an approved activity and updates its published details at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const state = await mockBackend(page)
+    await page.goto('/admin/submissions')
+    await page.getByTestId('admin-approve').click()
+    await expect(page.getByTestId('admin-empty')).toBeVisible()
+    await page.getByTestId('admin-tab-approved').click()
+    await expect(page.getByTestId('admin-approve')).toHaveCount(0)
+    await expect(page.getByTestId('admin-reject')).toHaveCount(0)
+    await page.getByTestId('admin-edit').click()
+    await page.getByTestId('admin-edit-name').fill('Updated published studio')
+    await page.getByTestId('admin-edit-price').fill('40')
+    await page.getByTestId('admin-hours-Mon-open').fill('12:00')
+    await expect(page.locator('body')).toHaveJSProperty('scrollWidth', width)
+    state.actionError = true
+    await page.getByTestId('admin-save-edits').click()
+    await expect(page.getByTestId('admin-action-error')).toContainText("Couldn't save changes")
+    await expect(page.getByTestId('admin-edit-name')).toHaveValue('Updated published studio')
+    expect(state.activities[0].name).toBe('Weekend art studio')
+    state.actionError = false
+    await page.getByTestId('admin-save-edits').click()
+    await expect(page.getByRole('status')).toContainText('published activity')
+    expect(state.activities).toHaveLength(1)
+    expect(state.activities[0]).toMatchObject({
+      id: activityId,
+      name: 'Updated published studio',
+      price_per_person: 40,
+      opening_hours: { Mon: { open: '12:00', close: '18:00' } },
+    })
+    expect(state.submissions[0].status).toBe('approved')
+    await page.goto('/activities')
+    await expect(page.getByTestId('activity-card')).toContainText('Updated published studio')
+    await expect(page.getByTestId('activity-card')).toContainText('40')
+  })
+}
+
+const deletionScenarios = [
+  { status: 'pending', prepare: async () => {}, warning: 'permanently deletes the submission.' },
+  {
+    status: 'approved',
+    warning: 'published activity',
+    prepare: async (page) => {
+      await page.getByTestId('admin-approve').click()
+      await expect(page.getByTestId('admin-empty')).toBeVisible()
+    },
+  },
+  {
+    status: 'rejected',
+    warning: 'permanently deletes the submission.',
+    prepare: async (page) => {
+      await page.getByTestId('admin-reject').click()
+      await page.getByTestId('admin-reject-reason').fill('Duplicate')
+      await page.getByTestId('admin-confirm-reject').click()
+      await expect(page.getByTestId('admin-empty')).toBeVisible()
+    },
+  },
+]
+for (const { status, prepare, warning } of deletionScenarios) {
+  test(`confirms and deletes a ${status} submission`, async ({ page }) => {
+    const state = await mockBackend(page)
+    await page.goto('/admin/submissions')
+    await prepare(page)
+    await page.getByTestId(`admin-tab-${status}`).click()
+    const previousRequests = state.requests.length
+    await page.getByTestId('admin-delete').click()
+    await expect(page.getByTestId('admin-delete-confirmation')).toContainText(warning)
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+    expect(state.requests).toHaveLength(previousRequests)
+    await expect(page.getByTestId(`admin-submission-${submissionId}`)).toBeVisible()
+    await page.getByTestId('admin-delete').click()
+    state.actionError = true
+    await page.getByTestId('admin-confirm-delete').click()
+    await expect(page.getByTestId('admin-action-error')).toContainText("Couldn't delete")
+    await expect(page.getByTestId('admin-confirm-delete')).toBeEnabled()
+    expect(state.submissions).toHaveLength(1)
+    state.actionError = false
+    await page.getByTestId('admin-confirm-delete').click()
+    await expect(page.getByTestId('admin-empty')).toBeVisible()
+    await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (0)')
+    expect(state.submissions).toHaveLength(0)
+    expect(state.activities).toHaveLength(0)
+    expect(state.requests.at(-1).body).toEqual({
+      p_submission_id: submissionId,
+      p_expected_status: status,
+    })
+    await page.goto('/profile')
+    await expect(page.getByTestId(`submission-${submissionId}`)).toHaveCount(0)
+    await page.goto('/activities')
+    await expect(page.getByTestId('activity-card')).toHaveCount(0)
+  })
+}
+
+test('a delete checks the status again if another admin has approved the card', async ({
+  page,
+}) => {
+  const state = await mockBackend(page)
+  await page.goto('/admin/submissions')
+  await page.getByTestId('admin-delete').click()
+  state.submissions[0].status = 'approved'
+  await page.getByTestId('admin-confirm-delete').click()
+  await expect(page.getByTestId('admin-action-error')).toContainText("Couldn't delete")
+  expect(state.submissions).toHaveLength(1)
+})
+
+test('a committed delete with a lost response can be retried safely', async ({ page }) => {
+  const state = await mockBackend(page)
+  await page.clock.install()
+  await page.goto('/admin/submissions')
+  await page.getByTestId('admin-delete').click()
+  state.stallResponse = true
+  await page.getByTestId('admin-confirm-delete').click()
+  await expect.poll(() => state.requests.length).toBe(1)
+  await page.clock.fastForward(30001)
+  await expect(page.getByTestId('admin-action-error')).toContainText("Couldn't delete")
+  await page.getByTestId('admin-confirm-delete').click()
+  await expect(page.getByTestId('admin-empty')).toBeVisible()
+  state.releaseResponse()
+  expect(state.submissions).toHaveLength(0)
+  expect(state.activities).toHaveLength(0)
+})
+
+test('deleting the last card on a page returns to the previous page', async ({ page }) => {
+  const state = await mockBackend(page)
+  const original = state.submissions[0]
+  state.submissions = Array.from({ length: 11 }, (_, index) => ({
+    ...original,
+    id: `22222222-2222-4222-8222-${String(index).padStart(12, '0')}`,
+    name: `Studio ${index + 1}`,
+  }))
+  await page.goto('/admin/submissions')
+  await page.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Studio 11', exact: true })).toBeVisible()
+  await page.getByTestId('admin-delete').click()
+  await page.getByTestId('admin-confirm-delete').click()
+  await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (10)')
+  await expect(page.getByRole('heading', { name: 'Studio 1', exact: true })).toBeVisible()
+  await expect(page.locator('[data-testid^="admin-submission-"]')).toHaveCount(10)
 })
 
 test('a failed role check denies access and can be retried', async ({ page }) => {

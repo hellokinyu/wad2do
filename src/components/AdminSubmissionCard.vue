@@ -14,9 +14,10 @@ import {
 } from '@/lib/activityDisplay'
 
 const props = defineProps({ submission: { type: Object, required: true } })
-const emit = defineEmits(['saved', 'reviewed'])
+const emit = defineEmits(['saved', 'reviewed', 'deleted'])
 const editing = ref(false)
 const rejecting = ref(false)
+const deleting = ref(false)
 const busy = ref(false)
 const errorMessage = ref('')
 const savedMessage = ref('')
@@ -38,6 +39,8 @@ const categories = [
 const weeklyHours = computed(() => getWeeklyHours(props.submission.opening_hours).rows)
 const websiteUrl = computed(() => getWebsiteUrl(props.submission))
 const pending = computed(() => props.submission.status === 'pending')
+const approved = computed(() => props.submission.status === 'approved')
+const editable = computed(() => pending.value || approved.value)
 const hoursReady = computed(() => hasCompleteOpeningHours(props.submission.opening_hours))
 const { user } = useAuth()
 let requestController
@@ -93,6 +96,7 @@ function startEdit() {
   }
   editing.value = true
   rejecting.value = false
+  deleting.value = false
   errorMessage.value = ''
   savedMessage.value = ''
 }
@@ -174,28 +178,35 @@ async function saveEdits() {
 
   busy.value = true
   try {
-    // Only editable activity details are sent. Review fields are set by SQL functions.
+    const details = {
+      name: form.name.trim(),
+      category: form.category.trim(),
+      price_per_person: form.price_per_person,
+      duration_min: form.duration_min,
+      indoor: form.indoor,
+      address: form.address.trim(),
+      postal_code: form.postal_code || null,
+      google_place_id: form.google_place_id,
+      area: form.area.trim(),
+      description: form.description.trim() || null,
+      website: form.website.trim() || null,
+      image_url: form.image_url.trim() || null,
+      opening_hours: openingHours,
+    }
+    // Approved edits update the submission and its published activity in one transaction.
     const { data, error } = await requestWithTimeout((signal) =>
-      supabase
-        .from('submissions')
-        .update({
-          name: form.name.trim(),
-          category: form.category.trim(),
-          price_per_person: form.price_per_person,
-          duration_min: form.duration_min,
-          indoor: form.indoor,
-          address: form.address.trim(),
-          postal_code: form.postal_code || null,
-          google_place_id: form.google_place_id,
-          area: form.area.trim(),
-          description: form.description.trim() || null,
-          website: form.website.trim() || null,
-          image_url: form.image_url.trim() || null,
-          opening_hours: openingHours,
-        })
-        .eq('id', props.submission.id)
-        .eq('status', 'pending')
-        .select('*')
+      (approved.value
+        ? supabase.rpc('edit_approved_submission', {
+            p_submission_id: props.submission.id,
+            p_details: details,
+          })
+        : supabase
+            .from('submissions')
+            .update(details)
+            .eq('id', props.submission.id)
+            .eq('status', 'pending')
+            .select('*')
+      )
         .single()
         .abortSignal(signal),
     )
@@ -203,10 +214,41 @@ async function saveEdits() {
     emit('saved', data)
     editing.value = false
     imageFailed.value = false
-    savedMessage.value = 'Changes saved. You can now approve this submission.'
+    savedMessage.value = approved.value
+      ? 'Changes saved to the submission and published activity.'
+      : 'Changes saved. You can now approve this submission.'
   } catch {
     errorMessage.value =
       "Couldn't save changes. Your edits are still here. It may have been reviewed by another admin."
+  } finally {
+    busy.value = false
+  }
+}
+
+function startDelete() {
+  deleting.value = true
+  errorMessage.value = ''
+  savedMessage.value = ''
+}
+
+async function deleteSubmission() {
+  if (busy.value) return
+  busy.value = true
+  errorMessage.value = ''
+  try {
+    const { error } = await requestWithTimeout((signal) =>
+      supabase
+        .rpc('delete_submission', {
+          p_submission_id: props.submission.id,
+          p_expected_status: props.submission.status,
+        })
+        .abortSignal(signal),
+    )
+    if (error) throw error
+    emit('deleted', props.submission)
+  } catch {
+    errorMessage.value =
+      "Couldn't delete this submission. Try again, or refresh to check its status."
   } finally {
     busy.value = false
   }
@@ -356,8 +398,9 @@ async function reject() {
           >View published activity</RouterLink
         >
 
-        <div v-if="pending && !editing && !rejecting" class="d-flex flex-wrap gap-2 mt-4">
+        <div v-if="!editing && !rejecting && !deleting" class="d-flex flex-wrap gap-2 mt-4">
           <button
+            v-if="editable"
             class="btn btn-outline-dark"
             :disabled="busy"
             data-testid="admin-edit"
@@ -366,6 +409,7 @@ async function reject() {
             Edit
           </button>
           <button
+            v-if="pending"
             class="btn btn-dark"
             :disabled="busy || !hoursReady"
             :aria-describedby="!hoursReady ? `hours-required-${submission.id}` : undefined"
@@ -375,12 +419,46 @@ async function reject() {
             {{ busy ? 'Saving...' : 'Approve' }}
           </button>
           <button
+            v-if="pending"
             class="btn btn-outline-danger"
             :disabled="busy"
             data-testid="admin-reject"
             @click="startReject"
           >
             Reject
+          </button>
+          <button
+            class="btn btn-outline-danger"
+            :disabled="busy"
+            data-testid="admin-delete"
+            @click="startDelete"
+          >
+            Delete
+          </button>
+        </div>
+        <div
+          v-if="deleting"
+          class="alert alert-warning mt-4"
+          data-testid="admin-delete-confirmation"
+        >
+          <p class="fw-semibold">Delete {{ submission.name }}?</p>
+          <p>
+            {{
+              approved
+                ? 'This permanently deletes the submission and published activity, including its favourites, group votes and saved itinerary stops.'
+                : 'This permanently deletes the submission.'
+            }}
+          </p>
+          <button
+            class="btn btn-danger me-2"
+            :disabled="busy"
+            data-testid="admin-confirm-delete"
+            @click="deleteSubmission"
+          >
+            {{ busy ? 'Deleting...' : 'Delete permanently' }}
+          </button>
+          <button class="btn btn-outline-dark" :disabled="busy" @click="deleting = false">
+            Cancel
           </button>
         </div>
         <form v-if="pending && rejecting" class="mt-4" @submit.prevent="reject">
@@ -420,7 +498,7 @@ async function reject() {
     </div>
 
     <form
-      v-if="pending && editing"
+      v-if="editable && editing"
       class="border-top p-4"
       @submit.prevent="saveEdits"
       data-testid="admin-edit-form"
@@ -428,7 +506,12 @@ async function reject() {
       <fieldset :disabled="busy">
         <legend class="h5">Edit submission</legend>
         <p class="small text-secondary">
-          Save your changes before approving. Fields marked * are required.
+          {{
+            approved
+              ? 'Changes also update the published activity.'
+              : 'Save your changes before approving.'
+          }}
+          Fields marked * are required.
         </p>
         <GooglePlacePicker
           v-model="form.google_place_id"

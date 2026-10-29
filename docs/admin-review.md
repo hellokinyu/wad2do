@@ -10,14 +10,19 @@ permissions or approval functions.
    as `postgres`. Saving the file in this repository does **not** apply it.
 2. In Table Editor, set `profiles.is_admin` to `true` for a trusted account. Use its
    Auth user ID to find the right profile. The script does not promote anyone.
-3. Sign in with that account. The navbar shows **Admin**. Open `/admin/submissions`.
+3. After the optional [lookup migration](sql/google_place_search.sql), run
+   [admin activity management](sql/admin_activity_management.sql) to enable editing
+   approved activities and deleting submissions. This is a separate, rerunnable
+   migration; saving it locally does not apply it to Supabase.
+4. Sign in with that account. The navbar shows **Admin**. Open `/admin/submissions`.
 
 The SQL can be rerun; it replaces only policies and functions with its own names.
 It changes grants on profiles, submissions, and activities. Browser clients may
 update only their own normal profile fields; creating profiles remains the job
 of the existing signup trigger. Submissions can only be inserted as the user's
 own pending entry with empty review fields. Admins may edit activity details on
-pending submissions. Review fields and activity publishing can only be written
+pending submissions directly, and approved submissions through a checked function
+that updates the published activity in the same transaction. Review fields and activity publishing can only be written
 through the review functions. Existing group, favourite, and itinerary policies
 are not changed. Existing profiles SELECT policies are preserved so group member
 names can continue to work.
@@ -51,10 +56,40 @@ preserves own-profile and admin access, including the submitter-name join on thi
 - **Reject** calls `reject_submission` with a required reason (1–300 characters).
   The existing Profile page already reads and displays `reject_reason`.
 
-While editing, save or cancel before approving. Editing and reviewing completed
-submissions is deliberately disabled. If another admin reviews a pending card,
+While editing, save or cancel before approving. Approved submissions can be edited
+from the Approved tab; approval and rejection decisions remain limited to pending
+submissions. If another admin reviews a pending card,
 an attempted edit or conflicting decision fails; refresh to see its new state.
 An approval uses the latest saved details in the database.
+
+## Edit and delete activities
+
+Pending and approved cards have **Edit**. Approved edits save the submitted details
+and published catalogue entry together, retaining the published ID and review
+history. A corrected venue clears old coordinates/map data; a changed price clears
+the old price note. Failed edits retain the draft for retry. Rejected cards can be
+deleted, but cannot be edited or published.
+
+All tabs have **Delete**, followed by a permanent-deletion warning and Cancel.
+Deleting an approved submission also deletes its published activity, favourites,
+shortlist entries and votes. Saved itinerary stops for that activity are removed
+and totals recomputed from the remaining stops' saved costs, preserving their
+order and times. The SQL does all of this in one transaction. It does not remove
+uploaded Storage objects. Existing open user pages update on reload.
+
+The delete function locks the submission and checks the status shown when the
+admin confirmed: a pending card approved by someone else cannot silently delete
+the newly published activity. Retrying a completed deletion is safe. Ordinary
+users and anonymous clients cannot invoke either management operation. Browser
+table grants and policies are unchanged.
+
+Verification includes mocked desktop/mobile browser cases and the opt-in
+`tests/adminActivityManagement.database.test.js`. The latter runs both migrations
+against an isolated PGlite PostgreSQL fixture when `WAD2DO_PGLITE_MODULE` points
+to the file URL of an installed `@electric-sql/pglite/dist/index.js`; otherwise it
+skips. It checks ordinary/anonymous denial, protected review fields, validated
+edits, published data synchronization, cleanup, rollback and delete retries.
+It does not connect to or verify the shared Supabase database.
 
 New submissions contain `opening_hours: {}` and show **Opening hours need admin review**. Approve stays disabled until the admin edits and saves a complete week with at least one open day. Missing days remain blank in the editor; they are never silently marked Closed. Admins should verify hours from the venue's official website or by contacting it, rather than copying Google Maps content into the database. Rejection remains available without hours.
 
