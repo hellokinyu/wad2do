@@ -572,6 +572,7 @@ onUnmounted(() => {
   right: 24px;
   z-index: 1100;
   max-width: min(360px, calc(100% - 32px));
+  overflow-wrap: anywhere;
   padding: 14px 20px;
   border-radius: 14px;
   background: #111;

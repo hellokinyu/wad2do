@@ -146,8 +146,10 @@ test('multi-group partial failure keeps successful groups locked and retries onl
   await page.getByTestId('activity-share').first().click()
   await checkbox(page, 0).check()
   await checkbox(page, 1).check()
-  await page.getByTestId('share-confirm').click()
+  await page.getByTestId('share-confirm').focus()
+  await page.keyboard.press('Enter')
   await expect(page.getByTestId('share-error')).toContainText("Couldn't share this activity")
+  await expect(page.getByRole('button', { name: 'Close share menu' })).toBeFocused()
   await expect(checkbox(page, 0)).toBeDisabled()
   await expect(checkbox(page, 0)).toBeChecked()
   await expect(checkbox(page, 1)).toBeEnabled()
@@ -155,7 +157,10 @@ test('multi-group partial failure keeps successful groups locked and retries onl
   await expect(page.getByTestId('share-group-option').nth(1)).toContainText('Failed')
   expect(state.shares.size).toBe(1)
   await expect(page.getByTestId('share-confirm')).toHaveText('Share to 1 group')
-  await page.getByTestId('share-confirm').click()
+  await page.keyboard.press('Shift+Tab')
+  await page.keyboard.press('Shift+Tab')
+  await expect(page.getByTestId('share-confirm')).toBeFocused()
+  await page.keyboard.press('Enter')
   await expect(page.getByTestId('activity-share-dialog')).toBeHidden()
   expect(state.writes.map((row) => row.group_id)).toEqual([
     groups[0].id,
@@ -247,8 +252,31 @@ test('sharing stays usable when favourites fail and validates the account before
   await expect(page.getByTestId('share-error')).toContainText('Log in again')
   await expect(page.getByTestId('share-confirm')).toBeDisabled()
   await expect(page.getByTestId('share-error').getByRole('link', { name: 'Log in' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Close share menu' })).toBeFocused()
   expect(state.writes).toHaveLength(0)
 })
+
+for (const [name, url, shareButton, toastId] of [
+  ['grid', '/activities', 'activity-share', 'activity-save-feedback'],
+  ['detail', '/activities/' + activities[0].id, 'detail-share', 'detail-toast'],
+]) {
+  test(`${name} success message wraps a long group name on a phone`, async ({ page }) => {
+    const state = await mockBackend(page)
+    const longName = 'SaturdaySquad'.repeat(6)
+    state.groups = [{ ...groups[0], name: longName }]
+    await page.setViewportSize({ width: 375, height: 667 })
+    await page.goto(url)
+    await page.getByTestId(shareButton).first().click()
+    await checkbox(page, 0).check()
+    await page.getByTestId('share-confirm').click()
+    const toast = page.getByTestId(toastId)
+    await expect(toast).toHaveText('Shared to ' + longName + '.')
+    expect(await toast.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+    const bounds = await toast.boundingBox()
+    expect(bounds.x).toBeGreaterThanOrEqual(0)
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(375)
+  })
+}
 
 test('pending sharing prevents repeated submissions and Escape dismissal', async ({ page }) => {
   const state = await mockBackend(page)

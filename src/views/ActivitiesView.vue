@@ -701,6 +701,7 @@ onMounted(loadActivities)
   bottom: 1rem;
   right: 1rem;
   max-width: calc(100% - 2rem);
+  overflow-wrap: anywhere;
   z-index: 1080;
 }
 

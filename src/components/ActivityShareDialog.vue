@@ -182,7 +182,14 @@ async function shareActivity() {
         : "Couldn't check your account. Please try again."
     }
   } finally {
-    if (request === requestNumber) sharing.value = false
+    if (request === requestNumber) {
+      sharing.value = false
+      // Safari drops focus when the submit button is disabled; restore it after rendering.
+      await nextTick()
+      if (request === requestNumber && dialog.value?.open) {
+        dialog.value.querySelector('.btn-close')?.focus({ preventScroll: true })
+      }
+    }
   }
 }
 
