@@ -186,7 +186,7 @@ onUnmounted(() => {
               : `No ${selectedStatus} submissions yet.`
         }}
       </div>
-      <div v-else class="d-grid gap-4">
+      <div v-else class="submission-grid">
         <AdminSubmissionCard
           v-for="submission in submissions"
           :key="submission.id"
@@ -216,5 +216,20 @@ onUnmounted(() => {
 <style scoped>
 .admin-page {
   max-width: 1000px;
+}
+.submission-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+@media (max-width: 991.98px) {
+  .submission-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 575.98px) {
+  .submission-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>

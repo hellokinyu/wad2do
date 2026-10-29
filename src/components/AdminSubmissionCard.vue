@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/composables/useAuth'
 import { requestWithTimeout as timedRequest } from '@/lib/requestWithTimeout'
@@ -23,6 +23,39 @@ const errorMessage = ref('')
 const savedMessage = ref('')
 const rejectReason = ref('')
 const imageFailed = ref(false)
+const dialog = ref(null)
+const detailsOpen = ref(false)
+let detailsTrigger
+let previousBodyOverflow
+
+async function openDetails(event) {
+  detailsTrigger = event.currentTarget
+  detailsTrigger.focus({ preventScroll: true })
+  detailsOpen.value = true
+  await nextTick()
+  previousBodyOverflow = document.body.style.overflow
+  document.body.style.overflow = 'hidden'
+  dialog.value.showModal()
+}
+
+function closeDetails() {
+  if (busy.value) return
+  dialog.value.close()
+}
+
+function onDetailsClosed() {
+  detailsOpen.value = false
+  restoreBodyScroll()
+  detailsTrigger?.focus({ preventScroll: true })
+}
+
+function restoreBodyScroll() {
+  if (previousBodyOverflow === undefined) return
+  document.body.style.overflow = previousBodyOverflow
+  previousBodyOverflow = undefined
+}
+
+onUnmounted(restoreBodyScroll)
 const form = reactive({})
 const hours = reactive({})
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -311,399 +344,583 @@ async function reject() {
 </script>
 
 <template>
-  <article
-    class="card rounded-4 overflow-hidden"
-    :data-testid="`admin-submission-${submission.id}`"
-    :aria-busy="busy"
-  >
-    <div class="row g-0">
-      <div class="col-md-4 photo-panel">
-        <img
-          v-if="submission.image_url && !imageFailed"
-          :src="submission.image_url"
-          :alt="submission.name"
-          class="submission-photo"
-          loading="lazy"
-          @error="imageFailed = true"
-        />
-        <div v-else class="photo-placeholder text-secondary">
-          {{ submission.image_url ? 'Photo unavailable' : 'No photo submitted' }}
-        </div>
+  <article class="card submission-preview h-100" :data-testid="`admin-submission-${submission.id}`">
+    <div class="preview-photo-panel">
+      <img
+        v-if="submission.image_url && !imageFailed"
+        :src="submission.image_url"
+        :alt="submission.name"
+        class="preview-photo"
+        loading="lazy"
+        @error="imageFailed = true"
+      />
+      <div v-else class="preview-placeholder text-secondary">
+        {{ submission.image_url ? 'Photo unavailable' : 'No photo submitted' }}
       </div>
-      <div class="col-md-8 p-4">
-        <span class="badge rounded-pill text-bg-light mb-2 text-capitalize">{{
-          submission.status
-        }}</span>
-        <h2 class="h4 fw-bold">{{ submission.name }}</h2>
-        <p class="small text-secondary mb-1">
-          Submitted by
-          {{ submission.submitter?.display_name || submission.submitted_by || 'Unknown user' }}
-        </p>
-        <p class="small text-secondary">{{ formatDate(submission.created_at) }} (Singapore time)</p>
-        <dl class="row mb-0 details">
-          <dt class="col-sm-4">Category</dt>
-          <dd class="col-sm-8">{{ submission.category || 'Not provided' }}</dd>
-          <dt class="col-sm-4">Price / person</dt>
-          <dd class="col-sm-8">{{ formatPrice(submission.price_per_person) }}</dd>
-          <dt class="col-sm-4">Duration</dt>
-          <dd class="col-sm-8">{{ formatDuration(submission.duration_min) }}</dd>
-          <dt class="col-sm-4">Setting</dt>
-          <dd class="col-sm-8">{{ getSetting(submission.indoor) }}</dd>
-          <dt class="col-sm-4">Address</dt>
-          <dd class="col-sm-8">{{ submission.address || 'Not provided' }}</dd>
-          <dt class="col-sm-4">Postal code</dt>
-          <dd class="col-sm-8">{{ submission.postal_code || 'Not provided' }}</dd>
-          <dt class="col-sm-4">Suggested venue</dt>
-          <dd class="col-sm-8 text-break" data-testid="admin-place-suggestion">
-            {{ submission.google_place_id || 'No Google link' }}
-            <span v-if="submission.google_place_id"> (suggested, not verified)</span>
-          </dd>
-          <dt class="col-sm-4">Area</dt>
-          <dd class="col-sm-8">{{ submission.area || 'Not provided' }}</dd>
-          <dt class="col-sm-4">Description</dt>
-          <dd class="col-sm-8 description">{{ submission.description || 'Not provided' }}</dd>
-          <dt class="col-sm-4">Website</dt>
-          <dd class="col-sm-8">
-            <a v-if="websiteUrl" :href="websiteUrl" target="_blank" rel="noopener noreferrer">{{
-              submission.website
-            }}</a>
-            <span v-else>{{ submission.website || 'Not provided' }}</span>
-          </dd>
-        </dl>
-        <details class="mt-2">
-          <summary class="fw-semibold">Opening hours (Singapore time)</summary>
-          <ul class="list-unstyled mt-2 mb-0">
-            <li v-for="day in weeklyHours" :key="day.day">{{ day.day }}: {{ day.hours }}</li>
-          </ul>
-        </details>
-        <p
-          v-if="pending && !hoursReady"
-          class="alert alert-warning mt-3 mb-0"
-          :id="`hours-required-${submission.id}`"
-          data-testid="admin-hours-required"
+      <div class="preview-badges">
+        <span class="badge rounded-pill text-bg-light">{{ getSetting(submission.indoor) }}</span>
+        <span
+          class="badge rounded-pill text-capitalize"
+          :class="{
+            'text-bg-warning': pending,
+            'text-bg-success': approved,
+            'text-bg-secondary': !pending && !approved,
+          }"
+          >{{ submission.status }}</span
         >
-          Opening hours need admin review. Select Edit to add a complete week and save before
-          approving.
-        </p>
-        <p v-if="submission.reviewed_at" class="small text-secondary mt-3 mb-0">
-          Reviewed {{ formatDate(submission.reviewed_at) }}
-        </p>
-        <p v-if="submission.reject_reason" class="alert alert-light mt-3 mb-0">
-          <strong>Reason:</strong> {{ submission.reject_reason }}
-        </p>
-        <RouterLink
-          v-if="submission.status === 'approved' && submission.activity_id"
-          :to="`/activities/${submission.activity_id}`"
-          class="d-inline-block mt-3"
-          >View published activity</RouterLink
-        >
-
-        <div v-if="!editing && !rejecting && !deleting" class="d-flex flex-wrap gap-2 mt-4">
-          <button
-            v-if="editable"
-            class="btn btn-outline-dark"
-            :disabled="busy"
-            data-testid="admin-edit"
-            @click="startEdit"
-          >
-            Edit
-          </button>
-          <button
-            v-if="pending"
-            class="btn btn-dark"
-            :disabled="busy || !hoursReady"
-            :aria-describedby="!hoursReady ? `hours-required-${submission.id}` : undefined"
-            data-testid="admin-approve"
-            @click="approve"
-          >
-            {{ busy ? 'Saving...' : 'Approve' }}
-          </button>
-          <button
-            v-if="pending"
-            class="btn btn-outline-danger"
-            :disabled="busy"
-            data-testid="admin-reject"
-            @click="startReject"
-          >
-            Reject
-          </button>
-          <button
-            class="btn btn-outline-danger"
-            :disabled="busy"
-            data-testid="admin-delete"
-            @click="startDelete"
-          >
-            Delete
-          </button>
-        </div>
-        <div
-          v-if="deleting"
-          class="alert alert-warning mt-4"
-          data-testid="admin-delete-confirmation"
-        >
-          <p class="fw-semibold">Delete {{ submission.name }}?</p>
-          <p>
-            {{
-              approved
-                ? 'This permanently deletes the submission and published activity, including its favourites, group votes and saved itinerary stops.'
-                : 'This permanently deletes the submission.'
-            }}
-          </p>
-          <button
-            class="btn btn-danger me-2"
-            :disabled="busy"
-            data-testid="admin-confirm-delete"
-            @click="deleteSubmission"
-          >
-            {{ busy ? 'Deleting...' : 'Delete permanently' }}
-          </button>
-          <button class="btn btn-outline-dark" :disabled="busy" @click="deleting = false">
-            Cancel
-          </button>
-        </div>
-        <form v-if="pending && rejecting" class="mt-4" @submit.prevent="reject">
-          <fieldset :disabled="busy">
-            <legend class="h6">Why is this submission being rejected?</legend>
-            <label :for="`reason-${submission.id}`" class="form-label"
-              >Reason shown to the submitter</label
-            >
-            <textarea
-              :id="`reason-${submission.id}`"
-              v-model="rejectReason"
-              class="form-control mb-2"
-              rows="3"
-              maxlength="300"
-              required
-              placeholder="For example: Duplicate of Gardens by the Bay"
-              data-testid="admin-reject-reason"
-            ></textarea>
-            <button type="submit" class="btn btn-danger me-2" data-testid="admin-confirm-reject">
-              {{ busy ? 'Saving...' : 'Confirm rejection' }}
-            </button>
-            <button type="button" class="btn btn-outline-dark" @click="cancelReject">Cancel</button>
-          </fieldset>
-        </form>
-        <p v-if="savedMessage" class="alert alert-success mt-3 mb-0" role="status">
-          {{ savedMessage }}
-        </p>
-        <p
-          v-if="errorMessage"
-          class="alert alert-danger mt-3 mb-0"
-          role="alert"
-          data-testid="admin-action-error"
-        >
-          {{ errorMessage }}
-        </p>
       </div>
     </div>
-
-    <form
-      v-if="editable && editing"
-      class="border-top p-4"
-      @submit.prevent="saveEdits"
-      data-testid="admin-edit-form"
-    >
-      <fieldset :disabled="busy">
-        <legend class="h5">Edit submission</legend>
-        <p class="small text-secondary">
-          {{
-            approved
-              ? 'Changes also update the published activity.'
-              : 'Save your changes before approving.'
-          }}
-          Fields marked * are required.
-        </p>
-        <GooglePlacePicker
-          v-model="form.google_place_id"
-          v-model:postal-code="form.postal_code"
-          :name="form.name"
-          :address="form.address"
-          :area="form.area"
-          class="mb-3"
-        />
-        <div class="row g-3">
-          <div class="col-12">
-            <label :for="`name-${submission.id}`" class="form-label">Name *</label>
-            <input
-              :id="`name-${submission.id}`"
-              v-model="form.name"
-              class="form-control"
-              required
-              data-testid="admin-edit-name"
-            />
-          </div>
-          <div class="col-sm-6">
-            <label :for="`category-${submission.id}`" class="form-label">Category *</label>
-            <select
-              :id="`category-${submission.id}`"
-              v-model="form.category"
-              class="form-select"
-              required
-            >
-              <option
-                v-if="form.category && !categories.includes(form.category)"
-                :value="form.category"
-              >
-                {{ form.category }}
-              </option>
-              <option v-for="category in categories" :key="category">{{ category }}</option>
-            </select>
-          </div>
-          <div class="col-sm-6">
-            <label :for="`price-${submission.id}`" class="form-label"
-              >Price per person (S$) *</label
-            >
-            <input
-              :id="`price-${submission.id}`"
-              v-model.number="form.price_per_person"
-              type="number"
-              min="0"
-              step="0.01"
-              class="form-control"
-              required
-              data-testid="admin-edit-price"
-            />
-          </div>
-          <div class="col-sm-6">
-            <label :for="`duration-${submission.id}`" class="form-label"
-              >Duration (minutes) *</label
-            >
-            <input
-              :id="`duration-${submission.id}`"
-              v-model.number="form.duration_min"
-              type="number"
-              min="1"
-              step="1"
-              class="form-control"
-              required
-            />
-          </div>
-          <div class="col-sm-6">
-            <label :for="`setting-${submission.id}`" class="form-label">Setting *</label>
-            <select
-              :id="`setting-${submission.id}`"
-              v-model="form.indoor"
-              class="form-select"
-              required
-            >
-              <option disabled value="">Choose a setting</option>
-              <option :value="true">Indoor</option>
-              <option :value="false">Outdoor</option>
-            </select>
-          </div>
-          <div class="col-sm-8">
-            <label :for="`address-${submission.id}`" class="form-label">Address *</label>
-            <input
-              data-testid="admin-edit-address"
-              :id="`address-${submission.id}`"
-              v-model="form.address"
-              class="form-control"
-              required
-            />
-          </div>
-          <div class="col-sm-4">
-            <label :for="`area-${submission.id}`" class="form-label">Area *</label>
-            <input
-              :id="`area-${submission.id}`"
-              v-model="form.area"
-              class="form-control"
-              required
-            />
-          </div>
-          <div class="col-12">
-            <label :for="`description-${submission.id}`" class="form-label">Description</label>
-            <textarea
-              :id="`description-${submission.id}`"
-              v-model="form.description"
-              class="form-control"
-              rows="3"
-              maxlength="300"
-            ></textarea>
-          </div>
-          <div class="col-sm-6">
-            <label :for="`website-${submission.id}`" class="form-label">Website</label>
-            <input
-              :id="`website-${submission.id}`"
-              v-model="form.website"
-              type="url"
-              class="form-control"
-            />
-          </div>
-          <div class="col-sm-6">
-            <label :for="`image-${submission.id}`" class="form-label">Photo URL</label>
-            <input
-              :id="`image-${submission.id}`"
-              v-model="form.image_url"
-              type="url"
-              class="form-control"
-            />
-          </div>
-        </div>
-        <h3 class="h6 mt-4">Opening hours (Singapore time) *</h3>
-        <p class="small text-secondary">
-          Check the venue's official website or contact the venue, then enter its hours here. A
-          closing time earlier than opening means the following day.
-        </p>
-        <div v-for="day in days" :key="day" class="row g-2 align-items-end mb-3">
-          <div class="col-12 col-sm-2 fw-semibold">{{ day }}</div>
-          <div class="col-12 col-sm-4">
-            <label :for="`mode-${submission.id}-${day}`" class="visually-hidden"
-              >{{ day }} opening status</label
-            >
-            <select
-              :id="`mode-${submission.id}-${day}`"
-              v-model="hours[day].mode"
-              class="form-select"
-              :data-testid="`admin-hours-${day}-mode`"
-            >
-              <option value="open">Set hours</option>
-              <option value="closed">Closed</option>
-              <option value="24h">Open 24 hours</option>
-            </select>
-          </div>
-          <template v-if="hours[day].mode === 'open'">
-            <div class="col-6 col-sm-3">
-              <label :for="`open-${submission.id}-${day}`" class="form-label small"
-                >{{ day }} opens</label
-              >
-              <input
-                :id="`open-${submission.id}-${day}`"
-                v-model="hours[day].open"
-                type="time"
-                class="form-control"
-                required
-                :data-testid="`admin-hours-${day}-open`"
-              />
-            </div>
-            <div class="col-6 col-sm-3">
-              <label :for="`close-${submission.id}-${day}`" class="form-label small"
-                >{{ day }} closes</label
-              >
-              <input
-                :id="`close-${submission.id}-${day}`"
-                v-model="hours[day].close"
-                type="time"
-                class="form-control"
-                required
-                :data-testid="`admin-hours-${day}-close`"
-              />
-            </div>
-          </template>
-        </div>
-        <button type="submit" class="btn btn-dark me-2" data-testid="admin-save-edits">
-          {{ busy ? 'Saving...' : 'Save changes' }}
+    <div class="preview-body d-flex flex-column">
+      <h2 class="h5 fw-bold mb-2">
+        <button
+          type="button"
+          class="preview-open stretched-link"
+          :title="`View details for ${submission.name}`"
+          aria-haspopup="dialog"
+          data-testid="admin-view-details"
+          @click="openDetails"
+        >
+          {{ submission.name }}
         </button>
-        <button type="button" class="btn btn-outline-dark" @click="cancelEdit">Cancel</button>
-      </fieldset>
-    </form>
+      </h2>
+      <p class="fw-semibold mb-2">
+        {{ formatPrice(submission.price_per_person)
+        }}<span v-if="formatPrice(submission.price_per_person).startsWith('S$')"> / person</span>
+      </p>
+      <p class="preview-description text-secondary small mb-2">
+        {{ submission.description?.trim() || 'No description provided.' }}
+      </p>
+      <p class="text-secondary small mb-1">{{ submission.area || 'Area unavailable' }}</p>
+      <p class="text-secondary small mb-3">{{ formatDuration(submission.duration_min) }}</p>
+      <span class="small fw-semibold mt-auto" aria-hidden="true">View details &rarr;</span>
+    </div>
+
+    <dialog
+      ref="dialog"
+      class="submission-dialog"
+      :aria-labelledby="`review-title-${submission.id}`"
+      data-testid="admin-details-dialog"
+      @cancel.prevent="closeDetails"
+      @close="onDetailsClosed"
+    >
+      <header class="dialog-header d-flex align-items-center justify-content-between gap-3">
+        <h2 :id="`review-title-${submission.id}`" class="h5 fw-bold mb-0">Review submission</h2>
+        <button
+          type="button"
+          class="btn-close"
+          aria-label="Close submission details"
+          :disabled="busy"
+          autofocus
+          @click="closeDetails"
+        ></button>
+      </header>
+      <div
+        v-if="detailsOpen"
+        class="dialog-body card border-0 rounded-0"
+        data-testid="admin-review-details"
+        :aria-busy="busy"
+      >
+        <div class="row g-0">
+          <div class="col-12 photo-panel">
+            <img
+              v-if="submission.image_url && !imageFailed"
+              :src="submission.image_url"
+              :alt="submission.name"
+              class="submission-photo"
+              loading="lazy"
+              @error="imageFailed = true"
+            />
+            <div v-else class="photo-placeholder text-secondary">
+              {{ submission.image_url ? 'Photo unavailable' : 'No photo submitted' }}
+            </div>
+          </div>
+          <div class="col-12 p-4">
+            <span class="badge rounded-pill text-bg-light mb-2 text-capitalize">{{
+              submission.status
+            }}</span>
+            <h2 class="h4 fw-bold">{{ submission.name }}</h2>
+            <p class="small text-secondary mb-1">
+              Submitted by
+              {{ submission.submitter?.display_name || submission.submitted_by || 'Unknown user' }}
+            </p>
+            <p class="small text-secondary">
+              {{ formatDate(submission.created_at) }} (Singapore time)
+            </p>
+            <dl class="row mb-0 details">
+              <dt class="col-sm-4">Category</dt>
+              <dd class="col-sm-8">{{ submission.category || 'Not provided' }}</dd>
+              <dt class="col-sm-4">Price / person</dt>
+              <dd class="col-sm-8">{{ formatPrice(submission.price_per_person) }}</dd>
+              <dt class="col-sm-4">Duration</dt>
+              <dd class="col-sm-8">{{ formatDuration(submission.duration_min) }}</dd>
+              <dt class="col-sm-4">Setting</dt>
+              <dd class="col-sm-8">{{ getSetting(submission.indoor) }}</dd>
+              <dt class="col-sm-4">Address</dt>
+              <dd class="col-sm-8">{{ submission.address || 'Not provided' }}</dd>
+              <dt class="col-sm-4">Postal code</dt>
+              <dd class="col-sm-8">{{ submission.postal_code || 'Not provided' }}</dd>
+              <dt class="col-sm-4">Suggested venue</dt>
+              <dd class="col-sm-8 text-break" data-testid="admin-place-suggestion">
+                {{ submission.google_place_id || 'No Google link' }}
+                <span v-if="submission.google_place_id"> (suggested, not verified)</span>
+              </dd>
+              <dt class="col-sm-4">Area</dt>
+              <dd class="col-sm-8">{{ submission.area || 'Not provided' }}</dd>
+              <dt class="col-sm-4">Description</dt>
+              <dd class="col-sm-8 description">{{ submission.description || 'Not provided' }}</dd>
+              <dt class="col-sm-4">Website</dt>
+              <dd class="col-sm-8">
+                <a v-if="websiteUrl" :href="websiteUrl" target="_blank" rel="noopener noreferrer">{{
+                  submission.website
+                }}</a>
+                <span v-else>{{ submission.website || 'Not provided' }}</span>
+              </dd>
+            </dl>
+            <details class="mt-2">
+              <summary class="fw-semibold">Opening hours (Singapore time)</summary>
+              <ul class="list-unstyled mt-2 mb-0">
+                <li v-for="day in weeklyHours" :key="day.day">{{ day.day }}: {{ day.hours }}</li>
+              </ul>
+            </details>
+            <p
+              v-if="pending && !hoursReady"
+              class="alert alert-warning mt-3 mb-0"
+              :id="`hours-required-${submission.id}`"
+              data-testid="admin-hours-required"
+            >
+              Opening hours need admin review. Select Edit to add a complete week and save before
+              approving.
+            </p>
+            <p v-if="submission.reviewed_at" class="small text-secondary mt-3 mb-0">
+              Reviewed {{ formatDate(submission.reviewed_at) }}
+            </p>
+            <p v-if="submission.reject_reason" class="alert alert-light mt-3 mb-0">
+              <strong>Reason:</strong> {{ submission.reject_reason }}
+            </p>
+            <RouterLink
+              v-if="submission.status === 'approved' && submission.activity_id"
+              :to="`/activities/${submission.activity_id}`"
+              class="d-inline-block mt-3"
+              >View published activity</RouterLink
+            >
+
+            <div v-if="!editing && !rejecting && !deleting" class="d-flex flex-wrap gap-2 mt-4">
+              <button
+                v-if="editable"
+                class="btn btn-outline-dark"
+                :disabled="busy"
+                data-testid="admin-edit"
+                @click="startEdit"
+              >
+                Edit
+              </button>
+              <button
+                v-if="pending"
+                class="btn btn-dark"
+                :disabled="busy || !hoursReady"
+                :aria-describedby="!hoursReady ? `hours-required-${submission.id}` : undefined"
+                data-testid="admin-approve"
+                @click="approve"
+              >
+                {{ busy ? 'Saving...' : 'Approve' }}
+              </button>
+              <button
+                v-if="pending"
+                class="btn btn-outline-danger"
+                :disabled="busy"
+                data-testid="admin-reject"
+                @click="startReject"
+              >
+                Reject
+              </button>
+              <button
+                class="btn btn-outline-danger"
+                :disabled="busy"
+                data-testid="admin-delete"
+                @click="startDelete"
+              >
+                Delete
+              </button>
+            </div>
+            <div
+              v-if="deleting"
+              class="alert alert-warning mt-4"
+              data-testid="admin-delete-confirmation"
+            >
+              <p class="fw-semibold">Delete {{ submission.name }}?</p>
+              <p>
+                {{
+                  approved
+                    ? 'This permanently deletes the submission and published activity, including its favourites, group votes and saved itinerary stops.'
+                    : 'This permanently deletes the submission.'
+                }}
+              </p>
+              <button
+                class="btn btn-danger me-2"
+                :disabled="busy"
+                data-testid="admin-confirm-delete"
+                @click="deleteSubmission"
+              >
+                {{ busy ? 'Deleting...' : 'Delete permanently' }}
+              </button>
+              <button class="btn btn-outline-dark" :disabled="busy" @click="deleting = false">
+                Cancel
+              </button>
+            </div>
+            <form v-if="pending && rejecting" class="mt-4" @submit.prevent="reject">
+              <fieldset :disabled="busy">
+                <legend class="h6">Why is this submission being rejected?</legend>
+                <label :for="`reason-${submission.id}`" class="form-label"
+                  >Reason shown to the submitter</label
+                >
+                <textarea
+                  :id="`reason-${submission.id}`"
+                  v-model="rejectReason"
+                  class="form-control mb-2"
+                  rows="3"
+                  maxlength="300"
+                  required
+                  placeholder="For example: Duplicate of Gardens by the Bay"
+                  data-testid="admin-reject-reason"
+                ></textarea>
+                <button
+                  type="submit"
+                  class="btn btn-danger me-2"
+                  data-testid="admin-confirm-reject"
+                >
+                  {{ busy ? 'Saving...' : 'Confirm rejection' }}
+                </button>
+                <button type="button" class="btn btn-outline-dark" @click="cancelReject">
+                  Cancel
+                </button>
+              </fieldset>
+            </form>
+            <p v-if="savedMessage" class="alert alert-success mt-3 mb-0" role="status">
+              {{ savedMessage }}
+            </p>
+            <p
+              v-if="errorMessage"
+              class="alert alert-danger mt-3 mb-0"
+              role="alert"
+              data-testid="admin-action-error"
+            >
+              {{ errorMessage }}
+            </p>
+          </div>
+        </div>
+
+        <form
+          v-if="editable && editing"
+          class="border-top p-4"
+          @submit.prevent="saveEdits"
+          data-testid="admin-edit-form"
+        >
+          <fieldset :disabled="busy">
+            <legend class="h5">Edit submission</legend>
+            <p class="small text-secondary">
+              {{
+                approved
+                  ? 'Changes also update the published activity.'
+                  : 'Save your changes before approving.'
+              }}
+              Fields marked * are required.
+            </p>
+            <GooglePlacePicker
+              v-model="form.google_place_id"
+              v-model:postal-code="form.postal_code"
+              :name="form.name"
+              :address="form.address"
+              :area="form.area"
+              class="mb-3"
+            />
+            <div class="row g-3">
+              <div class="col-12">
+                <label :for="`name-${submission.id}`" class="form-label">Name *</label>
+                <input
+                  :id="`name-${submission.id}`"
+                  v-model="form.name"
+                  class="form-control"
+                  required
+                  data-testid="admin-edit-name"
+                />
+              </div>
+              <div class="col-sm-6">
+                <label :for="`category-${submission.id}`" class="form-label">Category *</label>
+                <select
+                  :id="`category-${submission.id}`"
+                  v-model="form.category"
+                  class="form-select"
+                  required
+                >
+                  <option
+                    v-if="form.category && !categories.includes(form.category)"
+                    :value="form.category"
+                  >
+                    {{ form.category }}
+                  </option>
+                  <option v-for="category in categories" :key="category">{{ category }}</option>
+                </select>
+              </div>
+              <div class="col-sm-6">
+                <label :for="`price-${submission.id}`" class="form-label"
+                  >Price per person (S$) *</label
+                >
+                <input
+                  :id="`price-${submission.id}`"
+                  v-model.number="form.price_per_person"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  required
+                  data-testid="admin-edit-price"
+                />
+              </div>
+              <div class="col-sm-6">
+                <label :for="`duration-${submission.id}`" class="form-label"
+                  >Duration (minutes) *</label
+                >
+                <input
+                  :id="`duration-${submission.id}`"
+                  v-model.number="form.duration_min"
+                  type="number"
+                  min="1"
+                  step="1"
+                  class="form-control"
+                  required
+                />
+              </div>
+              <div class="col-sm-6">
+                <label :for="`setting-${submission.id}`" class="form-label">Setting *</label>
+                <select
+                  :id="`setting-${submission.id}`"
+                  v-model="form.indoor"
+                  class="form-select"
+                  required
+                >
+                  <option disabled value="">Choose a setting</option>
+                  <option :value="true">Indoor</option>
+                  <option :value="false">Outdoor</option>
+                </select>
+              </div>
+              <div class="col-sm-8">
+                <label :for="`address-${submission.id}`" class="form-label">Address *</label>
+                <input
+                  data-testid="admin-edit-address"
+                  :id="`address-${submission.id}`"
+                  v-model="form.address"
+                  class="form-control"
+                  required
+                />
+              </div>
+              <div class="col-sm-4">
+                <label :for="`area-${submission.id}`" class="form-label">Area *</label>
+                <input
+                  :id="`area-${submission.id}`"
+                  v-model="form.area"
+                  class="form-control"
+                  required
+                />
+              </div>
+              <div class="col-12">
+                <label :for="`description-${submission.id}`" class="form-label">Description</label>
+                <textarea
+                  :id="`description-${submission.id}`"
+                  v-model="form.description"
+                  class="form-control"
+                  rows="3"
+                  maxlength="300"
+                ></textarea>
+              </div>
+              <div class="col-sm-6">
+                <label :for="`website-${submission.id}`" class="form-label">Website</label>
+                <input
+                  :id="`website-${submission.id}`"
+                  v-model="form.website"
+                  type="url"
+                  class="form-control"
+                />
+              </div>
+              <div class="col-sm-6">
+                <label :for="`image-${submission.id}`" class="form-label">Photo URL</label>
+                <input
+                  :id="`image-${submission.id}`"
+                  v-model="form.image_url"
+                  type="url"
+                  class="form-control"
+                />
+              </div>
+            </div>
+            <h3 class="h6 mt-4">Opening hours (Singapore time) *</h3>
+            <p class="small text-secondary">
+              Check the venue's official website or contact the venue, then enter its hours here. A
+              closing time earlier than opening means the following day.
+            </p>
+            <div v-for="day in days" :key="day" class="row g-2 align-items-end mb-3">
+              <div class="col-12 col-sm-2 fw-semibold">{{ day }}</div>
+              <div class="col-12 col-sm-4">
+                <label :for="`mode-${submission.id}-${day}`" class="visually-hidden"
+                  >{{ day }} opening status</label
+                >
+                <select
+                  :id="`mode-${submission.id}-${day}`"
+                  v-model="hours[day].mode"
+                  class="form-select"
+                  :data-testid="`admin-hours-${day}-mode`"
+                >
+                  <option value="open">Set hours</option>
+                  <option value="closed">Closed</option>
+                  <option value="24h">Open 24 hours</option>
+                </select>
+              </div>
+              <template v-if="hours[day].mode === 'open'">
+                <div class="col-6 col-sm-3">
+                  <label :for="`open-${submission.id}-${day}`" class="form-label small"
+                    >{{ day }} opens</label
+                  >
+                  <input
+                    :id="`open-${submission.id}-${day}`"
+                    v-model="hours[day].open"
+                    type="time"
+                    class="form-control"
+                    required
+                    :data-testid="`admin-hours-${day}-open`"
+                  />
+                </div>
+                <div class="col-6 col-sm-3">
+                  <label :for="`close-${submission.id}-${day}`" class="form-label small"
+                    >{{ day }} closes</label
+                  >
+                  <input
+                    :id="`close-${submission.id}-${day}`"
+                    v-model="hours[day].close"
+                    type="time"
+                    class="form-control"
+                    required
+                    :data-testid="`admin-hours-${day}-close`"
+                  />
+                </div>
+              </template>
+            </div>
+            <button type="submit" class="btn btn-dark me-2" data-testid="admin-save-edits">
+              {{ busy ? 'Saving...' : 'Save changes' }}
+            </button>
+            <button type="button" class="btn btn-outline-dark" @click="cancelEdit">Cancel</button>
+          </fieldset>
+        </form>
+      </div>
+    </dialog>
   </article>
 </template>
 
 <style scoped>
-.submission-photo {
+.submission-preview {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #eee;
+  border-radius: 18px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
+  transition: box-shadow 0.2s ease;
+}
+.submission-preview:hover {
+  box-shadow: 0 6px 20px rgb(0 0 0 / 10%);
+}
+.submission-preview:focus-within {
+  outline: 2px solid #212529;
+  outline-offset: 3px;
+}
+.preview-photo-panel {
+  position: relative;
+  background: #f3f3f3;
+}
+.preview-photo,
+.preview-placeholder {
   width: 100%;
-  max-height: 420px;
-  object-fit: cover;
+  height: 200px;
+}
+.preview-photo {
+  display: block;
+  object-fit: contain;
+}
+.preview-placeholder {
+  display: grid;
+  place-items: center;
+}
+.preview-badges {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.preview-badges .badge {
+  padding: 6px 10px;
+  font-weight: 500;
+}
+.preview-body {
+  flex: 1;
+  padding: 16px;
+  overflow-wrap: anywhere;
+}
+.preview-open {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #111;
+  font: inherit;
+  text-align: left;
+}
+.preview-open:focus-visible {
+  outline: none;
+}
+.preview-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.submission-dialog {
+  width: min(900px, calc(100% - 24px));
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid #e5e5e5;
+  border-radius: 18px;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 20%);
+  color: #212529;
+}
+.submission-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.submission-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+.dialog-header {
+  flex-shrink: 0;
+  padding: 20px 24px;
+  border-bottom: 1px solid #eee;
+  background: white;
+}
+.dialog-body {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.dialog-header .btn-close {
+  flex-shrink: 0;
+  min-width: 24px;
+  min-height: 24px;
+}
+.submission-photo {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 .photo-panel,
 .photo-placeholder {
@@ -726,5 +943,10 @@ a {
 .form-control,
 .form-select {
   min-height: 44px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .submission-preview {
+    transition: none;
+  }
 }
 </style>
