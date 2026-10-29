@@ -78,7 +78,16 @@ async function mockBackend(page, admin = true) {
         return replyAction(route, state.submissions[0])
       }
       const status = url.searchParams.get('status')?.replace('eq.', '')
-      const rows = state.submissions.filter((row) => !status || row.status === status)
+      const nameFilter = url.searchParams.get('name')
+      const search = nameFilter
+        ?.slice('ilike.%'.length, -1)
+        .replace(/\\([\\%_])/g, '$1')
+        .toLowerCase()
+      const rows = state.submissions.filter(
+        (row) =>
+          (!status || row.status === status) &&
+          (!search || row.name.toLowerCase().includes(search)),
+      )
       const headers = {
         'access-control-expose-headers': 'content-range',
         'content-range': rows.length ? `0-${rows.length - 1}/${rows.length}` : '*/0',
@@ -162,6 +171,99 @@ async function mockBackend(page, admin = true) {
   return state
 }
 
+for (const width of [1280, 375]) {
+  test(`partial name search filters all status tabs and resets pagination at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const state = await mockBackend(page)
+    const original = state.submissions[0]
+    state.submissions = [
+      ...Array.from({ length: 12 }, (_, index) => ({
+        ...original,
+        id: `22222222-2222-4222-8222-${String(index).padStart(12, '0')}`,
+        name: index === 11 ? 'Hidden River Walk' : `Studio ${index + 1}`,
+      })),
+      { ...original, id: 'approved-river', name: 'River cafe', status: 'approved' },
+      { ...original, id: 'rejected-river', name: 'River rooftop', status: 'rejected' },
+    ]
+    await page.goto('/admin/submissions')
+    await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (12)')
+    await page.getByRole('button', { name: 'Next', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Studio 11', exact: true })).toBeVisible()
+    const search = page.getByTestId('admin-search')
+    await search.fill(' rIvEr ')
+    await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (1)')
+    await expect(page.getByTestId('admin-tab-approved')).toHaveText('Approved (1)')
+    await expect(page.getByTestId('admin-tab-rejected')).toHaveText('Rejected (1)')
+    await expect(
+      page.getByRole('heading', { name: 'Hidden River Walk', exact: true }),
+    ).toBeVisible()
+    await expect(page.locator('[data-testid^="admin-submission-"]')).toHaveCount(1)
+    await expect(page.getByRole('navigation', { name: 'Submission pages' })).toHaveCount(0)
+    await page.getByTestId('admin-tab-approved').click()
+    await expect(page.getByRole('heading', { name: 'River cafe', exact: true })).toBeVisible()
+    await expect(search).toHaveValue(' rIvEr ')
+    await page.getByTestId('admin-tab-rejected').click()
+    await expect(page.getByRole('heading', { name: 'River rooftop', exact: true })).toBeVisible()
+    await search.fill('unfindable')
+    await expect(page.getByTestId('admin-empty')).toContainText('No rejected activities match')
+    await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (0)')
+    await expect(page.getByTestId('admin-tab-approved')).toHaveText('Approved (0)')
+    await expect(page.getByTestId('admin-tab-rejected')).toHaveText('Rejected (0)')
+    await page.getByRole('button', { name: 'Clear', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'River rooftop', exact: true })).toBeVisible()
+    await expect(search).toHaveValue('')
+    await page.getByTestId('admin-tab-pending').click()
+    await expect(page.getByRole('heading', { name: 'Studio 1', exact: true })).toBeVisible()
+    await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (12)')
+    await expect(page.locator('[data-testid^="admin-submission-"]')).toHaveCount(10)
+    await expect(page.locator('body')).toHaveJSProperty('scrollWidth', width)
+  })
+}
+
+test('search treats percent and underscore as literal name characters', async ({ page }) => {
+  const state = await mockBackend(page)
+  state.submissions = ['100% Fun', '1000 Fun', 'Studio_A', 'StudioBA'].map((name, index) => ({
+    ...state.submissions[0],
+    id: `search-${index}`,
+    name,
+  }))
+  await page.goto('/admin/submissions')
+  const filteredRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return request.method() === 'GET' && url.searchParams.get('name') === 'ilike.%\\%%'
+  })
+  await page.getByTestId('admin-search').fill('%')
+  await filteredRequest
+  await expect(page.getByRole('heading', { name: '100% Fun', exact: true })).toBeVisible()
+  await expect(page.locator('[data-testid^="admin-submission-"]')).toHaveCount(1)
+  await page.getByTestId('admin-search').fill('_')
+  await expect(page.getByRole('heading', { name: 'Studio_A', exact: true })).toBeVisible()
+  await expect(page.locator('[data-testid^="admin-submission-"]')).toHaveCount(1)
+})
+
+test('renaming a search result refreshes matching cards and counts', async ({ page }) => {
+  await mockBackend(page)
+  await page.goto('/admin/submissions')
+  const searchResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' &&
+      new URL(response.url()).searchParams.get('name') === 'ilike.%art%',
+  )
+  await page.getByTestId('admin-search').fill('art')
+  await searchResponse
+  await expect(page.getByText('Loading submissions...', { exact: true })).toHaveCount(0)
+  await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (1)')
+  await page.getByTestId('admin-edit').click()
+  await page.getByTestId('admin-edit-name').fill('Renamed venue')
+  await page.getByTestId('admin-save-edits').click()
+  await expect(page.getByTestId('admin-empty')).toContainText('No pending activities match')
+  await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (0)')
+  await page.getByRole('button', { name: 'Clear', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Renamed venue', exact: true })).toBeVisible()
+})
+
 test('ordinary users cannot open the admin page or see its navigation link', async ({ page }) => {
   const state = await mockBackend(page, false)
   await page.goto('/admin/submissions')
@@ -180,6 +282,7 @@ for (const width of [1280, 375]) {
     await page.goto('/admin/submissions')
     await page.getByTestId('admin-approve').click()
     await expect(page.getByTestId('admin-empty')).toBeVisible()
+    await expect(page.getByTestId('admin-tab-approved')).toHaveText('Approved (1)')
     await page.getByTestId('admin-tab-approved').click()
     await expect(page.getByTestId('admin-approve')).toHaveCount(0)
     await expect(page.getByTestId('admin-reject')).toHaveCount(0)
@@ -253,6 +356,8 @@ for (const { status, prepare, warning } of deletionScenarios) {
     await page.getByTestId('admin-confirm-delete').click()
     await expect(page.getByTestId('admin-empty')).toBeVisible()
     await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (0)')
+    await expect(page.getByTestId('admin-tab-approved')).toHaveText('Approved (0)')
+    await expect(page.getByTestId('admin-tab-rejected')).toHaveText('Rejected (0)')
     expect(state.submissions).toHaveLength(0)
     expect(state.activities).toHaveLength(0)
     expect(state.requests.at(-1).body).toEqual({
@@ -341,6 +446,8 @@ for (const width of [1280, 375]) {
     await card.getByText('Opening hours (Singapore time)', { exact: true }).click()
     await expect(card).toContainText('Monday: 10:00')
     await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (1)')
+    await expect(page.getByTestId('admin-tab-approved')).toHaveText('Approved (0)')
+    await expect(page.getByTestId('admin-tab-rejected')).toHaveText('Rejected (0)')
     await page.getByTestId('admin-tab-approved').click()
     await expect(page.getByTestId('admin-empty')).toHaveText('No approved submissions yet.')
     await page.getByTestId('admin-tab-rejected').click()
@@ -465,6 +572,7 @@ test('requires a rejection reason and shows it in the submitter profile', async 
   await page.getByTestId('admin-reject-reason').fill('  Duplicate of an existing activity  ')
   await page.getByTestId('admin-confirm-reject').click()
   await expect(page.getByTestId('admin-empty')).toBeVisible()
+  await expect(page.getByTestId('admin-tab-rejected')).toHaveText('Rejected (1)')
   expect(state.requests[0].body.p_reason).toBe('Duplicate of an existing activity')
   await page.getByTestId('admin-tab-rejected').click()
   await expect(page.getByTestId(`admin-submission-${submissionId}`)).toContainText(

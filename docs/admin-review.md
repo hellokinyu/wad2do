@@ -43,8 +43,11 @@ preserves own-profile and admin access, including the submitter-name join on thi
   admin access. Auth callbacks stay synchronous, avoiding Supabase auth deadlocks.
 - `router/index.js`: checks the role on navigation. Signed-out visitors go to
   login; non-admins go to an access message. Failed role checks offer a retry.
-- `AdminReviewView.vue`: loads a status tab, an exact pending count, and ten cards
+- `AdminReviewView.vue`: loads a status tab, exact counts for all statuses, and ten cards
   per page. Loading failures have a retry button.
+  Search matches any part of an activity name without case sensitivity, across
+  all pages. The search stays active when switching status tabs, and each tab's
+  count reflects matching activities. Clearing search restores the full list.
 - `AdminSubmissionCard.vue`: displays all submitted activity fields, photo,
   submitter name (or ID), and submission time in Singapore time. The edit form
   saves only activity fields and keeps changes on failure. Cancel discards edits.
