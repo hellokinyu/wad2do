@@ -12,6 +12,8 @@ const itinerary = ref(null)
 const budget = computed(() => group.value?.budget_per_person ?? 0)
 // The group's voted activities (loaded from Supabase by loadVotes)
 const votedActivities = ref([])
+// Every voted activity with its vote total, including ones with more downs than ups
+const allVotedActivities = ref([])
 
 // Add up the cost of every stop
 const totalCost = computed(() => {
@@ -304,12 +306,15 @@ async function loadSavedPlan() {
   return data
 }
 
-// Turn saved stops back into full stops by adding each activity's details (name, photo...)
+// Turn saved stops back into full stops by adding each activity's details (name, photo...).
+// Stops the group has since voted down (more downs than ups) are left out.
 function useSavedPlan(saved) {
-  const stops = saved.stops.map((s) => {
-    const activity = votedActivities.value.find((a) => a.activity_id === s.activity_id) || {}
-    return { ...activity, ...s }
-  })
+  const stops = saved.stops
+    .map((s) => {
+      const activity = allVotedActivities.value.find((a) => a.activity_id === s.activity_id) || {}
+      return { ...activity, ...s }
+    })
+    .filter((stop) => !(stop.votes < 0))
   const date = group.value?.chosen_start ? toSgKey(group.value.chosen_start).slice(0, 10) : ''
   itinerary.value = { date, total_cost: saved.total_cost, stops }
   dayStart.value = stops[0]?.start || dayStart.value
@@ -347,7 +352,8 @@ async function loadVotes() {
     byActivity[vote.activity_id].votes += vote.value
   }
 
-  votedActivities.value = Object.values(byActivity).filter((a) => a.votes > 0)
+  allVotedActivities.value = Object.values(byActivity)
+  votedActivities.value = allVotedActivities.value.filter((a) => a.votes > 0)
 }
 
 // Fill the chosen time with the most-voted activities that fit the time, opening hours and budget
