@@ -474,9 +474,6 @@ onMounted(loadActivities)
             <circle class="filter-knob filter-knob-middle" cx="20" cy="14" r="3" />
             <circle class="filter-knob filter-knob-bottom" cx="11" cy="22" r="3" />
           </svg>
-          <span v-if="activeFilters.length" class="filter-count" aria-hidden="true">{{
-            activeFilters.length
-          }}</span>
         </button>
       </div>
 
@@ -914,23 +911,6 @@ onMounted(loadActivities)
 .filters-toggle:is(:hover, :focus-visible) .filter-knob-bottom {
   transform: translateX(8px);
   transition-delay: 140ms, 0ms;
-}
-.filter-count {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  display: grid;
-  place-items: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 3px;
-  border-radius: 999px;
-  background: white;
-  color: #111;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
-  pointer-events: none;
 }
 
 .category-chips {
