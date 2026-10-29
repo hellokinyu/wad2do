@@ -649,12 +649,14 @@ async function extendDateRange() {
 
 // ---------- Plan button ----------
 async function onPlan() {
+  if (planning.value || !group.value.chosen_start) return
   planning.value = true
   try {
-    // TODO: call your Plan function here (votes + chosen slot + budget + OneMap travel time)
-    // and save the result to the itineraries table.
-    await new Promise((resolve) => setTimeout(resolve, 500)) // placeholder, remove later
-    router.push('/groups/' + groupId.value + '/itinerary') // open the Itinerary tab
+    await router.push({
+      name: 'group-itinerary',
+      params: { id: groupId.value },
+      query: { replan: '1' },
+    })
   } catch {
     errorMsg.value = "Couldn't build the plan"
   } finally {
