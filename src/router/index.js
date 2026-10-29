@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
+import { safeRedirect } from '@/lib/safeRedirect'
 import { waitForActivitiesRender } from '@/lib/activityScroll'
 
 import LandingView from '@/views/LandingView.vue'
@@ -102,9 +103,12 @@ const { user, isAdmin, needsOnboarding, initializeAuth, loadAdminStatus } = useA
 router.beforeEach(async (to) => {
   // Wait for the saved session before deciding whether to redirect after a refresh.
   await initializeAuth()
-  if (to.meta.requiresAuth && !user.value) return { name: 'login' }
+  // Remember the page (e.g. a group invite link) so login can return to it.
+  if (to.meta.requiresAuth && !user.value)
+    return { name: 'login', query: { redirect: to.fullPath } }
   if (needsOnboarding.value && to.name !== 'onboarding') return { name: 'onboarding' }
-  if (to.meta.guestOnly && user.value) return { name: 'activities' }
+  if (to.meta.guestOnly && user.value)
+    return safeRedirect(to.query.redirect) || { name: 'activities' }
   if (to.name !== 'admin-access') await loadAdminStatus()
   if (to.meta.requiresAdmin && !isAdmin.value) return { name: 'admin-access' }
 })
@@ -116,7 +120,7 @@ const stopWatching = watch(user, (currentUser) => {
   if (currentUser && needsOnboarding.value && route.name !== 'onboarding') {
     router.replace({ name: 'onboarding' })
   } else if (currentUser && route.meta.guestOnly) {
-    router.replace({ name: 'activities' })
+    router.replace(safeRedirect(route.query.redirect) || { name: 'activities' })
   }
 })
 

@@ -74,11 +74,13 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { authErrorMessage, useAuth } from '@/composables/useAuth'
+import { safeRedirect } from '@/lib/safeRedirect'
 
 const router = useRouter()
+const route = useRoute()
 const { authError } = useAuth()
 const email = ref('')
 const password = ref('')
@@ -102,7 +104,8 @@ async function logIn() {
     })
     if (error) throw error
     password.value = ''
-    await router.replace({ name: 'activities' })
+    // Go back to the page that asked them to log in (e.g. a group invite link).
+    await router.replace(safeRedirect(route.query.redirect) || { name: 'activities' })
   } catch (error) {
     errorMessage.value = authErrorMessage(error)
   } finally {

@@ -102,8 +102,13 @@ function getInviteLink(group) {
 }
 
 async function copyInviteLink() {
-  await navigator.clipboard.writeText(getInviteLink(newGroup.value))
-  copyMessage.value = 'Link copied!'
+  try {
+    await navigator.clipboard.writeText(getInviteLink(newGroup.value))
+    copyMessage.value = 'Link copied!'
+  } catch {
+    // Some browsers block clipboard access, so let the user copy it by hand.
+    copyMessage.value = "Couldn't copy automatically. Select the link above and copy it."
+  }
 }
 
 // ----- Create a group -----
