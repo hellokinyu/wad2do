@@ -461,3 +461,86 @@ test.describe('phone sharing', () => {
     await expect(page.getByTestId('activity-share-dialog')).toBeHidden()
   })
 })
+
+for (const width of [375, 1440]) {
+  test(`long group picker keeps its heading and confirmation visible at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 667 })
+    const state = await mockBackend(page)
+    state.groups = Array.from({ length: 12 }, (_, index) => ({
+      id: 'long-group-' + index,
+      name: index === 11 ? 'SaturdaySquad'.repeat(12) : 'Outing group ' + index,
+    }))
+    state.failures[state.groups[11].id] = 1
+    await page.goto('/activities')
+    await page.getByTestId('activity-share').first().click()
+    const dialog = page.getByTestId('activity-share-dialog')
+    const heading = dialog.getByRole('heading', { name: 'Share to groups' })
+    const confirm = page.getByTestId('share-confirm')
+    const lastRow = page.getByTestId('share-group-option').last()
+    await expect(lastRow).toBeAttached()
+    await expect(heading).toBeInViewport()
+    await expect(confirm).toBeInViewport()
+    await lastRow.getByRole('checkbox').check()
+    await expect(lastRow).toHaveClass(/is-selected/)
+    await expect(heading).toBeInViewport()
+    await expect(confirm).toBeInViewport()
+    await confirm.click()
+    await expect(page.getByTestId('share-error')).toBeVisible()
+    await lastRow.scrollIntoViewIfNeeded()
+    const name = await lastRow.locator('.group-name').boundingBox()
+    const status = await lastRow.getByRole('status').boundingBox()
+    expect(status.y).toBeGreaterThanOrEqual(name.y + name.height)
+    await expect(heading).toBeInViewport()
+    await expect(confirm).toBeInViewport()
+    const bounds = await dialog.boundingBox()
+    expect(bounds.x).toBeGreaterThanOrEqual(0)
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(width)
+    await confirm.click()
+    await expect(dialog).toBeHidden()
+    expect(state.writes).toHaveLength(2)
+  })
+}
+
+for (const viewport of [
+  { width: 568, height: 320 },
+  { width: 375, height: 667 },
+]) {
+  test(`long activity names leave the group picker usable at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport)
+    const state = await mockBackend(page)
+    const activity = {
+      ...activities[0],
+      name: 'Art exhibition visit at National Gallery Singapore '.repeat(16).trim(),
+    }
+    await page.route('**/rest/v1/activities?*', (route) => route.fulfill({ json: [activity] }))
+    await page.goto('/activities')
+    await page.getByTestId('activity-share').click()
+    const dialog = page.getByTestId('activity-share-dialog')
+    await expect(page.getByTestId('share-group-option')).toHaveCount(groups.length)
+    const assertControlsFit = async () => {
+      const bounds = await dialog.boundingBox()
+      for (const control of [
+        dialog.getByRole('heading', { name: 'Share to groups' }),
+        dialog.getByRole('button', { name: 'Close share menu' }),
+        page.getByTestId('share-confirm'),
+        dialog.getByRole('link', { name: 'Create a new group' }),
+      ]) {
+        const box = await control.boundingBox()
+        expect(box.y).toBeGreaterThanOrEqual(bounds.y)
+        expect(box.y + box.height).toBeLessThanOrEqual(bounds.y + bounds.height)
+      }
+    }
+    await assertControlsFit()
+    await expect(dialog).toContainText(activity.name)
+    await checkbox(page, 0).check()
+    await checkbox(page, 2).check()
+    await assertControlsFit()
+    await page.getByTestId('share-confirm').click()
+    await expect(dialog).toBeHidden()
+    expect(state.writes.map((row) => row.group_id)).toEqual([groups[0].id, groups[2].id])
+  })
+}

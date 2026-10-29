@@ -4,6 +4,7 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import ActivityCard from '@/components/ActivityCard.vue'
 import ActivityShareDialog from '@/components/ActivityShareDialog.vue'
+import { moveDialogFocus } from '@/lib/dialogFocus'
 import { getPrice } from '@/lib/activityDisplay'
 import { rankActivities } from '@/lib/activityRanking'
 import { useAuth } from '@/composables/useAuth'
@@ -126,13 +127,24 @@ const allowedSorts = ['best-match', 'catalogue', 'price-asc', 'price-desc']
 const sortBy = ref(
   allowedSorts.includes(previousFilters.sort) ? previousFilters.sort : 'best-match',
 )
-const filtersOpen = ref(false)
 const pageSize = 20
 const requestedPage = ref(
   Number.isSafeInteger(previousFilters.page) && previousFilters.page > 0 ? previousFilters.page : 1,
 )
 const resultsSummary = ref(null)
 const filtersPanel = ref(null)
+const stickyControls = ref(null)
+const filtersTrigger = ref(null)
+
+function openFilters(event) {
+  event.currentTarget.focus({ preventScroll: true })
+  filtersPanel.value.showModal()
+}
+
+function closeFilters() {
+  filtersPanel.value.close()
+  filtersTrigger.value?.focus({ preventScroll: true })
+}
 
 watch([keyword, selectedCategory, selectedSetting, selectedArea, selectedPrice, sortBy], () => {
   requestedPage.value = 1
@@ -261,10 +273,10 @@ async function changePage(page) {
   requestedPage.value = page
   await nextTick()
   resultsSummary.value?.focus({ preventScroll: true })
-  if (resultsSummary.value) {
-    const filterHeight = filtersPanel.value?.getBoundingClientRect().height ?? 0
-    const navbarHeight = filtersPanel.value ? parseFloat(getComputedStyle(filtersPanel.value).top) || 0 : 0
-    resultsSummary.value.style.scrollMarginTop = `${navbarHeight + filterHeight + 16}px`
+  if (resultsSummary.value && stickyControls.value) {
+    const controls = stickyControls.value
+    const navbarHeight = parseFloat(getComputedStyle(controls).top) || 0
+    resultsSummary.value.style.scrollMarginTop = `${navbarHeight + controls.getBoundingClientRect().height + 16}px`
   }
   resultsSummary.value?.scrollIntoView({ block: 'start' })
 }
@@ -287,6 +299,37 @@ function clearFilters() {
   selectedArea.value = ''
   selectedPrice.value = ''
   sortBy.value = 'best-match'
+  const target = filtersPanel.value?.open
+    ? filtersPanel.value.querySelector('.btn-close')
+    : filtersTrigger.value
+  target?.focus({ preventScroll: true })
+}
+
+const activeFilters = computed(() =>
+  [
+    { key: 'category', label: selectedCategory.value, value: selectedCategory },
+    { key: 'area', label: selectedArea.value, value: selectedArea },
+    {
+      key: 'price',
+      label: priceRanges.find((range) => range.value === selectedPrice.value)?.label,
+      value: selectedPrice,
+    },
+    {
+      key: 'setting',
+      label:
+        selectedSetting.value === 'indoor'
+          ? 'Indoor'
+          : selectedSetting.value === 'outdoor'
+            ? 'Outdoor'
+            : '',
+      value: selectedSetting,
+    },
+  ].filter((filter) => filter.label),
+)
+
+function removeFilter(filter) {
+  filter.value.value = ''
+  filtersTrigger.value?.focus({ preventScroll: true })
 }
 
 async function loadProfile() {
@@ -373,122 +416,65 @@ onMounted(loadActivities)
       </RouterLink>
     </header>
 
-    <div class="search-bar d-flex gap-2 mb-3">
-      <div class="flex-grow-1">
-        <label for="activity-search" class="visually-hidden">Search activities</label>
-        <input
-          id="activity-search"
-          v-model="keyword"
-          type="search"
-          class="form-control"
-          placeholder="Search activities, categories or areas"
-          data-testid="activity-search"
-        />
-      </div>
-      <button
-        type="button"
-        class="btn btn-outline-dark d-md-none"
-        :aria-expanded="filtersOpen"
-        aria-controls="activity-filters"
-        data-testid="filters-toggle"
-        @click="filtersOpen = !filtersOpen"
-      >
-        Filters
-      </button>
-    </div>
-
-    <div class="category-chips mb-4" role="group" aria-label="Quick category filters">
-      <button
-        type="button"
-        class="category-chip"
-        :class="{ active: selectedCategory === '' }"
-        :aria-pressed="selectedCategory === ''"
-        data-testid="category-chip-all"
-        @click="selectedCategory = ''"
-      >
-        All activities
-      </button>
-
-      <button
-        v-for="category in categories"
-        :key="category"
-        type="button"
-        class="category-chip"
-        :class="{ active: selectedCategory === category }"
-        :aria-pressed="selectedCategory === category"
-        data-testid="category-chip"
-        @click="selectedCategory = category"
-      >
-        {{ category }}
-      </button>
-    </div>
-
     <section
-      id="activity-filters"
-      ref="filtersPanel"
-      class="filters-panel mb-4"
-      :class="{ 'is-open': filtersOpen }"
-      aria-label="Activity filters"
+      ref="stickyControls"
+      class="activity-controls mb-3"
+      aria-label="Activity search and filters"
+      data-testid="activity-controls"
     >
-      <div class="d-flex justify-content-end d-md-none mb-2">
-        <button type="button" class="btn-close" aria-label="Close filters" @click="filtersOpen = false"></button>
+      <div class="search-bar d-flex gap-2 mb-3">
+        <div class="flex-grow-1">
+          <label for="activity-search" class="visually-hidden">Search activities</label>
+          <input
+            id="activity-search"
+            v-model="keyword"
+            type="search"
+            class="form-control"
+            placeholder="Search activities, categories or areas"
+            data-testid="activity-search"
+          />
+        </div>
+        <button
+          type="button"
+          ref="filtersTrigger"
+          class="btn btn-outline-dark"
+          aria-haspopup="dialog"
+          aria-controls="activity-filters"
+          data-testid="filters-toggle"
+          @click="openFilters"
+        >
+          Filters<span v-if="activeFilters.length"> ({{ activeFilters.length }})</span>
+        </button>
       </div>
-      <div class="row g-3 align-items-end">
-        <div class="col-12 col-md-4">
-          <label for="category-filter" class="form-label">Category</label>
-          <select
-            id="category-filter"
-            v-model="selectedCategory"
-            class="form-select"
-            data-testid="category-filter"
+
+      <div class="browse-controls">
+        <div class="category-chips" role="group" aria-label="Quick category filters">
+          <button
+            type="button"
+            class="category-chip"
+            :class="{ active: selectedCategory === '' }"
+            :aria-pressed="selectedCategory === ''"
+            data-testid="category-chip-all"
+            @click="selectedCategory = ''"
           >
-            <option value="">All categories</option>
-            <option v-for="category in categories" :key="category" :value="category">
-              {{ category }}
-            </option>
-          </select>
-        </div>
-        <div class="col-12 col-md-4">
-          <label for="area-filter" class="form-label">Area</label>
-          <select
-            id="area-filter"
-            v-model="selectedArea"
-            class="form-select"
-            data-testid="area-filter"
+            All activities
+          </button>
+
+          <button
+            v-for="category in categories"
+            :key="category"
+            type="button"
+            class="category-chip"
+            :class="{ active: selectedCategory === category }"
+            :aria-pressed="selectedCategory === category"
+            data-testid="category-chip"
+            @click="selectedCategory = category"
           >
-            <option value="">All areas</option>
-            <option v-for="area in areas" :key="area" :value="area">{{ area }}</option>
-          </select>
+            {{ category }}
+          </button>
         </div>
-        <div class="col-12 col-md-4">
-          <label for="price-filter" class="form-label">Price per person</label>
-          <select
-            id="price-filter"
-            v-model="selectedPrice"
-            class="form-select"
-            data-testid="price-filter"
-          >
-            <option value="">All prices</option>
-            <option v-for="range in priceRanges" :key="range.value" :value="range.value">
-              {{ range.label }}
-            </option>
-          </select>
-        </div>
-        <div class="col-12 col-md-4">
-          <label for="setting-filter" class="form-label">Indoor / outdoor</label>
-          <select
-            id="setting-filter"
-            v-model="selectedSetting"
-            class="form-select"
-            data-testid="setting-filter"
-          >
-            <option value="">All</option>
-            <option value="indoor">Indoor</option>
-            <option value="outdoor">Outdoor</option>
-          </select>
-        </div>
-        <div class="col-12 col-md-4">
-          <label for="sort-filter" class="form-label">Sort by</label>
+        <div class="sort-control">
+          <label for="sort-filter" class="visually-hidden">Sort by</label>
           <select id="sort-filter" v-model="sortBy" class="form-select" data-testid="sort-filter">
             <option value="best-match">Best match</option>
             <option value="catalogue">Catalogue order</option>
@@ -496,19 +482,131 @@ onMounted(loadActivities)
             <option value="price-desc">Price: high to low</option>
           </select>
         </div>
-        <div class="col-12 col-md-4">
-          <button
-            type="button"
-            class="btn btn-outline-secondary w-100"
-            :disabled="!hasFilters"
-            data-testid="clear-filters"
-            @click="clearFilters"
-          >
-            Clear filters
-          </button>
-        </div>
+      </div>
+
+      <div
+        v-if="hasFilters"
+        class="d-flex flex-wrap gap-2 mt-3"
+        role="group"
+        aria-label="Applied filters"
+      >
+        <button
+          v-for="filter in activeFilters"
+          :key="filter.key"
+          type="button"
+          class="category-chip"
+          :aria-label="`Remove ${filter.label} filter`"
+          data-testid="active-filter"
+          @click="removeFilter(filter)"
+        >
+          {{ filter.label }} <span aria-hidden="true">×</span>
+        </button>
+        <button
+          v-if="hasFilters"
+          type="button"
+          class="btn btn-link text-secondary btn-sm"
+          data-testid="clear-all-filters"
+          @click="clearFilters"
+        >
+          Clear all
+        </button>
       </div>
     </section>
+
+    <dialog
+      id="activity-filters"
+      ref="filtersPanel"
+      class="filters-panel"
+      aria-labelledby="activity-filters-title"
+      @cancel.prevent="closeFilters"
+      @keydown.tab.prevent="moveDialogFocus"
+    >
+      <header class="filter-header d-flex justify-content-between align-items-center gap-3">
+        <h2 id="activity-filters-title" class="h4 fw-bold mb-0">Filter activities</h2>
+        <button
+          type="button"
+          class="btn-close"
+          aria-label="Close filters"
+          @click="closeFilters"
+        ></button>
+      </header>
+      <div class="filter-body">
+        <div class="row g-3">
+          <div class="col-12 col-sm-6">
+            <label for="category-filter" class="form-label">Category</label>
+            <select
+              id="category-filter"
+              v-model="selectedCategory"
+              class="form-select"
+              data-testid="category-filter"
+            >
+              <option value="">All categories</option>
+              <option v-for="category in categories" :key="category" :value="category">
+                {{ category }}
+              </option>
+            </select>
+          </div>
+          <div class="col-12 col-sm-6">
+            <label for="area-filter" class="form-label">Area</label>
+            <select
+              id="area-filter"
+              v-model="selectedArea"
+              class="form-select"
+              data-testid="area-filter"
+            >
+              <option value="">All areas</option>
+              <option v-for="area in areas" :key="area" :value="area">{{ area }}</option>
+            </select>
+          </div>
+          <div class="col-12 col-sm-6">
+            <label for="price-filter" class="form-label">Price per person</label>
+            <select
+              id="price-filter"
+              v-model="selectedPrice"
+              class="form-select"
+              data-testid="price-filter"
+            >
+              <option value="">All prices</option>
+              <option v-for="range in priceRanges" :key="range.value" :value="range.value">
+                {{ range.label }}
+              </option>
+            </select>
+          </div>
+          <div class="col-12 col-sm-6">
+            <label for="setting-filter" class="form-label">Indoor / outdoor</label>
+            <select
+              id="setting-filter"
+              v-model="selectedSetting"
+              class="form-select"
+              data-testid="setting-filter"
+            >
+              <option value="">All</option>
+              <option value="indoor">Indoor</option>
+              <option value="outdoor">Outdoor</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <footer class="filter-footer d-flex gap-2">
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          :disabled="!hasFilters"
+          data-testid="clear-filters"
+          @click="clearFilters"
+        >
+          Clear filters
+        </button>
+        <button
+          type="button"
+          class="btn btn-dark flex-grow-1"
+          data-testid="filter-confirm"
+          @click="closeFilters"
+        >
+          Show {{ filteredActivities.length }} activities
+        </button>
+      </footer>
+    </dialog>
 
     <div
       v-if="favouritesError"
@@ -588,8 +686,18 @@ onMounted(loadActivities)
     </p>
 
     <template v-else>
-      <div class="mb-3" role="status" data-testid="activities-sort-summary">
-        <p class="fw-semibold mb-0">{{ sortSummary }}</p>
+      <div :class="{ 'mb-3': sortBy === 'best-match' }">
+        <p
+          :class="
+            sortBy === 'best-match' && !hasRankingPreferences
+              ? 'text-secondary small mb-0'
+              : 'visually-hidden'
+          "
+          role="status"
+          data-testid="activities-sort-summary"
+        >
+          {{ sortSummary }}
+        </p>
         <p
           v-if="sortBy === 'best-match' && hasRankingPreferences"
           class="text-secondary small mb-0"
@@ -709,6 +817,17 @@ onMounted(loadActivities)
   opacity: 0.45;
 }
 
+.activity-controls {
+  position: sticky;
+  top: var(--navbar-height, 0px);
+  z-index: 1010;
+  max-height: min(45dvh, calc(100dvh - var(--navbar-height, 0px) - 64px));
+  overflow-y: auto;
+  padding: 12px 0;
+  border-bottom: 1px solid #eee;
+  background: white;
+}
+
 .search-bar .form-control {
   min-height: 48px;
   border-radius: 12px;
@@ -755,16 +874,56 @@ onMounted(loadActivities)
 }
 
 .filters-panel {
-  position: sticky;
-  top: var(--navbar-height, 0px);
-  z-index: 10;
-  max-height: min(45vh, calc(100vh - var(--navbar-height, 0px)));
-  max-height: min(45dvh, calc(100dvh - var(--navbar-height, 0px)));
-  overflow-y: auto;
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
+  width: min(620px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  overflow: hidden;
+  background: white;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 15%);
+}
+
+.filters-panel[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.filters-panel::backdrop {
+  background: rgb(0 0 0 / 35%);
+}
+
+.filter-header,
+.filter-footer {
+  flex-shrink: 0;
   padding: 20px;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 6%);
+}
+
+.filter-header {
+  border-bottom: 1px solid #eee;
+}
+.filter-footer {
+  border-top: 1px solid #eee;
+}
+.filter-body {
+  overflow-y: auto;
+  padding: 20px;
+  min-height: 0;
+}
+.browse-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.category-chips {
+  flex: 1;
+  min-width: 0;
+}
+.sort-control {
+  margin-left: auto;
+  width: min(100%, 230px);
+  flex-shrink: 0;
+}
+#activities-results-summary {
+  scroll-margin-top: calc(var(--navbar-height, 0px) + 16px);
 }
 
 .form-label {
@@ -778,8 +937,16 @@ onMounted(loadActivities)
     text-align: center;
   }
 
-  .filters-panel:not(.is-open) {
-    display: none;
+  .browse-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .category-chips {
+    flex: auto;
+  }
+  .sort-control {
+    width: 100%;
   }
 }
 
