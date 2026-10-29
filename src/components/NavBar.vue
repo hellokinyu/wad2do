@@ -1,11 +1,13 @@
 <template>
   <nav ref="navbar" class="navbar navbar-expand-md bg-white border-bottom">
+    <NavBarTheme />
     <div class="container">
       <RouterLink class="navbar-brand" to="/" aria-label="WAD2Do home">
         <img :src="brandLogo" alt="WAD2Do" class="brand-logo" width="180" height="60" />
       </RouterLink>
 
       <button
+        ref="toggler"
         class="navbar-toggler"
         type="button"
         data-bs-toggle="collapse"
@@ -17,7 +19,7 @@
         <span class="navbar-toggler-icon"></span>
       </button>
 
-      <div class="collapse navbar-collapse" id="mainNav">
+      <div ref="menu" class="collapse navbar-collapse" id="mainNav">
         <ul class="navbar-nav ms-auto">
           <li class="nav-item">
             <RouterLink
@@ -90,6 +92,7 @@
               >Log in</RouterLink
             >
           </li>
+          <NavBarTheme picker />
         </ul>
       </div>
     </div>
@@ -97,13 +100,27 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import AnimalAvatar from '@/components/AnimalAvatar.vue'
+import NavBarTheme from '@/components/NavBarTheme.vue'
 import brandLogo from '@/assets/wad2do-logo.png'
 
 const { user, isAdmin, avatarAnimal } = useAuth()
 const navbar = ref(null)
+const toggler = ref(null)
+const menu = ref(null)
+const route = useRoute()
+
+// On phones, Bootstrap leaves the menu open after tapping a link, covering the new page.
+// Close it by pressing the menu button again whenever the page changes.
+watch(
+  () => route.fullPath,
+  () => {
+    if (menu.value?.classList.contains('show')) toggler.value?.click()
+  },
+)
 let resizeObserver
 
 onMounted(() => {

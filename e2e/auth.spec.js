@@ -82,7 +82,7 @@ test('signup requests email confirmation without creating an authenticated sessi
   expect(new URL(state.requests[0].url).searchParams.get('redirect_to')).toMatch(/\/onboarding$/)
   expect(await page.evaluate((key) => localStorage.getItem(key), authStorageKey())).toBeNull()
   await page.goto('/profile')
-  await expect(page).toHaveURL('/login')
+  await expect(page).toHaveURL('/login?redirect=/profile')
 })
 
 test('mismatched passwords do not send a signup request', async ({ page }) => {
@@ -230,7 +230,7 @@ test('an invalid saved refresh token sends the user back to login', async ({ pag
     { key: authStorageKey(), session: { ...mockSession, expires_at: 1 } },
   )
   await page.goto('/profile')
-  await expect(page).toHaveURL('/login')
+  await expect(page).toHaveURL('/login?redirect=/profile')
   expect(await page.evaluate((key) => localStorage.getItem(key), authStorageKey())).toBeNull()
 })
 
@@ -253,7 +253,7 @@ test('logout clears the session and redirects another open protected tab', async
   await expect(otherTab).toHaveURL('/login')
   expect(await page.evaluate((key) => localStorage.getItem(key), authStorageKey())).toBeNull()
   await page.goto('/profile')
-  await expect(page).toHaveURL('/login')
+  await expect(page).toHaveURL('/login?redirect=/profile')
 })
 
 test('logout errors stay visible when Supabase clears the local session', async ({ page }) => {
@@ -311,7 +311,26 @@ for (const path of [
   test('signed-out visitors to ' + path + ' are redirected to login', async ({ page }) => {
     await mockBackend(page)
     await page.goto(path)
-    await expect(page).toHaveURL('/login')
+    await expect(page).toHaveURL('/login?redirect=' + path)
     await expect(page.getByTestId('login-page')).toBeVisible()
   })
 }
+
+test('logging in from an invite link returns to the group', async ({ page }) => {
+  const state = await mockBackend(page)
+  state.user = { ...mockUser, user_metadata: { display_name: 'Demo User', avatar_animal: 'dog' } }
+  await page.goto('/groups/example?invite=ABC234')
+  await expect(page).toHaveURL(/\/login\?redirect=/)
+  await fillLogin(page)
+  await page.getByTestId('login-submit').click()
+  await expect(page).toHaveURL('/groups/example/activities?invite=ABC234')
+})
+
+test('login ignores redirects to other websites', async ({ page }) => {
+  const state = await mockBackend(page)
+  state.user = { ...mockUser, user_metadata: { display_name: 'Demo User', avatar_animal: 'dog' } }
+  await page.goto('/login?redirect=//evil.example')
+  await fillLogin(page)
+  await page.getByTestId('login-submit').click()
+  await expect(page).toHaveURL('/activities')
+})
