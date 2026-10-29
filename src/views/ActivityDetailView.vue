@@ -13,6 +13,7 @@ import {
   getLocation,
   getMapEmbedUrl,
 } from '@/lib/activityDisplay'
+import ActivityShareDialog from '@/components/ActivityShareDialog.vue'
 import { useActivityActions } from '@/composables/useActivityActions'
 
 const route = useRoute()
@@ -21,7 +22,7 @@ const activity = ref(null)
 const loading = ref(true)
 const errorMessage = ref('')
 const imageFailed = ref(false)
-const shareDialog = ref(null)
+const shareTarget = ref(null)
 const googleDetails = ref(null)
 const googleLoading = ref(false)
 const googleError = ref('')
@@ -64,33 +65,20 @@ const showSettingTag = computed(
   () => activity.value?.category?.trim().toLowerCase() !== setting.value.toLowerCase(),
 )
 
-const {
-  saved,
-  saving,
-  sharing,
-  actionError,
-  needsLogin,
-  message,
-  showShareDialog,
-  groups,
-  groupsLoading,
-  groupsError,
-  selectedGroupId,
-  toggleSaved,
-  openShare,
-  closeShare,
-  shareActivity,
-} = useActivityActions(activity)
+const { saved, saving, actionError, needsLogin, message, toggleSaved, announce } =
+  useActivityActions(activity)
 
-// A native dialog supplies keyboard focus management and Escape handling.
 watch(
-  showShareDialog,
-  (open) => {
-    if (open && shareDialog.value && !shareDialog.value.open) shareDialog.value.showModal()
-    if (!open && shareDialog.value?.open) shareDialog.value.close()
+  () => activity.value?.id,
+  () => {
+    shareTarget.value = null
   },
-  { flush: 'post' },
 )
+
+function openShare(event) {
+  event.currentTarget.focus({ preventScroll: true })
+  shareTarget.value = activity.value
+}
 
 async function loadActivity() {
   const request = ++requestNumber
@@ -324,10 +312,10 @@ onUnmounted(() => {
                 type="button"
                 class="btn btn-dark rounded-pill action-button"
                 data-testid="detail-share"
-                :disabled="sharing"
+                aria-haspopup="dialog"
                 @click="openShare"
               >
-                Share to group
+                Share to groups
               </button>
               <button
                 type="button"
@@ -449,74 +437,9 @@ onUnmounted(() => {
           </section>
         </div>
       </div>
-
-      <dialog
-        ref="shareDialog"
-        class="share-dialog"
-        aria-labelledby="share-dialog-title"
-        data-testid="detail-share-dialog"
-        @cancel.prevent="closeShare"
-        @close="closeShare"
-      >
-        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-          <div>
-            <h2 id="share-dialog-title" class="h4 fw-bold mb-2">Share to group</h2>
-            <p class="text-secondary mb-0">{{ activity.name }}</p>
-          </div>
-          <button
-            type="button"
-            class="btn-close"
-            aria-label="Close share menu"
-            :disabled="sharing"
-            @click="closeShare"
-          ></button>
-        </div>
-
-        <p v-if="groupsLoading" role="status">Loading your groups…</p>
-        <div v-else-if="groupsError" class="alert alert-danger" role="alert">
-          {{ groupsError }}
-          <button
-            v-if="!groups.length"
-            type="button"
-            class="btn btn-outline-danger mt-2"
-            @click="openShare"
-          >
-            Try again
-          </button>
-        </div>
-        <p v-else-if="groups.length === 0" data-testid="detail-no-groups">
-          You're not in any groups yet.
-        </p>
-
-        <form v-if="!groupsLoading && groups.length" @submit.prevent="shareActivity">
-          <label for="detail-share-group" class="form-label">Choose a group</label>
-          <select
-            id="detail-share-group"
-            v-model="selectedGroupId"
-            class="form-select mb-3"
-            data-testid="detail-share-group"
-            :disabled="sharing"
-            required
-          >
-            <option value="">Choose a group</option>
-            <option v-for="group in groups" :key="group.id" :value="group.id">
-              {{ group.name }}
-            </option>
-          </select>
-          <button
-            type="submit"
-            class="btn btn-dark rounded-pill w-100"
-            :disabled="!selectedGroupId || sharing"
-            data-testid="detail-confirm-share"
-          >
-            {{ sharing ? 'Sharing…' : 'Share activity' }}
-          </button>
-        </form>
-        <RouterLink v-if="!sharing" to="/groups" class="d-inline-block mt-3" @click="closeShare">
-          Create a new group
-        </RouterLink>
-      </dialog>
     </article>
+
+    <ActivityShareDialog :activity="shareTarget" @close="shareTarget = null" @shared="announce" />
 
     <div v-if="message" class="action-toast" role="status" data-testid="detail-toast">
       {{ message }}
@@ -643,23 +566,13 @@ onUnmounted(() => {
 .is-saved {
   color: #dc3545;
 }
-.share-dialog {
-  width: min(460px, calc(100% - 32px));
-  max-height: calc(100vh - 48px);
-  padding: 28px;
-  border: 1px solid #e5e5e5;
-  border-radius: 20px;
-  box-shadow: 0 16px 48px rgb(0 0 0 / 15%);
-}
-.share-dialog::backdrop {
-  background: rgb(0 0 0 / 35%);
-}
 .action-toast {
   position: fixed;
   bottom: 24px;
   right: 24px;
   z-index: 1100;
   max-width: min(360px, calc(100% - 32px));
+  overflow-wrap: anywhere;
   padding: 14px 20px;
   border-radius: 14px;
   background: #111;
