@@ -40,3 +40,8 @@ __screenshots__/
 
 test-results/
 playwright-report/
+
+# Local AI tool files (Claude Code, Cursor, Impeccable): personal settings and large binaries
+.claude/
+.cursor/
+.impeccable/
