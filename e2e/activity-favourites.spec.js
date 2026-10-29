@@ -126,7 +126,7 @@ test('card favourites persist across pages, reload, details and Profile', async 
   await expect(firstHeart).toHaveAttribute('aria-pressed', 'false')
   await page.reload()
   await expect(firstHeart).toHaveAttribute('aria-pressed', 'false')
-  await expect(page.getByTestId('activity-share')).toHaveCount(0)
+  await expect(page.getByTestId('activity-share')).toHaveCount(20)
 })
 
 test('failed favourite loading disables hearts and can be retried', async ({ page }) => {

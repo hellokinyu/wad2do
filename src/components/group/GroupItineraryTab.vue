@@ -1,14 +1,15 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { getVisitHoursWarnings } from '@/lib/openingHours'
 import { fetchTravelOptions } from '@/lib/travelOptions'
+import { requestWithTimeout } from '@/lib/requestWithTimeout'
 import ItineraryTravelOptions from '@/components/group/ItineraryTravelOptions.vue'
 
+const TRAVEL_MINUTES = 30
 const itinerary = ref(null)
 const budget = computed(() => group.value?.budget_per_person ?? 0)
-// Fake group votes for now. Later: group_activities joined with activities.
 // The group's voted activities (loaded from Supabase by loadVotes)
 const votedActivities = ref([])
 // Every voted activity with its vote total, including ones with more downs than ups
@@ -54,6 +55,7 @@ function whyNotInPlan(activity) {
 
 // ----- The group (real data from Supabase) -----
 const route = useRoute()
+const router = useRouter()
 const groupId = route.params.id // the :id in /groups/:id/itinerary
 
 const group = ref(null) // { chosen_start, chosen_end, budget_per_person }
@@ -207,10 +209,10 @@ const saveError = ref('')
 
 // Save the plan for this group (creates the row the first time, updates it after)
 async function saveChanges() {
+  if (saving.value) return false
   saving.value = true
   saveError.value = ''
   try {
-    const { data: userData } = await supabase.auth.getUser()
     // Only save the fields from the brief. Name, photo etc. come from the activity.
     const stopsToSave = itinerary.value.stops.map((s) => ({
       activity_id: s.activity_id,
@@ -220,21 +222,30 @@ async function saveChanges() {
       reason: s.reason,
       travel_mode: s.travel_mode || null,
     }))
+    const totalCostToSave = totalCost.value
 
-    const { error } = await supabase.from('itineraries').upsert(
-      {
-        group_id: groupId,
-        stops: stopsToSave,
-        total_cost: totalCost.value,
-        updated_by: userData.user.id,
-      },
-      { onConflict: 'group_id' },
-    )
+    const { error } = await requestWithTimeout(async (signal) => {
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError) throw userError
+      if (!userData.user) throw new Error('Log in before saving the plan.')
+      signal.throwIfAborted()
+      return supabase.from('itineraries').upsert(
+        {
+          group_id: groupId,
+          stops: stopsToSave,
+          total_cost: totalCostToSave,
+          updated_by: userData.user.id,
+        },
+        { onConflict: 'group_id' },
+      ).abortSignal(signal)
+    })
     if (error) throw error
     isEditing.value = false // only leave edit mode if it worked
+    return true
   } catch (error) {
     console.log(error)
     saveError.value = "Couldn't save the plan. Please try again."
+    return false
   } finally {
     saving.value = false
   }
@@ -388,23 +399,36 @@ function buildPlan() {
   dayStart.value = stops[0]?.start || dayStart.value
 }
 
-// Runs when the tab opens: the group first, then the weather (which needs the date)
+// Load an existing plan, or build and save one before showing it.
 async function loadPage() {
   loading.value = true
   errorMessage.value = ''
+  saveError.value = ''
   try {
     await loadGroup()
     await loadVotes()
     const saved = await loadSavedPlan()
-    if (saved) {
+    const rebuild = route.query.replan === '1'
+    if (saved && !rebuild) {
       useSavedPlan(saved) // the group already has a plan: show it
     } else {
-      buildPlan() // no plan yet: make one from the chosen time
+      buildPlan()
     }
-    loadWeather()
+    if (itinerary.value) {
+      await loadTravel()
+      if ((!saved || rebuild) && !(await saveChanges())) {
+        throw new Error('Generated plan could not be saved.')
+      }
+      if (rebuild) {
+        const query = { ...route.query }
+        delete query.replan
+        await router.replace({ query })
+      }
+      loadWeather()
+    }
   } catch (error) {
     console.log(error)
-    errorMessage.value = "Couldn't load the plan. Please try again."
+    errorMessage.value = saveError.value || "Couldn't load the plan. Please try again."
   } finally {
     loading.value = false
   }
@@ -463,7 +487,9 @@ async function loadTravel() {
     travelByLeg.value[key] = { loading: true }
     try {
       const departure = itinerary.value.date + 'T' + from.end // leave when this stop ends
-      const options = await fetchTravelOptions(placeOf(from), placeOf(to), departure)
+      const options = await requestWithTimeout(() =>
+        fetchTravelOptions(placeOf(from), placeOf(to), departure),
+      )
       travelByLeg.value[key] = { options }
     } catch (error) {
       travelByLeg.value[key] = { error: error.message }
@@ -473,16 +499,21 @@ async function loadTravel() {
 }
 
 // Reload travel when the stops or their order change (new plan, move, remove, swap)
-watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), loadTravel)
+watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
+  if (!loading.value) loadTravel()
+})
 </script>
 
 <template>
   <div data-testid="group-itinerary-tab">
     <h2 class="h4">Itinerary</h2>
     <p v-if="loading" class="text-muted">Loading plan...</p>
-    <p v-else-if="errorMessage" class="text-danger" data-testid="itinerary-error">
-      {{ errorMessage }}
-    </p>
+    <div v-else-if="errorMessage" class="alert alert-danger" role="alert" data-testid="itinerary-error">
+      <p>{{ errorMessage }}</p>
+      <button class="btn btn-outline-danger" data-testid="itinerary-retry" @click="loadPage">
+        Try again
+      </button>
+    </div>
 
     <!-- No plan yet -->
     <div v-else-if="!itinerary" class="alert alert-secondary" data-testid="itinerary-empty">

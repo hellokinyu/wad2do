@@ -6,20 +6,13 @@ import { readSavedStatus, setActivitySaved } from '@/lib/activityFavourites'
 export function useActivityActions(activity) {
   const saved = ref(false)
   const saving = ref(false)
-  const sharing = ref(false)
   const actionError = ref('')
   const needsLogin = ref(false)
   const message = ref('')
-  const showShareDialog = ref(false)
-  const groups = ref([])
-  const groupsLoading = ref(false)
-  const groupsError = ref('')
-  const selectedGroupId = ref('')
 
   let messageTimer
   // Request numbers stop an older response from changing the current screen.
   let savedRequest = 0
-  let groupRequest = 0
   let disposed = false
 
   function announce(text) {
@@ -38,16 +31,9 @@ export function useActivityActions(activity) {
 
     if (!user && promptForLogin) {
       needsLogin.value = true
-      actionError.value = 'Log in to save or share activities.'
+      actionError.value = 'Log in to save activities.'
     }
     return user
-  }
-
-  function closeShare() {
-    if (sharing.value) return
-    groupRequest += 1
-    showShareDialog.value = false
-    groupsLoading.value = false
   }
 
   // Refresh saved state when another activity is opened.
@@ -60,8 +46,6 @@ export function useActivityActions(activity) {
       needsLogin.value = false
       message.value = ''
       clearTimeout(messageTimer)
-      showShareDialog.value = false
-      groupRequest += 1
       if (!id) return
 
       try {
@@ -107,107 +91,19 @@ export function useActivityActions(activity) {
     }
   }
 
-  async function openShare() {
-    if (!activity.value || sharing.value) return
-    const id = activity.value.id
-    const request = ++groupRequest
-    actionError.value = ''
-    needsLogin.value = false
-
-    try {
-      const user = await getUser(true)
-      if (!user || disposed || activity.value?.id !== id || request !== groupRequest) return
-
-      showShareDialog.value = true
-      groupsLoading.value = true
-      groupsError.value = ''
-      groups.value = []
-      selectedGroupId.value = ''
-
-      const { data: memberships, error: membershipError } = await supabase
-        .from('group_members')
-        .select('group_id')
-        .eq('user_id', user.id)
-
-      if (membershipError) throw membershipError
-      const ids = (memberships ?? []).map((row) => row.group_id)
-
-      if (ids.length) {
-        const { data, error } = await supabase
-          .from('groups')
-          .select('id, name')
-          .in('id', ids)
-          .order('name')
-
-        if (error) throw error
-        if (request === groupRequest) groups.value = data ?? []
-      }
-    } catch {
-      if (!disposed && request === groupRequest && activity.value?.id === id) {
-        if (showShareDialog.value) groupsError.value = "Couldn't load your groups. Try again."
-        else actionError.value = "Couldn't check your account. Please try again."
-      }
-    } finally {
-      if (request === groupRequest) groupsLoading.value = false
-    }
-  }
-
-  async function shareActivity() {
-    if (!activity.value || sharing.value || groupsLoading.value) return
-    const group = groups.value.find((item) => item.id === selectedGroupId.value)
-    if (!group) return
-
-    const id = activity.value.id
-    sharing.value = true
-    actionError.value = ''
-    groupsError.value = ''
-
-    try {
-      const user = await getUser(true)
-      if (!user) {
-        groupsError.value = 'Log in again before sharing this activity.'
-        return
-      }
-
-      const { error } = await supabase
-        .from('group_activities')
-        .insert({ group_id: group.id, activity_id: id, shared_by: user.id })
-
-      if (error && error.code !== '23505') throw error
-
-      if (!disposed && activity.value?.id === id) {
-        announce(error ? 'Already shared to ' + group.name + '.' : 'Shared to ' + group.name + '.')
-        showShareDialog.value = false
-      }
-    } catch {
-      groupsError.value = "Couldn't share this activity. Please try again."
-    } finally {
-      sharing.value = false
-    }
-  }
-
   onUnmounted(() => {
     disposed = true
     savedRequest += 1
-    groupRequest += 1
     clearTimeout(messageTimer)
   })
 
   return {
     saved,
     saving,
-    sharing,
     actionError,
     needsLogin,
     message,
-    showShareDialog,
-    groups,
-    groupsLoading,
-    groupsError,
-    selectedGroupId,
     toggleSaved,
-    openShare,
-    closeShare,
-    shareActivity,
+    announce,
   }
 }

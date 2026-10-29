@@ -82,22 +82,35 @@
         </button>
       </div>
 
-      <!-- DAY TABS: only visible on phones (d-md-none); the grid shows one day at a time there -->
-      <div class="d-md-none mb-2 d-flex flex-wrap gap-1">
+      <!-- PAGE NAV: 3 days per page on phones, 7 on laptops -->
+      <div v-if="pageCount > 1" class="d-flex align-items-center justify-content-between mb-2" data-testid="day-pager">
         <button
-          v-for="day in days"
-          :key="day"
-          class="btn btn-sm"
-          :class="day === selectedDay ? 'btn-secondary' : 'btn-outline-secondary'"
-          @click="selectedDay = day"
+          class="btn btn-sm btn-outline-secondary"
+          :disabled="page === 0"
+          aria-label="Previous days"
+          data-testid="prev-days"
+          @click="prevPage"
         >
-          {{ formatDay(day) }}
+          &larr;
+        </button>
+        <span class="small fw-semibold">
+          {{ pageLabel }}
+          <span class="text-muted fw-normal">({{ page + 1 }} / {{ pageCount }})</span>
+        </span>
+        <button
+          class="btn btn-sm btn-outline-secondary"
+          :disabled="page === pageCount - 1"
+          aria-label="Next days"
+          data-testid="next-days"
+          @click="nextPage"
+        >
+          &rarr;
         </button>
       </div>
 
       <!-- THE GRID: days across the top, 30-minute slots down the side (CSS Grid, see <style>) -->
       <div class="grid-scroll" data-testid="availability-grid">
-        <div class="avail-grid" :style="{ '--cols': days.length }" @mouseleave="hoveredKey = null">
+        <div class="avail-grid" :style="{ '--cols': daysPerPage }" @mouseleave="hoveredKey = null">
           <!-- time labels column -->
           <div class="time-col">
             <div class="head-cell"></div>
@@ -106,12 +119,11 @@
             </div>
           </div>
 
-          <!-- one column per day; on phones only the selected day is shown -->
+          <!-- one column per visible day (3 per page on phones, 7 on laptops) -->
           <div
-            v-for="day in days"
+            v-for="day in visibleDays"
             :key="day"
             class="day-col"
-            :class="{ 'd-none d-md-flex': day !== selectedDay }"
           >
             <div class="head-cell">{{ formatDay(day) }}</div>
             <div
@@ -199,7 +211,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 // Shared Supabase client (handbook: src/lib/supabase.js). If it is a default export, use: import supabase from ...
 import { supabase } from '../../lib/supabase'
@@ -220,6 +232,13 @@ let saveController
 let disposed = false
 const planning = ref(false)
 
+// ---------- pagination: 3 days per page on phones, 7 on laptops ----------
+const isPhone = ref(window.innerWidth < 768) // same breakpoint as Bootstrap's md
+const page = ref(0) // which page of days is showing (0 = first)
+function onResize() {
+  isPhone.value = window.innerWidth < 768
+}
+
 const userId = ref(null) // current logged-in user
 const group = ref({}) // start_date, end_date, chosen_start, chosen_end
 const members = ref([]) // [{ id, name }]
@@ -227,7 +246,6 @@ const allSlots = ref([]) // everyone's saved slots: [{ user_id, key }]
 const mySlots = ref({}) // my slots as an object: { "2026-10-17T14:00": true }
 
 const mode = ref('mine') // 'mine' | 'heatmap'
-const selectedDay = ref(null) // which day is shown on phones
 const hoveredKey = ref(null) // slot being hovered/tapped in the heatmap
 const pickStart = ref(null) // first slot picked on the heatmap
 const pickEnd = ref(null) // second slot picked on the heatmap
@@ -313,6 +331,42 @@ const days = computed(() => {
   }
   return out
 })
+
+const daysPerPage = computed(() => (isPhone.value ? 3 : 7))
+const pageCount = computed(() => Math.max(1, Math.ceil(days.value.length / daysPerPage.value)))
+// Only the days on the current page get rendered
+const visibleDays = computed(() => {
+  const start = page.value * daysPerPage.value
+  return days.value.slice(start, start + daysPerPage.value)
+})
+const pageLabel = computed(() => {
+  const v = visibleDays.value
+  if (!v.length) return ''
+  return v.length === 1 ? formatDay(v[0]) : formatDay(v[0]) + ' – ' + formatDay(v[v.length - 1])
+})
+
+function prevPage() {
+  if (page.value > 0) page.value--
+}
+function nextPage() {
+  if (page.value < pageCount.value - 1) page.value++
+}
+// Jump to the page that contains a given day (used by the "everyone free" chips)
+function goToDay(day) {
+  const i = days.value.indexOf(day)
+  if (i >= 0) page.value = Math.floor(i / daysPerPage.value)
+}
+
+// When the screen crosses the breakpoint, keep the first visible day on screen
+watch(daysPerPage, (newPer, oldPer) => {
+  const firstIdx = page.value * oldPer
+  page.value = Math.floor(firstIdx / newPer)
+})
+// If the date range shrinks, don't get stuck on a page that no longer exists
+watch(pageCount, (n) => {
+  if (page.value > n - 1) page.value = n - 1
+})
+
 // 30-minute slots from 9:00 to 22:30 (so the last slot ends at 11pm)
 const times = computed(() => {
   const out = []
@@ -473,7 +527,7 @@ function useWindow(w) {
   mode.value = 'heatmap'
   pickStart.value = w.startKey
   pickEnd.value = w.endKey === w.startKey ? null : w.endKey
-  selectedDay.value = w.startKey.split('T')[0]
+  goToDay(w.startKey.split('T')[0])
 }
 
 // ---------- loading data from Supabase ----------
@@ -517,7 +571,7 @@ async function loadAll() {
     }
     mySlots.value = mine
 
-    selectedDay.value = days.value[0]
+    page.value = 0
     maybeShowPopup()
   } catch {
     errorMsg.value = "Couldn't load availability"
@@ -553,12 +607,16 @@ async function onMouseUp() {
   isDragging.value = false
   await saveMySlots()
 }
-onMounted(() => window.addEventListener('mouseup', onMouseUp))
+onMounted(() => {
+  window.addEventListener('mouseup', onMouseUp)
+  window.addEventListener('resize', onResize)
+})
 onUnmounted(() => {
   disposed = true
   saveQueued = false
   saveController?.abort()
   window.removeEventListener('mouseup', onMouseUp)
+  window.removeEventListener('resize', onResize)
 })
 
 // Queue later drags; the database replaces one member's slots in a single transaction.
@@ -645,16 +703,19 @@ async function extendDateRange() {
     return
   }
   group.value = { ...group.value, end_date: newEnd }
+  goToDay(newEnd)
 }
 
 // ---------- Plan button ----------
 async function onPlan() {
+  if (planning.value || !group.value.chosen_start) return
   planning.value = true
   try {
-    // TODO: call your Plan function here (votes + chosen slot + budget + OneMap travel time)
-    // and save the result to the itineraries table.
-    await new Promise((resolve) => setTimeout(resolve, 500)) // placeholder, remove later
-    router.push('/groups/' + groupId.value + '/itinerary') // open the Itinerary tab
+    await router.push({
+      name: 'group-itinerary',
+      params: { id: groupId.value },
+      query: { replan: '1' },
+    })
   } catch {
     errorMsg.value = "Couldn't build the plan"
   } finally {
@@ -680,14 +741,7 @@ onMounted(loadAll)
 /* CSS Grid: one narrow time column + one column per day (--cols is set from the template) */
 .avail-grid {
   display: grid;
-  grid-template-columns: 3.5rem repeat(var(--cols), minmax(5rem, 1fr));
-}
-
-/* Phones: time column + the single selected day */
-@media (max-width: 767.98px) {
-  .avail-grid {
-    grid-template-columns: 3.5rem 1fr;
-  }
+  grid-template-columns: 3.5rem repeat(var(--cols), minmax(3.5rem, 1fr));
 }
 
 .time-col,

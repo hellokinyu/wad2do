@@ -30,6 +30,12 @@ const props = defineProps({
 // Events that ActivitiesView can listen for.
 const emit = defineEmits(['save', 'share'])
 
+function share(event) {
+  // Safari does not focus buttons on pointer clicks before opening a dialog.
+  event.currentTarget.focus({ preventScroll: true })
+  emit('share', props.activity.id)
+}
+
 // The card and detail page use the same display rules.
 const priceLabel = computed(() => formatPrice(props.activity.price_per_person))
 const duration = computed(() => formatDuration(props.activity.duration_min))
@@ -78,31 +84,54 @@ watch(
         </span>
       </div>
 
-      <button
-        type="button"
-        class="save-button"
-        :class="{ saved: saved }"
-        :aria-pressed="saved"
-        :aria-label="
-          saved ? `Remove ${activity.name} from saved activities` : `Save ${activity.name}`
-        "
-        :aria-busy="saving"
-        :disabled="saveDisabled || saving"
-        data-testid="activity-save"
-        @click="emit('save', activity.id)"
-      >
-        <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" focusable="false">
-          <path
-            d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"
-          />
-        </svg>
-      </button>
+      <div class="photo-actions">
+        <button
+          type="button"
+          class="photo-action save-button"
+          :class="{ saved: saved }"
+          :aria-pressed="saved"
+          :aria-label="
+            saved ? `Remove ${activity.name} from saved activities` : `Save ${activity.name}`
+          "
+          :aria-busy="saving"
+          :disabled="saveDisabled || saving"
+          data-testid="activity-save"
+          @click="emit('save', activity.id)"
+        >
+          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" focusable="false">
+            <path
+              d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"
+            />
+          </svg>
+        </button>
+        <button
+          v-if="showShare"
+          type="button"
+          class="photo-action share-button"
+          :aria-label="`Share ${activity.name} to groups`"
+          aria-haspopup="dialog"
+          title="Share to groups"
+          data-testid="activity-share"
+          @click="share"
+        >
+          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" focusable="false">
+            <circle cx="18" cy="5" r="3" />
+            <circle cx="6" cy="12" r="3" />
+            <circle cx="18" cy="19" r="3" />
+            <path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <div class="card-body d-flex flex-column">
       <div class="d-flex align-items-start gap-2">
         <h2 class="activity-name">
-          <RouterLink :to="`/activities/${activity.id}`" data-testid="activity-name-link">
+          <RouterLink
+            :to="`/activities/${activity.id}`"
+            :title="activity.name"
+            data-testid="activity-name-link"
+          >
             {{ activity.name }}
           </RouterLink>
         </h2>
@@ -113,37 +142,29 @@ watch(
       </p>
       <p
         v-if="activity.description?.trim()"
-        class="text-secondary small mb-2"
+        class="activity-description text-secondary small mb-2"
         data-testid="activity-description"
       >
         {{ activity.description }}
       </p>
 
-      <p class="text-secondary small mb-1">
-        {{ activity.area || 'Area unavailable' }}
-      </p>
+      <div class="activity-metadata mt-auto pt-2">
+        <p class="text-secondary small mb-1">
+          {{ activity.area || 'Area unavailable' }}
+        </p>
 
-      <p class="text-secondary small mb-3">
-        <span v-if="showSetting">
-          <span
-            v-if="activity.indoor !== null && activity.indoor !== undefined"
-            aria-hidden="true"
-            >{{ activity.indoor ? '⌂' : '☀' }}</span
-          >
-          {{ setting }} ·
-        </span>
-        {{ duration }}
-      </p>
-
-      <button
-        v-if="showShare"
-        type="button"
-        class="btn btn-outline-dark rounded-pill mt-auto"
-        data-testid="activity-share"
-        @click="emit('share', activity.id)"
-      >
-        Share to group
-      </button>
+        <p class="text-secondary small mb-0">
+          <span v-if="showSetting">
+            <span
+              v-if="activity.indoor !== null && activity.indoor !== undefined"
+              aria-hidden="true"
+              >{{ activity.indoor ? '⌂' : '☀' }}</span
+            >
+            {{ setting }} ·
+          </span>
+          {{ duration }}
+        </p>
+      </div>
     </div>
   </article>
 </template>
@@ -205,7 +226,20 @@ watch(
   transform: scale(1.03);
 }
 
+.activity-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .activity-name {
+  height: 2.6em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
   flex: 1;
   margin-bottom: 8px;
   font-size: 1.2rem;
@@ -222,10 +256,16 @@ watch(
   text-decoration: underline;
 }
 
-.save-button {
+.photo-actions {
   position: absolute;
   top: 12px;
   right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.photo-action {
   display: grid;
   place-items: center;
   width: 44px;
@@ -237,7 +277,7 @@ watch(
   color: white;
 }
 
-.save-button svg {
+.photo-action svg {
   fill: none;
   stroke: white;
   stroke-width: 2;
@@ -246,8 +286,8 @@ watch(
   filter: drop-shadow(0 1px 2px rgb(0 0 0 / 80%));
 }
 
-.save-button:hover,
-.save-button:focus-visible {
+.photo-action:hover,
+.photo-action:focus-visible {
   background: rgb(0 0 0 / 16%);
 }
 
@@ -259,7 +299,7 @@ watch(
   fill: currentColor;
 }
 
-.save-button:focus-visible {
+.photo-action:focus-visible {
   outline: 2px solid white;
   outline-offset: 2px;
   box-shadow: 0 0 0 4px rgb(0 0 0 / 60%);

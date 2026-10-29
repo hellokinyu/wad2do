@@ -71,6 +71,20 @@ async function mockActivities(page, records = activities) {
   })
 }
 
+async function selectFilter(page, name, value) {
+  const dialog = page.getByRole('dialog', { name: 'Filter activities' })
+  if (!(await dialog.isVisible())) await page.getByTestId('filters-toggle').click()
+  await page.getByTestId(name).selectOption(value)
+  await page.getByTestId('filter-confirm').click()
+}
+
+async function clearFilters(page) {
+  const dialog = page.getByRole('dialog', { name: 'Filter activities' })
+  if (!(await dialog.isVisible())) await page.getByTestId('filters-toggle').click()
+  await page.getByTestId('clear-filters').click()
+  await page.getByTestId('filter-confirm').click()
+}
+
 test('demo searches, combines filters and clears them', async ({ page }) => {
   await mockActivities(page)
   await page.goto('/activities')
@@ -80,7 +94,7 @@ test('demo searches, combines filters and clears them', async ({ page }) => {
   await expect(page.getByTestId('activities-sort-summary')).toHaveText('Showing catalogue order')
   await expect(page.getByTestId('activities-sort-description')).toHaveCount(0)
   await expect(page.getByTestId('activity-save')).toHaveCount(4)
-  await expect(page.getByTestId('activity-share')).toHaveCount(0)
+  await expect(page.getByTestId('activity-share')).toHaveCount(4)
   await expect(cards.getByRole('link')).toHaveCount(8)
 
   await page.getByRole('button', { name: 'Outdoor', exact: true }).click()
@@ -91,7 +105,7 @@ test('demo searches, combines filters and clears them', async ({ page }) => {
     'true',
   )
 
-  await page.getByTestId('category-filter').selectOption('Workshops')
+  await selectFilter(page, 'category-filter', 'Workshops')
   await expect(cards).toHaveCount(1)
   await expect(page.getByRole('button', { name: 'Workshops', exact: true })).toHaveAttribute(
     'aria-pressed',
@@ -105,7 +119,7 @@ test('demo searches, combines filters and clears them', async ({ page }) => {
   await expect(cards).toHaveCount(1)
   await expect(cards).toContainText('Pottery Workshop')
 
-  await page.getByTestId('category-filter').selectOption('Outdoor')
+  await selectFilter(page, 'category-filter', 'Outdoor')
   await expect(page.getByTestId('activities-no-results')).toBeVisible()
   await expect(cards).toHaveCount(0)
 
@@ -114,19 +128,19 @@ test('demo searches, combines filters and clears them', async ({ page }) => {
   await expect(page.getByTestId('activity-search')).toHaveValue('')
   await expect(page.getByTestId('category-filter')).toHaveValue('')
 
-  await page.getByTestId('category-filter').selectOption('Outdoor')
+  await selectFilter(page, 'category-filter', 'Outdoor')
   await expect(cards).toHaveCount(2)
-  await page.getByTestId('setting-filter').selectOption('indoor')
+  await selectFilter(page, 'setting-filter', 'indoor')
   await expect(page.getByTestId('activities-no-results')).toBeVisible()
 
-  await page.getByTestId('setting-filter').selectOption('outdoor')
+  await selectFilter(page, 'setting-filter', 'outdoor')
   await expect(cards).toHaveCount(2)
   await page.getByTestId('activity-search').fill('marina')
   await expect(cards).toHaveCount(1)
   await expect(cards).toContainText('Free')
   await expect(page.getByTestId('activities-count')).toHaveText('Showing 1–1 of 1 activities')
 
-  await page.getByTestId('clear-filters').click()
+  await clearFilters(page)
   await page.getByTestId('activity-search').fill('cafe')
   await expect(cards).toHaveCount(1)
   await expect(cards).toContainText('Cafés in Tiong Bahru')
@@ -185,15 +199,15 @@ test('phone layout has one card per row and an accessible filter panel', async (
   await expect(cards).toHaveCount(4)
 
   await page.getByTestId('filters-toggle').click()
-  await expect(page.getByTestId('filters-toggle')).toHaveAttribute('aria-expanded', 'true')
-  await page.getByTestId('setting-filter').selectOption('outdoor')
+  await expect(page.getByRole('dialog', { name: 'Filter activities' })).toBeVisible()
+  await selectFilter(page, 'setting-filter', 'outdoor')
   await expect(cards).toHaveCount(2)
-  await page.getByTestId('area-filter').selectOption('Marina Bay')
-  await page.getByTestId('price-filter').selectOption('free')
+  await selectFilter(page, 'area-filter', 'Marina Bay')
+  await selectFilter(page, 'price-filter', 'free')
   await page.getByTestId('sort-filter').selectOption('price-asc')
   await expect(cards).toHaveCount(1)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375)
-  await page.getByTestId('clear-filters').click()
+  await clearFilters(page)
   await expect(cards).toHaveCount(4)
 })
 
@@ -208,16 +222,16 @@ test('area and price filters combine and clear with the existing filters', async
     'Marina Bay',
     'Tiong Bahru',
   ])
-  await page.getByTestId('area-filter').selectOption('Tiong Bahru')
+  await selectFilter(page, 'area-filter', 'Tiong Bahru')
   await expect(names).toHaveText(['Cafés in Tiong Bahru', 'Pottery Workshop'])
-  await page.getByTestId('price-filter').selectOption('20-50')
+  await selectFilter(page, 'price-filter', '20-50')
   await page.getByTestId('sort-filter').selectOption('price-desc')
   await expect(names).toHaveText(['Pottery Workshop', 'Cafés in Tiong Bahru'])
-  await page.getByTestId('category-filter').selectOption('Workshops')
-  await page.getByTestId('setting-filter').selectOption('indoor')
+  await selectFilter(page, 'category-filter', 'Workshops')
+  await selectFilter(page, 'setting-filter', 'indoor')
   await page.getByTestId('activity-search').fill('pottery')
   await expect(names).toHaveText(['Pottery Workshop'])
-  await page.getByTestId('price-filter').selectOption('free')
+  await selectFilter(page, 'price-filter', 'free')
   await expect(page.getByTestId('activities-no-results')).toBeVisible()
   await page.getByTestId('empty-clear-filters').click()
   await expect(names).toHaveText(activities.map((activity) => activity.name))
@@ -258,10 +272,10 @@ test('price bands handle boundaries and sorting keeps missing prices last', asyn
     ['50-100', [12, 4]],
     ['100-plus', [0]],
   ]) {
-    await page.getByTestId('price-filter').selectOption(band)
+    await selectFilter(page, 'price-filter', band)
     await expect(names).toHaveText(indices.map((i) => 'Price ' + i))
   }
-  await page.getByTestId('clear-filters').click()
+  await clearFilters(page)
   await expect(names).toHaveText(records.map((activity) => activity.name))
 })
 
@@ -271,8 +285,8 @@ test('area, price and sorting survive an activity detail round trip', async ({ p
     route.fulfill({ headers: apiHeaders, json: activities[3] }),
   )
   await page.goto('/activities')
-  await page.getByTestId('area-filter').selectOption('Tiong Bahru')
-  await page.getByTestId('price-filter').selectOption('20-50')
+  await selectFilter(page, 'area-filter', 'Tiong Bahru')
+  await selectFilter(page, 'price-filter', '20-50')
   await page.getByTestId('sort-filter').selectOption('price-desc')
   await page.getByTestId('activity-name-link').first().click()
   await expect(page).toHaveURL('/activities/' + activities[3].id)
@@ -341,7 +355,9 @@ for (const count of [40, 45]) {
     await expect(pagination.getByRole('button', { name: 'Next' })).toBeDisabled()
     // A visible scrollbar can reduce the document width below the viewport width.
     expect(
-      await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
     ).toBe(true)
     await pagination.getByRole('button', { name: 'Previous' }).click()
     await expect(names).toHaveText(
@@ -378,12 +394,12 @@ test('pagination survives a detail visit and resets for search, filters and sort
       .map((activity) => activity.name),
   )
   await pagination.getByRole('button', { name: 'Next' }).click()
-  await page.getByTestId('price-filter').selectOption('under-20')
+  await selectFilter(page, 'price-filter', 'under-20')
   await expect(names).toHaveCount(19)
   await expect(pagination).toHaveCount(0)
   await expect(page.getByTestId('activities-count')).toHaveText('Showing 1–19 of 19 activities')
 
-  await page.getByTestId('clear-filters').click()
+  await clearFilters(page)
   await pagination.getByRole('button', { name: 'Page 3', exact: true }).click()
   await page.getByTestId('activity-search').fill('Workshop 0')
   await expect(names).toHaveText(['Workshop 0'])
@@ -421,7 +437,7 @@ test('Best match reads only the signed-in profile and still respects filters and
     activities[0].name,
     activities[3].name,
   ])
-  await page.getByTestId('category-filter').selectOption('Outdoor')
+  await selectFilter(page, 'category-filter', 'Outdoor')
   await expect(names).toHaveText([activities[2].name, activities[1].name])
   await page.getByTestId('sort-filter').selectOption('price-asc')
   await expect(page.getByTestId('activities-sort-summary')).toHaveText(
@@ -433,7 +449,7 @@ test('Best match reads only the signed-in profile and still respects filters and
   await expect(page.getByTestId('activities-sort-summary')).toHaveText(
     'Sorted by Price: high to low',
   )
-  await page.getByTestId('clear-filters').click()
+  await clearFilters(page)
   await expect(page.getByTestId('sort-filter')).toHaveValue('best-match')
   await expect(names.first()).toHaveText(activities[2].name)
   await expect(page.getByTestId('activities-sort-summary')).toContainText('Sorted by Best match')
@@ -504,6 +520,8 @@ test('empty saved preferences show catalogue order without claiming personalisat
   await expect(page.getByTestId('sort-filter')).toHaveValue('best-match')
   await expect(page.getByTestId('activities-sort-summary')).toHaveText('Showing catalogue order')
   await expect(page.getByTestId('activities-sort-description')).toHaveCount(0)
+  const summary = await page.getByTestId('activities-sort-summary').boundingBox()
+  expect(summary.height).toBeGreaterThan(16)
 })
 
 test('profile failure keeps the catalogue usable and can be retried', async ({ page }) => {
@@ -528,7 +546,7 @@ test('profile failure keeps the catalogue usable and can be retried', async ({ p
   await page.getByTestId('preferences-retry').click()
   await expect(page.getByTestId('preferences-error')).toHaveCount(0)
   await expect(page.getByTestId('activities-sort-summary')).toContainText('Sorted by Best match')
-  await page.getByTestId('clear-filters').click()
+  await clearFilters(page)
   await expect(names).toHaveText([
     activities[1].name,
     activities[2].name,
@@ -637,3 +655,141 @@ test('a zero-row preference update preserves the draft and only confirms a succe
   expect(profile.interests).toEqual(['Cafes', 'Outdoors'])
   expect(attempts).toEqual([confirmedUpdate, confirmedUpdate])
 })
+
+for (const width of [375, 1440]) {
+  test(`filters overlay keeps results compact, removable and keyboard accessible at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 667 })
+    let reads = 0
+    await page.route('**/rest/v1/activities?*', (route) => {
+      reads += 1
+      return route.fulfill({ json: activities })
+    })
+    await page.goto('/activities')
+    await expect(page.getByTestId('activity-card')).toHaveCount(4)
+    const initialReads = reads
+    const dialog = page.getByRole('dialog', { name: 'Filter activities' })
+    const trigger = page.getByTestId('filters-toggle')
+    await expect(dialog).toBeHidden()
+    await expect(page.getByTestId('sort-filter')).toBeVisible()
+    const initialTop = (await page.getByTestId('activity-card').first().boundingBox()).y
+    await trigger.click()
+    await expect(page.getByRole('button', { name: 'Close filters', exact: true })).toBeFocused()
+    await page.keyboard.press('Shift+Tab')
+    await expect(page.getByTestId('filter-confirm')).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(page.getByRole('button', { name: 'Close filters', exact: true })).toBeFocused()
+    await page.getByTestId('area-filter').selectOption('Tiong Bahru')
+    await page.getByTestId('price-filter').selectOption('20-50')
+    await expect(page.getByTestId('filter-confirm')).toHaveText('Show 2 activities')
+    await expect(page.getByTestId('filter-confirm')).toBeInViewport()
+    await expect(page.getByRole('heading', { name: 'Filter activities' })).toBeInViewport()
+    await page.getByTestId('filter-confirm').click()
+    await expect(trigger).toBeFocused()
+    await expect(page.getByTestId('active-filter')).toHaveCount(2)
+    await page.getByRole('button', { name: 'Remove Tiong Bahru filter', exact: true }).click()
+    await expect(page.getByTestId('area-filter')).toHaveValue('')
+    await expect(page.getByTestId('price-filter')).toHaveValue('20-50')
+    await page.getByTestId('clear-all-filters').click()
+    await expect(page.getByTestId('active-filter')).toHaveCount(0)
+    await trigger.click()
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+    await expect(trigger).toBeFocused()
+    expect(reads).toBe(initialReads)
+    expect((await page.getByTestId('activity-card').first().boundingBox()).y).toBe(initialTop)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    )
+  })
+}
+
+for (const width of [768, 1024, 1440]) {
+  test(`cards limit previews and align prices with long titles at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 })
+    const records = activities.slice(0, width < 992 ? 2 : 3).map((activity, index) => ({
+      ...activity,
+      name: index === 1 ? 'Contemporary art at Singapore Art Museum Distripark' : activity.name,
+      description:
+        index === 0
+          ? 'A long description to explore Singapore with friends. '.repeat(12)
+          : 'A short description.',
+    }))
+    await mockActivities(page, records)
+    await page.goto('/activities')
+    const cards = page.getByTestId('activity-card')
+    await expect(cards).toHaveCount(records.length)
+    await expect(page.getByTestId('activity-name-link')).toHaveText(
+      records.map((record) => record.name),
+    )
+    const preview = cards.first().getByTestId('activity-description')
+    const clipping = await preview.evaluate((element) => ({
+      height: element.clientHeight,
+      content: element.scrollHeight,
+      lineHeight: parseFloat(getComputedStyle(element).lineHeight),
+    }))
+    expect(clipping.height).toBeLessThanOrEqual(clipping.lineHeight * 3 + 1)
+    expect(clipping.content).toBeGreaterThan(clipping.height)
+    const positions = await cards.evaluateAll((elements) =>
+      elements.map((card) => ({
+        price: card.querySelector('.fw-semibold').getBoundingClientRect().y,
+        metadata: card.querySelector('.activity-metadata').getBoundingClientRect().y,
+      })),
+    )
+    for (const key of ['price', 'metadata']) {
+      const values = positions.map((position) => position[key])
+      expect(Math.max(...values) - Math.min(...values)).toBeLessThan(1)
+    }
+  })
+}
+
+for (const [width, height] of [
+  [375, 667],
+  [568, 320],
+  [1024, 667],
+  [1440, 667],
+]) {
+  test(`search and filters stay below the navbar while browsing at ${width}x${height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height })
+    await mockActivities(page, paginatedCatalogue)
+    await page.goto('/activities')
+    const controls = page.getByTestId('activity-controls')
+    await expect(page.getByTestId('activity-card')).toHaveCount(20)
+    await page.evaluate(() => window.scrollTo(0, 1500))
+    await expect
+      .poll(async () => {
+        const navbar = await page.getByRole('navigation').first().boundingBox()
+        const box = await controls.boundingBox()
+        return Math.abs(box.y - navbar.y - navbar.height)
+      })
+      .toBeLessThan(1)
+    await expect(page.getByTestId('activity-search')).toBeInViewport()
+    await expect(page.getByTestId('filters-toggle')).toBeInViewport()
+    await page.getByTestId('activity-search').fill('Workshop')
+    await page.getByTestId('filters-toggle').click()
+    await page.getByTestId('category-filter').selectOption('Workshops')
+    await page.getByTestId('filter-confirm').click()
+    await expect(page.getByTestId('filters-toggle')).toBeFocused()
+    await page
+      .getByRole('navigation', { name: 'Activity pages' })
+      .getByRole('button', { name: 'Next' })
+      .click()
+    await expect(page.getByTestId('activities-count')).toHaveText('Showing 21–40 of 45 activities')
+    await expect
+      .poll(async () => {
+        const bar = await controls.boundingBox()
+        const summary = await page.getByTestId('activities-count').boundingBox()
+        return summary.y - bar.y - bar.height
+      })
+      .toBeGreaterThanOrEqual(0)
+    await expect(page.getByTestId('activities-count')).toBeInViewport()
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    ).toBe(true)
+  })
+}
