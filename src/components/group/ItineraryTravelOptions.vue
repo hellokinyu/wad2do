@@ -100,7 +100,7 @@ function formatDistance(meters) {
             v-for="mode in PUBLIC_MODES"
             :key="mode"
             type="button"
-            class="btn btn-outline-secondary"
+            class="btn btn-outline-dark"
             :class="{ active: selectedMode === mode }"
             :disabled="!optionFor(mode)?.available"
             @click="choose(mode)"
@@ -140,8 +140,9 @@ function formatDistance(meters) {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.25rem 0.75rem;
-  border: 1px solid var(--bs-border-color);
+  min-height: 36px;
+  padding: 0.25rem 0.85rem;
+  border: 1px solid #e5e5e5;
   border-radius: 999px;
   background: var(--bs-body-bg);
   color: var(--bs-body-color);
@@ -151,9 +152,9 @@ function formatDistance(meters) {
   cursor: pointer;
 }
 .mode-tab.active {
-  border-color: var(--bs-primary);
-  background: var(--bs-primary-bg-subtle);
-  color: var(--bs-primary);
+  border-color: #111;
+  background: #111;
+  color: white;
   font-weight: 600;
 }
 .mode-tab:disabled {
