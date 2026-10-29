@@ -50,8 +50,11 @@ async function saveSettings() {
   let clearChosen = false
   if (props.group.chosen_start) {
     const chosenDay = toSingaporeDate(props.group.chosen_start)
-    const chosenEndDay = props.group.chosen_end ? toSingaporeDate(props.group.chosen_end) : chosenDay
-    clearChosen = chosenDay < startDate.value || chosenDay > endDate.value || chosenEndDay > endDate.value
+    const chosenEndDay = props.group.chosen_end
+      ? toSingaporeDate(props.group.chosen_end)
+      : chosenDay
+    clearChosen =
+      chosenDay < startDate.value || chosenDay > endDate.value || chosenEndDay > endDate.value
   }
   if (clearChosen) {
     const ok = confirm(
@@ -63,23 +66,26 @@ async function saveSettings() {
   saving.value = true
   try {
     const { error } = await requestWithTimeout((signal) =>
-      supabase.rpc('update_group_settings', {
-        p_group_id: props.group.id,
-        p_name: groupName.value.trim(),
-        p_start_date: startDate.value,
-        p_end_date: endDate.value,
-        p_budget_per_person: budget.value,
-        p_clear_chosen: clearChosen,
-      }).abortSignal(signal),
+      supabase
+        .rpc('update_group_settings', {
+          p_group_id: props.group.id,
+          p_name: groupName.value.trim(),
+          p_start_date: startDate.value,
+          p_end_date: endDate.value,
+          p_budget_per_person: budget.value,
+          p_clear_chosen: clearChosen,
+        })
+        .abortSignal(signal),
     )
     if (error) throw error
 
     emit('saved')
   } catch (error) {
     console.log(error)
-    saveError.value = error?.code === '22023'
-      ? 'The chosen time or settings changed. Reload the group and try again.'
-      : "Couldn't save the settings. Please try again."
+    saveError.value =
+      error?.code === '22023'
+        ? 'The chosen time or settings changed. Reload the group and try again.'
+        : "Couldn't save the settings. Please try again."
   } finally {
     saving.value = false
   }
@@ -105,63 +111,129 @@ async function deleteGroup() {
 </script>
 
 <template>
-  <div class="card mt-3" data-testid="group-settings-form">
-    <div class="card-body">
-      <form @submit.prevent="saveSettings">
-        <fieldset :disabled="saving">
-          <h2 class="h5">Group settings</h2>
+  <section class="group-panel mt-3" aria-label="Group settings" data-testid="group-settings-form">
+    <form @submit.prevent="saveSettings">
+      <fieldset :disabled="saving">
+        <h2 class="h6 fw-bold mb-3">Group settings</h2>
 
-          <label for="settings-name" class="form-label">Group name</label>
-          <input
-            id="settings-name"
-            v-model="groupName"
-            class="form-control mb-2"
-            data-testid="settings-name-input"
-          />
+        <div class="row g-3">
+          <div class="col-12">
+            <label for="settings-name" class="form-label">Group name</label>
+            <input
+              id="settings-name"
+              v-model="groupName"
+              class="form-control"
+              data-testid="settings-name-input"
+            />
+          </div>
 
-          <label for="settings-start" class="form-label">Start date</label>
-          <input
-            id="settings-start"
-            v-model="startDate"
-            type="date"
-            class="form-control mb-2"
-            data-testid="settings-start-input"
-          />
+          <div class="col-12 col-sm-6">
+            <label for="settings-start" class="form-label">Start date</label>
+            <input
+              id="settings-start"
+              v-model="startDate"
+              type="date"
+              class="form-control"
+              data-testid="settings-start-input"
+            />
+          </div>
 
-          <label for="settings-end" class="form-label">End date</label>
-          <input
-            id="settings-end"
-            v-model="endDate"
-            type="date"
-            class="form-control mb-2"
-            data-testid="settings-end-input"
-          />
+          <div class="col-12 col-sm-6">
+            <label for="settings-end" class="form-label">End date</label>
+            <input
+              id="settings-end"
+              v-model="endDate"
+              type="date"
+              class="form-control"
+              data-testid="settings-end-input"
+            />
+          </div>
 
-          <label for="settings-budget" class="form-label">Budget per person ($)</label>
-          <input
-            id="settings-budget"
-            v-model.number="budget"
-            type="number"
-            min="0"
-            class="form-control mb-2"
-            data-testid="settings-budget-input"
-          />
+          <div class="col-12 col-sm-6">
+            <label for="settings-budget" class="form-label">Budget per person (S$)</label>
+            <input
+              id="settings-budget"
+              v-model.number="budget"
+              type="number"
+              min="0"
+              class="form-control"
+              data-testid="settings-budget-input"
+            />
+          </div>
+        </div>
 
-          <p v-if="saveError" class="text-danger" data-testid="settings-error">{{ saveError }}</p>
+        <p v-if="saveError" class="text-danger mt-3 mb-0" data-testid="settings-error">
+          {{ saveError }}
+        </p>
 
-          <button type="submit" class="btn btn-primary me-2" data-testid="settings-save">Save</button>
-          <button type="button" class="btn btn-secondary" @click="emit('cancel')">Cancel</button>
-        </fieldset>
-      </form>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          <button type="submit" class="btn btn-dark rounded-pill px-4" data-testid="settings-save">
+            Save
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline-dark rounded-pill px-4"
+            @click="emit('cancel')"
+          >
+            Cancel
+          </button>
+        </div>
+      </fieldset>
+    </form>
 
-      <hr />
-
-      <p v-if="deleteError" class="text-danger" data-testid="delete-group-error">
-        {{ deleteError }}
-      </p>
-      <button class="btn btn-danger" data-testid="delete-group-button" @click="deleteGroup">
+    <!-- Kept apart from Save, since deleting can't be undone -->
+    <div class="danger-zone">
+      <div>
+        <p class="fw-semibold mb-0">Delete this group</p>
+        <p class="small text-secondary mb-0">
+          Removes the group for everyone. This can't be undone.
+        </p>
+      </div>
+      <button
+        class="btn btn-outline-danger rounded-pill px-4"
+        data-testid="delete-group-button"
+        @click="deleteGroup"
+      >
         Delete group
       </button>
     </div>
-  </div>
+    <p v-if="deleteError" class="text-danger mt-2 mb-0" data-testid="delete-group-error">
+      {{ deleteError }}
+    </p>
+  </section>
 </template>
+
+<style scoped>
+/* Same soft grey panel and inputs as the filters on the Activities page */
+.group-panel {
+  padding: 20px;
+  border: 1px solid #e5e5e5;
+  border-radius: 16px;
+  background: #fafafa;
+}
+
+.form-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.form-control {
+  min-height: 44px;
+  border-radius: 12px;
+}
+
+.btn {
+  min-height: 44px;
+}
+
+.danger-zone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e5e5e5;
+}
+</style>

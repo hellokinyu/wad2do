@@ -14,6 +14,8 @@ const env = {
   GOOGLE_MAPS_API_KEY: 'google-secret',
 }
 const details = {
+  location: { latitude: 1.2914, longitude: 103.8501 },
+  formattedAddress: '107 North Bridge Road, Singapore 179105',
   rating: 4.9,
   userRatingCount: 325,
   regularOpeningHours: { weekdayDescriptions: ['Monday: Closed'] },
@@ -132,6 +134,7 @@ test('catalogue lookup uses caller permissions, then a server-only reservation p
     'https://places.googleapis.com/v1/places/ChIJ_saved_venue?languageCode=en',
   )
   assert.equal(calls[3].headers['X-Goog-FieldMask'], GOOGLE_FIELD_MASK)
+  assert.match(GOOGLE_FIELD_MASK, /location,formattedAddress/)
   assert.equal(calls[3].redirect, 'error')
   assert.equal(response.headers.get('Cache-Control'), 'no-store')
   assert.doesNotMatch(JSON.stringify(details), /server-only|google-secret/)

@@ -2,6 +2,7 @@
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { supabase } from '@/lib/supabase'
+import { moveDialogFocus } from '@/lib/dialogFocus'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
 import { useAuth } from '@/composables/useAuth'
 
@@ -42,18 +43,6 @@ function close() {
     if (trigger?.isConnected) trigger.focus({ preventScroll: true })
     else document.getElementById('activities-results-summary')?.focus({ preventScroll: true })
   })
-}
-
-function moveFocus(event) {
-  // Keep Tab inside the picker even when Safari skips native button/checkbox stops.
-  const controls = [...dialog.value.querySelectorAll('button, input, a[href]')].filter(
-    (element) => !element.matches(':disabled') && element.getClientRects().length,
-  )
-  const index = controls.indexOf(document.activeElement)
-  const next = event.shiftKey
-    ? controls[index - 1] || controls.at(-1)
-    : controls[index + 1] || controls[0]
-  next?.focus()
 }
 
 async function checkedUser() {
@@ -230,88 +219,101 @@ onUnmounted(invalidate)
     data-testid="activity-share-dialog"
     :aria-busy="loading || sharing"
     @cancel.prevent="close"
-    @keydown.tab.prevent="moveFocus"
+    @keydown.tab.prevent="moveDialogFocus"
   >
-    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-      <div>
-        <h2 id="share-dialog-title" class="h4 fw-bold mb-2">Share to groups</h2>
-        <p class="text-secondary mb-0">{{ activity?.name }}</p>
-      </div>
-      <button
-        type="button"
-        class="btn-close"
-        aria-label="Close share menu"
-        :disabled="sharing"
-        @click="close"
-      ></button>
-    </div>
+    <form class="share-layout" @submit.prevent="shareActivity">
+      <header class="share-header d-flex justify-content-between align-items-start gap-3">
+        <h2 id="share-dialog-title" class="h4 fw-bold mb-0">Share to groups</h2>
+        <button
+          type="button"
+          class="btn-close"
+          aria-label="Close share menu"
+          :disabled="sharing"
+          @click="close"
+        ></button>
+      </header>
 
-    <p v-if="loading" role="status">Loading your groups…</p>
-    <div v-else-if="errorMessage" class="alert alert-danger" role="alert" data-testid="share-error">
-      {{ errorMessage }}
-      <RouterLink v-if="needsLogin" to="/login" class="d-block mt-2" @click="close"
-        >Log in</RouterLink
-      >
-      <button
-        v-else-if="!groups.length"
-        type="button"
-        class="btn btn-outline-danger mt-2"
-        data-testid="share-retry-groups"
-        @click="loadGroups"
-      >
-        Try again
-      </button>
-    </div>
-    <p v-else-if="!groups.length" data-testid="share-no-groups">You're not in any groups yet.</p>
-
-    <form v-if="!loading && groups.length" @submit.prevent="shareActivity">
-      <fieldset :disabled="sharing || needsLogin">
-        <legend class="fs-6">Choose one or more groups</legend>
-        <label
-          v-for="group in groups"
-          :key="group.id"
-          class="group-option"
-          data-testid="share-group-option"
+      <div class="share-body">
+        <p class="text-secondary mb-3" data-testid="share-activity-name">{{ activity?.name }}</p>
+        <p v-if="loading" role="status">Loading your groups…</p>
+        <div
+          v-else-if="errorMessage"
+          class="alert alert-danger"
+          role="alert"
+          data-testid="share-error"
         >
-          <input
-            v-model="selectedIds"
-            type="checkbox"
-            class="form-check-input flex-shrink-0"
-            :value="group.id"
-            :disabled="completed(group.id)"
-            :data-testid="`share-group-${group.id}`"
-          />
-          <span class="group-name">{{ group.name }}</span>
-          <span
-            v-if="results[group.id]"
-            class="small"
-            :class="results[group.id] === 'failed' ? 'text-danger' : 'text-success'"
-            role="status"
+          {{ errorMessage }}
+          <RouterLink v-if="needsLogin" to="/login" class="d-block mt-2" @click="close"
+            >Log in</RouterLink
           >
-            {{
-              { shared: 'Shared', already: 'Already shared', failed: 'Failed — try again' }[
-                results[group.id]
-              ]
-            }}
-          </span>
-        </label>
-      </fieldset>
-      <button
-        type="submit"
-        class="btn btn-dark rounded-pill w-100 mt-3"
-        :disabled="sharing || needsLogin || !pendingGroups.length"
-        data-testid="share-confirm"
-      >
-        {{
-          sharing
-            ? 'Sharing…'
-            : `Share to ${pendingGroups.length} group${pendingGroups.length === 1 ? '' : 's'}`
-        }}
-      </button>
+          <button
+            v-else-if="!groups.length"
+            type="button"
+            class="btn btn-outline-danger mt-2"
+            data-testid="share-retry-groups"
+            @click="loadGroups"
+          >
+            Try again
+          </button>
+        </div>
+        <p v-else-if="!groups.length" data-testid="share-no-groups">
+          You're not in any groups yet.
+        </p>
+
+        <fieldset v-if="!loading && groups.length" :disabled="sharing || needsLogin">
+          <legend class="fs-6">Choose one or more groups</legend>
+          <label
+            v-for="group in groups"
+            :key="group.id"
+            class="group-option"
+            :class="{ 'is-selected': selectedIds.includes(group.id) }"
+            data-testid="share-group-option"
+          >
+            <input
+              v-model="selectedIds"
+              type="checkbox"
+              class="form-check-input flex-shrink-0"
+              :value="group.id"
+              :disabled="completed(group.id)"
+              :data-testid="`share-group-${group.id}`"
+            />
+            <span class="group-copy">
+              <span class="group-name">{{ group.name }}</span>
+              <span
+                v-if="results[group.id]"
+                class="small"
+                :class="results[group.id] === 'failed' ? 'text-danger' : 'text-success'"
+                role="status"
+              >
+                {{
+                  { shared: 'Shared', already: 'Already shared', failed: 'Failed — try again' }[
+                    results[group.id]
+                  ]
+                }}
+              </span>
+            </span>
+          </label>
+        </fieldset>
+      </div>
+      <footer class="share-footer">
+        <button
+          v-if="!loading && groups.length"
+          type="submit"
+          class="btn btn-dark rounded-pill w-100"
+          :disabled="sharing || needsLogin || !pendingGroups.length"
+          data-testid="share-confirm"
+        >
+          {{
+            sharing
+              ? 'Sharing…'
+              : `Share to ${pendingGroups.length} group${pendingGroups.length === 1 ? '' : 's'}`
+          }}
+        </button>
+        <RouterLink v-if="!sharing" to="/groups" class="d-inline-block mt-3" @click="close"
+          >Create a new group</RouterLink
+        >
+      </footer>
     </form>
-    <RouterLink v-if="!sharing" to="/groups" class="d-inline-block mt-3" @click="close"
-      >Create a new group</RouterLink
-    >
   </dialog>
 </template>
 
@@ -319,8 +321,8 @@ onUnmounted(invalidate)
 .share-dialog {
   width: min(460px, calc(100% - 32px));
   max-height: calc(100dvh - 48px);
-  overflow-y: auto;
-  padding: 28px;
+  overflow: hidden;
+  padding: 0;
   border: 1px solid #e5e5e5;
   border-radius: 20px;
   box-shadow: 0 16px 48px rgb(0 0 0 / 15%);
@@ -328,12 +330,50 @@ onUnmounted(invalidate)
 .share-dialog::backdrop {
   background: rgb(0 0 0 / 35%);
 }
+.share-layout {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 50px);
+}
+.share-header,
+.share-footer {
+  flex-shrink: 0;
+  padding: 20px;
+}
+.share-header .btn-close {
+  flex-shrink: 0;
+}
+.share-header {
+  border-bottom: 1px solid #eee;
+}
+.share-footer {
+  border-top: 1px solid #eee;
+}
+.share-body {
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  min-height: 0;
+  padding: 16px 20px;
+}
+.group-option.is-selected {
+  background: #f3f3f3;
+  border-color: #aaa;
+}
+.group-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .group-option {
   display: flex;
-  align-items: center;
+  align-items: start;
   gap: 12px;
   min-height: 48px;
-  padding: 10px 0;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  margin-bottom: 4px;
   cursor: pointer;
 }
 .group-name {

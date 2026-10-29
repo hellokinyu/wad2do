@@ -96,7 +96,15 @@ export function getWebsiteUrl(activity) {
   }
 }
 
-export function getMapEmbedUrl(activity) {
+export function getMapEmbedUrl(activity, liveLocation) {
+  if (
+    Number.isFinite(liveLocation?.latitude) &&
+    Math.abs(liveLocation.latitude) <= 90 &&
+    Number.isFinite(liveLocation?.longitude) &&
+    Math.abs(liveLocation.longitude) <= 180
+  ) {
+    return getMapEmbedUrl({ lat: liveLocation.latitude, lng: liveLocation.longitude })
+  }
   if (!activity) return null
   if (activity.map_embed_url) return activity.map_embed_url
   // shortcut: keyless embeds use addresses/coordinates; use the Embed API for exact Place ID pins.

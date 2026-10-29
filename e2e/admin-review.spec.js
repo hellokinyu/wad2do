@@ -7,6 +7,11 @@ const submissionId = '22222222-2222-4222-8222-222222222222'
 const activityId = '33333333-3333-4333-8333-333333333333'
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
+async function openSubmission(page) {
+  await page.getByTestId('admin-view-details').first().click()
+  await expect(page.getByTestId('admin-details-dialog').filter({ visible: true })).toBeVisible()
+}
+
 async function mockBackend(page, admin = true) {
   await signInMockUser(page)
   const state = {
@@ -172,6 +177,74 @@ async function mockBackend(page, admin = true) {
 }
 
 for (const width of [1280, 375]) {
+  test(`compact cards open full details and return keyboard focus at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const state = await mockBackend(page)
+    const imageUrl = 'https://example.com/submitted-photo.svg'
+    state.submissions[0].image_url = imageUrl
+    state.submissions.push({ ...state.submissions[0], id: 'second-card', name: 'Second studio' })
+    await page.route(imageUrl, (route) =>
+      route.fulfill({
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600"><rect width="900" height="600" fill="#164e63"/></svg>',
+      }),
+    )
+    await page.goto('/admin/submissions')
+    const card = page.getByTestId(`admin-submission-${submissionId}`)
+    const trigger = card.getByTestId('admin-view-details')
+    const photo = card.getByRole('img')
+    await expect(photo).toHaveJSProperty('naturalWidth', 900)
+    await expect(card).toContainText('Try a weekend art session.')
+    await expect(card).toContainText('Orchard')
+    await expect(card).toContainText('1 h 30 min')
+    await expect(page.getByTestId('admin-edit')).toHaveCount(0)
+    const cards = page.locator('[data-testid^="admin-submission-"]')
+    const firstBounds = await cards.nth(0).boundingBox()
+    const secondBounds = await cards.nth(1).boundingBox()
+    expect(secondBounds.y > firstBounds.y).toBe(width <= 575)
+
+    // Clicking the photo opens the same review as the title button.
+    await card.click({ position: { x: 30, y: 30 } })
+    const review = page.getByRole('dialog', { name: 'Review submission' })
+    await expect(review).toBeVisible()
+    await expect(review).toContainText('Submitted by Demo User')
+    await expect(review.getByTestId('admin-edit')).toBeVisible()
+    const fullPhoto = review.getByRole('img')
+    await expect(fullPhoto).toHaveJSProperty('naturalWidth', 900)
+    const bounds = await fullPhoto.boundingBox()
+    expect(bounds.width / bounds.height).toBeCloseTo(1.5, 1)
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        ),
+      )
+      .toBe(true)
+    await page.keyboard.press('Escape')
+    await expect(review).toBeHidden()
+    await expect(trigger).toBeFocused()
+    await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden')
+
+    await page.keyboard.press('Enter')
+    await expect(review).toBeVisible()
+    await page.getByRole('button', { name: 'Close submission details' }).click()
+    await expect(review).toBeHidden()
+    await expect(trigger).toBeFocused()
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        ),
+      )
+      .toBe(true)
+    await page.screenshot({ path: test.info().outputPath('submission-cards.png'), fullPage: true })
+    expect(state.requests).toHaveLength(0)
+  })
+}
+
+for (const width of [1280, 375]) {
   test(`partial name search filters all status tabs and resets pagination at ${width}px`, async ({
     page,
   }) => {
@@ -218,7 +291,13 @@ for (const width of [1280, 375]) {
     await expect(page.getByRole('heading', { name: 'Studio 1', exact: true })).toBeVisible()
     await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (12)')
     await expect(page.locator('[data-testid^="admin-submission-"]')).toHaveCount(10)
-    await expect(page.locator('body')).toHaveJSProperty('scrollWidth', width)
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        ),
+      )
+      .toBe(true)
   })
 }
 
@@ -255,6 +334,7 @@ test('renaming a search result refreshes matching cards and counts', async ({ pa
   await searchResponse
   await expect(page.getByText('Loading submissions...', { exact: true })).toHaveCount(0)
   await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (1)')
+  await openSubmission(page)
   await page.getByTestId('admin-edit').click()
   await page.getByTestId('admin-edit-name').fill('Renamed venue')
   await page.getByTestId('admin-save-edits').click()
@@ -280,17 +360,25 @@ for (const width of [1280, 375]) {
     await page.setViewportSize({ width, height: 900 })
     const state = await mockBackend(page)
     await page.goto('/admin/submissions')
+    await openSubmission(page)
     await page.getByTestId('admin-approve').click()
     await expect(page.getByTestId('admin-empty')).toBeVisible()
     await expect(page.getByTestId('admin-tab-approved')).toHaveText('Approved (1)')
     await page.getByTestId('admin-tab-approved').click()
+    await openSubmission(page)
     await expect(page.getByTestId('admin-approve')).toHaveCount(0)
     await expect(page.getByTestId('admin-reject')).toHaveCount(0)
     await page.getByTestId('admin-edit').click()
     await page.getByTestId('admin-edit-name').fill('Updated published studio')
     await page.getByTestId('admin-edit-price').fill('40')
     await page.getByTestId('admin-hours-Mon-open').fill('12:00')
-    await expect(page.locator('body')).toHaveJSProperty('scrollWidth', width)
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        ),
+      )
+      .toBe(true)
     state.actionError = true
     await page.getByTestId('admin-save-edits').click()
     await expect(page.getByTestId('admin-action-error')).toContainText("Couldn't save changes")
@@ -314,7 +402,13 @@ for (const width of [1280, 375]) {
 }
 
 const deletionScenarios = [
-  { status: 'pending', prepare: async () => {}, warning: 'permanently deletes the submission.' },
+  {
+    status: 'pending',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'Close submission details' }).click()
+    },
+    warning: 'permanently deletes the submission.',
+  },
   {
     status: 'approved',
     warning: 'published activity',
@@ -338,8 +432,10 @@ for (const { status, prepare, warning } of deletionScenarios) {
   test(`confirms and deletes a ${status} submission`, async ({ page }) => {
     const state = await mockBackend(page)
     await page.goto('/admin/submissions')
+    await openSubmission(page)
     await prepare(page)
     await page.getByTestId(`admin-tab-${status}`).click()
+    await openSubmission(page)
     const previousRequests = state.requests.length
     await page.getByTestId('admin-delete').click()
     await expect(page.getByTestId('admin-delete-confirmation')).toContainText(warning)
@@ -376,6 +472,7 @@ test('a delete checks the status again if another admin has approved the card', 
 }) => {
   const state = await mockBackend(page)
   await page.goto('/admin/submissions')
+  await openSubmission(page)
   await page.getByTestId('admin-delete').click()
   state.submissions[0].status = 'approved'
   await page.getByTestId('admin-confirm-delete').click()
@@ -387,6 +484,7 @@ test('a committed delete with a lost response can be retried safely', async ({ p
   const state = await mockBackend(page)
   await page.clock.install()
   await page.goto('/admin/submissions')
+  await openSubmission(page)
   await page.getByTestId('admin-delete').click()
   state.stallResponse = true
   await page.getByTestId('admin-confirm-delete').click()
@@ -411,6 +509,7 @@ test('deleting the last card on a page returns to the previous page', async ({ p
   await page.goto('/admin/submissions')
   await page.getByRole('button', { name: 'Next', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Studio 11', exact: true })).toBeVisible()
+  await openSubmission(page)
   await page.getByTestId('admin-delete').click()
   await page.getByTestId('admin-confirm-delete').click()
   await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (10)')
@@ -436,6 +535,9 @@ for (const width of [1280, 375]) {
     await page.goto('/admin/submissions')
     await expect(page.getByTestId('nav-admin')).toHaveCount(1)
     const card = page.getByTestId(`admin-submission-${submissionId}`)
+    await expect(card).toContainText('Weekend art studio')
+    await expect(page.getByTestId('admin-edit')).toHaveCount(0)
+    await openSubmission(page)
     await expect(card).toContainText('Demo User')
     await expect(card).toContainText('S$25.50')
     await expect(card).toContainText('No photo submitted')
@@ -448,11 +550,18 @@ for (const width of [1280, 375]) {
     await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (1)')
     await expect(page.getByTestId('admin-tab-approved')).toHaveText('Approved (0)')
     await expect(page.getByTestId('admin-tab-rejected')).toHaveText('Rejected (0)')
+    await page.getByRole('button', { name: 'Close submission details' }).click()
     await page.getByTestId('admin-tab-approved').click()
     await expect(page.getByTestId('admin-empty')).toHaveText('No approved submissions yet.')
     await page.getByTestId('admin-tab-rejected').click()
     await expect(page.getByTestId('admin-empty')).toHaveText('No rejected submissions yet.')
-    await expect(page.locator('body')).toHaveJSProperty('scrollWidth', width)
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        ),
+      )
+      .toBe(true)
   })
 }
 
@@ -461,6 +570,7 @@ test('edits name, price and hours before approval and publishes a Community acti
 }) => {
   const state = await mockBackend(page)
   await page.goto('/admin/submissions')
+  await openSubmission(page)
   await page.getByTestId('admin-edit').click()
   await page.getByTestId('admin-edit-name').fill('Corrected studio name')
   await page.getByTestId('admin-edit-price').fill('30')
@@ -484,6 +594,7 @@ test('edits name, price and hours before approval and publishes a Community acti
     body: { p_submission_id: submissionId },
   })
   await page.getByTestId('admin-tab-approved').click()
+  await openSubmission(page)
   await expect(page.getByRole('link', { name: 'View published activity' })).toHaveAttribute(
     'href',
     `/activities/${activityId}`,
@@ -502,6 +613,7 @@ for (const width of [1280, 375]) {
     const state = await mockBackend(page)
     state.submissions[0].opening_hours = {}
     await page.goto('/admin/submissions')
+    await openSubmission(page)
     await expect(page.getByTestId('admin-hours-required')).toBeVisible()
     await expect(page.getByTestId('admin-approve')).toBeDisabled()
     await page.getByTestId('admin-edit').click()
@@ -517,7 +629,13 @@ for (const width of [1280, 375]) {
     await page.getByTestId('admin-hours-Sat-open').fill('10:00')
     await page.getByTestId('admin-hours-Sat-close').fill('18:00')
     await page.getByTestId('admin-hours-Sun-mode').selectOption('24h')
-    await expect(page.locator('body')).toHaveJSProperty('scrollWidth', width)
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        ),
+      )
+      .toBe(true)
     await page
       .getByTestId('admin-edit-form')
       .screenshot({ path: test.info().outputPath('admin-hours.png') })
@@ -551,6 +669,7 @@ for (const openingHours of [
     const state = await mockBackend(page)
     state.submissions[0].opening_hours = openingHours
     await page.goto('/admin/submissions')
+    await openSubmission(page)
     await expect(page.getByTestId('admin-approve')).toBeDisabled()
     await expect(page.getByTestId('admin-hours-required')).toBeVisible()
     await page.getByTestId('admin-reject').click()
@@ -564,6 +683,7 @@ for (const openingHours of [
 test('requires a rejection reason and shows it in the submitter profile', async ({ page }) => {
   const state = await mockBackend(page)
   await page.goto('/admin/submissions')
+  await openSubmission(page)
   await page.getByTestId('admin-reject').click()
   await page.getByTestId('admin-reject-reason').fill('   ')
   await page.getByTestId('admin-confirm-reject').click()
@@ -575,6 +695,7 @@ test('requires a rejection reason and shows it in the submitter profile', async 
   await expect(page.getByTestId('admin-tab-rejected')).toHaveText('Rejected (1)')
   expect(state.requests[0].body.p_reason).toBe('Duplicate of an existing activity')
   await page.getByTestId('admin-tab-rejected').click()
+  await openSubmission(page)
   await expect(page.getByTestId(`admin-submission-${submissionId}`)).toContainText(
     'Duplicate of an existing activity',
   )
@@ -589,6 +710,7 @@ test('failed edits keep the draft, cancel discards it, and failed reviews can be
 }) => {
   const state = await mockBackend(page)
   await page.goto('/admin/submissions')
+  await openSubmission(page)
   await page.getByTestId('admin-edit').click()
   await page.getByTestId('admin-edit-name').fill('Unsaved name')
   state.actionError = true
@@ -630,6 +752,7 @@ test('reviews the last card on a page and returns to the previous page', async (
   await expect(page.locator('[data-testid^="admin-submission-"]')).toHaveCount(10)
   await page.getByRole('button', { name: 'Next', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Studio 11', exact: true })).toBeVisible()
+  await openSubmission(page)
   await page.getByTestId('admin-approve').click()
   await expect(page.getByTestId('admin-tab-pending')).toHaveText('Pending (10)')
   await expect(page.getByRole('heading', { name: 'Studio 1', exact: true })).toBeVisible()
@@ -660,6 +783,7 @@ for (const [action, expectedId, edit] of venueEdits) {
     const state = await mockBackend(page)
     const lookup = await mockPlaceSearch(page)
     await page.goto('/admin/submissions')
+    await openSubmission(page)
     await expect(page.getByTestId('admin-place-suggestion')).toContainText('ChIJ_original')
     expect(lookup.requests).toHaveLength(0)
     await page.getByTestId('admin-edit').click()
@@ -682,6 +806,7 @@ test('unrelated admin edits preserve the saved venue ID', async ({ page }) => {
   const state = await mockBackend(page)
   await mockPlaceSearch(page)
   await page.goto('/admin/submissions')
+  await openSubmission(page)
   await page.getByTestId('admin-edit').click()
   await page.getByTestId('admin-edit-price').fill('31')
   await page.getByTestId('admin-save-edits').click()
@@ -703,6 +828,7 @@ for (const options of [
     const state = await mockBackend(page)
     const lookup = await mockPlaceSearch(page, options)
     await page.goto('/admin/submissions')
+    await openSubmission(page)
     await page.getByTestId('admin-edit').click()
     await page.getByTestId('admin-edit-price').fill('31')
     await page.getByTestId('place-find').click()
@@ -747,6 +873,7 @@ test('reviews a submitted photo and publishes the same image in the card and det
     'naturalWidth',
     2,
   )
+  await openSubmission(page)
   await page.getByTestId('admin-approve').click()
   await expect(page.getByTestId('admin-empty')).toBeVisible()
   expect(state.activities).toHaveLength(1)
@@ -772,6 +899,7 @@ test('a broken submitted photo uses the fallback and rejection never publishes i
   await page.route('**/storage/v1/**', (route) => route.fulfill({ status: 404 }))
   await page.goto('/admin/submissions')
   await expect(page.getByText('Photo unavailable', { exact: true })).toBeVisible()
+  await openSubmission(page)
   await page.getByTestId('admin-reject').click()
   await page.getByTestId('admin-reject-reason').fill('Activity could not be verified')
   await page.getByTestId('admin-confirm-reject').click()
@@ -830,6 +958,7 @@ for (const scenario of stalledActions) {
     const state = await mockBackend(page)
     await page.clock.install()
     await page.goto('/admin/submissions')
+    await openSubmission(page)
     await scenario.prepare(page)
     state.stallResponse = true
     await page.getByTestId(scenario.button).click()
@@ -854,6 +983,7 @@ test('admin hours save times out while login refresh stalls and sends no late wr
   const state = await mockBackend(page)
   await page.clock.install()
   await page.goto('/admin/submissions')
+  await openSubmission(page)
   await page.getByTestId('admin-edit').click()
   await page.getByTestId('admin-hours-Mon-open').fill('11:00')
   let pendingRefresh
@@ -885,6 +1015,7 @@ test('leaving a card while login refresh stalls cancels its pending hours save',
 }) => {
   const state = await mockBackend(page)
   await page.goto('/admin/submissions')
+  await openSubmission(page)
   await page.getByTestId('admin-edit').click()
   await page.getByTestId('admin-hours-Mon-open').fill('11:00')
   let pendingRefresh
@@ -899,9 +1030,11 @@ test('leaving a card while login refresh stalls cancels its pending hours save',
   const refreshing = page.waitForRequest('**/auth/v1/token**')
   await page.getByTestId('admin-save-edits').click()
   await refreshing
-  await page.getByTestId('admin-tab-approved').click()
+  await page.goto('/')
   await expect(page.getByTestId('admin-edit-form')).toHaveCount(0)
   await pendingRefresh.fulfill({ json: mockSession })
+  await page.goto('/admin/submissions')
+  await page.getByTestId('admin-tab-approved').click()
   await expect(page.getByTestId('admin-empty')).toHaveText('No approved submissions yet.')
   expect(state.requests).toHaveLength(0)
   expect(state.submissions[0].opening_hours.Mon.open).toBe('10:00')

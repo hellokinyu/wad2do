@@ -92,7 +92,13 @@ function makeInviteCode() {
 }
 
 function getInviteLink(group) {
-  return window.location.origin + '/groups/' + group.id + '?invite=' + encodeURIComponent(group.invite_code)
+  return (
+    window.location.origin +
+    '/groups/' +
+    group.id +
+    '?invite=' +
+    encodeURIComponent(group.invite_code)
+  )
 }
 
 async function copyInviteLink() {
@@ -146,14 +152,17 @@ async function createGroup() {
   creating.value = true
   try {
     const { data, error } = await requestWithTimeout((signal) =>
-      supabase.rpc('create_group', {
-        p_group_id: newGroupId,
-        p_name: groupName.value.trim(),
-        p_start_date: startDate.value,
-        p_end_date: endDate.value,
-        p_budget_per_person: budget.value,
-        p_invite_code: makeInviteCode(),
-      }).single().abortSignal(signal),
+      supabase
+        .rpc('create_group', {
+          p_group_id: newGroupId,
+          p_name: groupName.value.trim(),
+          p_start_date: startDate.value,
+          p_end_date: endDate.value,
+          p_budget_per_person: budget.value,
+          p_invite_code: makeInviteCode(),
+        })
+        .single()
+        .abortSignal(signal),
     )
 
     if (error) throw error
@@ -202,12 +211,24 @@ async function joinGroup() {
   <div class="container py-4" data-testid="groups-page">
     <h1>Your groups</h1>
 
-    <button class="btn btn-primary me-2" data-testid="create-group-button" @click="openCreateForm">
-      Create group
-    </button>
-    <button class="btn btn-outline-primary" data-testid="join-group-button" @click="openJoinForm">
-      Join a group
-    </button>
+    <div class="group-actions">
+      <button
+        type="button"
+        class="group-action"
+        data-testid="create-group-button"
+        @click="openCreateForm"
+      >
+        <span>Create</span>
+      </button>
+      <button
+        type="button"
+        class="group-action"
+        data-testid="join-group-button"
+        @click="openJoinForm"
+      >
+        <span>Join</span>
+      </button>
+    </div>
 
     <!-- Create group form -->
     <div v-if="showCreateForm" class="card my-3" data-testid="create-group-form">
@@ -359,3 +380,58 @@ async function joinGroup() {
     </div>
   </div>
 </template>
+
+<style scoped>
+.group-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+  margin-bottom: 20px;
+}
+.group-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 110px;
+  min-height: 44px;
+  padding: 10px 24px;
+  border: 1px solid #111;
+  border-radius: 999px;
+  background: white;
+  color: #111;
+  box-shadow: none;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease;
+}
+.group-action:is(:hover, :focus-visible) {
+  background: #111;
+  color: white;
+  box-shadow: 0 5px 14px rgb(0 0 0 / 10%);
+  transform: translateY(-2px);
+}
+.group-action:active {
+  box-shadow: none;
+  transform: translateY(0);
+}
+.group-action:focus-visible {
+  outline: 3px solid #86b7fe;
+  outline-offset: 5px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .group-action {
+    transition: none;
+  }
+  .group-action:is(:hover, :focus-visible) {
+    transform: none;
+  }
+}
+</style>

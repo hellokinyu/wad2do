@@ -69,12 +69,27 @@
           </li>
           <li v-if="user && isAdmin" class="nav-item">
             <RouterLink
-              class="nav-link"
+              class="nav-link nav-admin-link"
               active-class="active"
               to="/admin/submissions"
               data-testid="nav-admin"
-              >Admin</RouterLink
             >
+              <svg
+                class="nav-icon admin-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="m12 3 8 3v6c0 4-3.4 7-8 9-4.6-2-8-5-8-9V6Z" />
+                <path class="admin-tick" d="m8 12 2.7 2.7L16 9.5" pathLength="1" />
+              </svg>
+              Admin
+            </RouterLink>
           </li>
           <li v-if="user" class="nav-item">
             <RouterLink
@@ -165,5 +180,36 @@ onUnmounted(() => {
   width: 24px;
   height: 24px;
   flex-shrink: 0;
+}
+.admin-icon {
+  width: 22px;
+  height: 22px;
+  transition: transform 180ms ease;
+}
+.nav-admin-link:is(:hover, :focus-visible) .admin-icon {
+  transform: rotate(-5deg);
+}
+.nav-admin-link:is(:hover, :focus-visible) .admin-tick {
+  stroke-dasharray: 1;
+  animation: admin-tick-draw 350ms ease-out;
+}
+@keyframes admin-tick-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-icon {
+    transition: none;
+  }
+  .nav-admin-link:is(:hover, :focus-visible) .admin-icon {
+    transform: none;
+  }
+  .nav-admin-link:is(:hover, :focus-visible) .admin-tick {
+    animation: none;
+  }
 }
 </style>

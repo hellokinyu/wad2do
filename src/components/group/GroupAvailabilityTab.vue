@@ -31,7 +31,10 @@
 
       <!-- CHOSEN SLOT: shown above the grid once the group has confirmed a time -->
       <div v-if="group.chosen_start" class="alert alert-success" data-testid="chosen-slot">
-        Chosen time: <strong>{{ chosenLabel }}</strong>
+        Chosen time:
+        <a href="#" class="alert-link" @click.prevent="goToDay(fromDb(group.chosen_start).slice(0, 10))">
+          {{ chosenLabel }}
+        </a>
       </div>
 
       <!-- ALL-FREE BANNER: lists every window where all members are free; click one to select it -->
@@ -75,29 +78,44 @@
         <strong>No time works for everyone.</strong>
         <span v-if="bestSlot">
           Best slots (⭐): {{ bestSlot.count }} of {{ members.length }} free, e.g.
-          {{ formatDay(bestSlot.day) }} {{ formatTime(bestSlot.time) }}.
+          <a href="#" class="alert-link" @click.prevent="mode = 'heatmap'; goToDay(bestSlot.day)">
+            {{ formatDay(bestSlot.day) }} {{ formatTime(bestSlot.time) }}
+          </a>.
         </span>
         <button class="btn btn-sm btn-outline-dark ms-2" data-testid="extend-range" @click="extendDateRange">
           Extend date range
         </button>
       </div>
 
-      <!-- DAY TABS: only visible on phones (d-md-none); the grid shows one day at a time there -->
-      <div class="d-md-none mb-2 d-flex flex-wrap gap-1">
+      <!-- PAGE NAV: 3 days per page on phones, 7 on laptops -->
+      <div v-if="pageCount > 1" class="d-flex align-items-center justify-content-center gap-3 mb-2" data-testid="day-pager">
         <button
-          v-for="day in days"
-          :key="day"
-          class="btn btn-sm"
-          :class="day === selectedDay ? 'btn-secondary' : 'btn-outline-secondary'"
-          @click="selectedDay = day"
+          class="btn btn-outline-primary px-3"
+          :disabled="page === 0"
+          aria-label="Previous days"
+          data-testid="prev-days"
+          @click="prevPage"
         >
-          {{ formatDay(day) }}
+          &larr; <span class="d-none d-md-inline">Prev</span>
+        </button>
+        <span class="fw-semibold text-center">
+          {{ pageLabel }}
+          <span class="d-block small text-muted fw-normal">Page {{ page + 1 }} of {{ pageCount }}</span>
+        </span>
+        <button
+          class="btn btn-outline-primary px-3"
+          :disabled="page === pageCount - 1"
+          aria-label="Next days"
+          data-testid="next-days"
+          @click="nextPage"
+        >
+          <span class="d-none d-md-inline">Next</span> &rarr;
         </button>
       </div>
 
       <!-- THE GRID: days across the top, 30-minute slots down the side (CSS Grid, see <style>) -->
       <div class="grid-scroll" data-testid="availability-grid">
-        <div class="avail-grid" :style="{ '--cols': days.length }" @mouseleave="hoveredKey = null">
+        <div class="avail-grid" :style="{ '--cols': daysPerPage }" @mouseleave="hoveredKey = null">
           <!-- time labels column -->
           <div class="time-col">
             <div class="head-cell"></div>
@@ -106,12 +124,11 @@
             </div>
           </div>
 
-          <!-- one column per day; on phones only the selected day is shown -->
+          <!-- one column per visible day (3 per page on phones, 7 on laptops) -->
           <div
-            v-for="day in days"
+            v-for="day in visibleDays"
             :key="day"
             class="day-col"
-            :class="{ 'd-none d-md-flex': day !== selectedDay }"
           >
             <div class="head-cell">{{ formatDay(day) }}</div>
             <div
@@ -122,6 +139,7 @@
                 'slot-free': mode === 'mine' && mySlots[makeKey(day, t)],
                 'slot-picked': mode === 'heatmap' && isInPick(makeKey(day, t)),
                 'slot-all': mode === 'heatmap' && isEveryoneFree(day, t),
+                'slot-chosen': isChosen(makeKey(day, t)),
               }"
               :style="cellStyle(day, t)"
               :data-testid="'slot-' + makeKey(day, t)"
@@ -199,7 +217,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 // Shared Supabase client (handbook: src/lib/supabase.js). If it is a default export, use: import supabase from ...
 import { supabase } from '../../lib/supabase'
@@ -220,6 +238,13 @@ let saveController
 let disposed = false
 const planning = ref(false)
 
+// ---------- pagination: 3 days per page on phones, 7 on laptops ----------
+const isPhone = ref(window.innerWidth < 768) // same breakpoint as Bootstrap's md
+const page = ref(0) // which page of days is showing (0 = first)
+function onResize() {
+  isPhone.value = window.innerWidth < 768
+}
+
 const userId = ref(null) // current logged-in user
 const group = ref({}) // start_date, end_date, chosen_start, chosen_end
 const members = ref([]) // [{ id, name }]
@@ -227,7 +252,6 @@ const allSlots = ref([]) // everyone's saved slots: [{ user_id, key }]
 const mySlots = ref({}) // my slots as an object: { "2026-10-17T14:00": true }
 
 const mode = ref('mine') // 'mine' | 'heatmap'
-const selectedDay = ref(null) // which day is shown on phones
 const hoveredKey = ref(null) // slot being hovered/tapped in the heatmap
 const pickStart = ref(null) // first slot picked on the heatmap
 const pickEnd = ref(null) // second slot picked on the heatmap
@@ -238,8 +262,8 @@ const isDragging = ref(false)
 const paintValue = ref(true) // true = marking free, false = unmarking
 
 // ---------- heatmap shades ----------
-// 6 clearly different colours: index 0 = nobody free ... index 5 = everyone free
-const shadeColors = ['#ffffff', '#f3f9c8', '#c5e8a5', '#7ccf8a', '#2f9e6a', '#0b5d3b']
+// One green that gets darker as more people are free: index 0 = nobody ... index 5 = everyone
+const shadeColors = ['#ffffff', '#d8f0df', '#a3dbb3', '#5fbf80', '#2a8f57', '#0b5d3b']
 
 // ---------- slot keys and time helpers ----------
 // A slot is identified by a string like "2026-10-17T14:00" (Singapore time).
@@ -313,6 +337,42 @@ const days = computed(() => {
   }
   return out
 })
+
+const daysPerPage = computed(() => (isPhone.value ? 3 : 7))
+const pageCount = computed(() => Math.max(1, Math.ceil(days.value.length / daysPerPage.value)))
+// Only the days on the current page get rendered
+const visibleDays = computed(() => {
+  const start = page.value * daysPerPage.value
+  return days.value.slice(start, start + daysPerPage.value)
+})
+const pageLabel = computed(() => {
+  const v = visibleDays.value
+  if (!v.length) return ''
+  return v.length === 1 ? formatDay(v[0]) : formatDay(v[0]) + ' – ' + formatDay(v[v.length - 1])
+})
+
+function prevPage() {
+  if (page.value > 0) page.value--
+}
+function nextPage() {
+  if (page.value < pageCount.value - 1) page.value++
+}
+// Jump to the page that contains a given day (used by the "everyone free" chips)
+function goToDay(day) {
+  const i = days.value.indexOf(day)
+  if (i >= 0) page.value = Math.floor(i / daysPerPage.value)
+}
+
+// When the screen crosses the breakpoint, keep the first visible day on screen
+watch(daysPerPage, (newPer, oldPer) => {
+  const firstIdx = page.value * oldPer
+  page.value = Math.floor(firstIdx / newPer)
+})
+// If the date range shrinks, don't get stuck on a page that no longer exists
+watch(pageCount, (n) => {
+  if (page.value > n - 1) page.value = n - 1
+})
+
 // 30-minute slots from 9:00 to 22:30 (so the last slot ends at 11pm)
 const times = computed(() => {
   const out = []
@@ -444,6 +504,12 @@ function isInPick(key) {
   return key >= pickStart.value && key <= end
 }
 
+// True when this slot is inside the time the group already confirmed
+function isChosen(key) {
+  if (!group.value.chosen_start) return false
+  return key >= fromDb(group.value.chosen_start) && key < fromDb(group.value.chosen_end)
+}
+
 // ---------- celebration popup (shown once per group, remembered with localStorage) ----------
 function popupStorageKey() {
   return 'avail-popup-seen-' + groupId.value
@@ -473,7 +539,7 @@ function useWindow(w) {
   mode.value = 'heatmap'
   pickStart.value = w.startKey
   pickEnd.value = w.endKey === w.startKey ? null : w.endKey
-  selectedDay.value = w.startKey.split('T')[0]
+  goToDay(w.startKey.split('T')[0])
 }
 
 // ---------- loading data from Supabase ----------
@@ -517,7 +583,7 @@ async function loadAll() {
     }
     mySlots.value = mine
 
-    selectedDay.value = days.value[0]
+    page.value = 0
     maybeShowPopup()
   } catch {
     errorMsg.value = "Couldn't load availability"
@@ -553,12 +619,16 @@ async function onMouseUp() {
   isDragging.value = false
   await saveMySlots()
 }
-onMounted(() => window.addEventListener('mouseup', onMouseUp))
+onMounted(() => {
+  window.addEventListener('mouseup', onMouseUp)
+  window.addEventListener('resize', onResize)
+})
 onUnmounted(() => {
   disposed = true
   saveQueued = false
   saveController?.abort()
   window.removeEventListener('mouseup', onMouseUp)
+  window.removeEventListener('resize', onResize)
 })
 
 // Queue later drags; the database replaces one member's slots in a single transaction.
@@ -645,6 +715,7 @@ async function extendDateRange() {
     return
   }
   group.value = { ...group.value, end_date: newEnd }
+  goToDay(newEnd)
 }
 
 // ---------- Plan button ----------
@@ -682,14 +753,7 @@ onMounted(loadAll)
 /* CSS Grid: one narrow time column + one column per day (--cols is set from the template) */
 .avail-grid {
   display: grid;
-  grid-template-columns: 3.5rem repeat(var(--cols), minmax(5rem, 1fr));
-}
-
-/* Phones: time column + the single selected day */
-@media (max-width: 767.98px) {
-  .avail-grid {
-    grid-template-columns: 3.5rem 1fr;
-  }
+  grid-template-columns: 3.5rem repeat(var(--cols), minmax(3.5rem, 1fr));
 }
 
 .time-col,
@@ -730,7 +794,7 @@ onMounted(loadAll)
 }
 /* Hover: the slot lifts up a little */
 .slot:hover {
-  transform: scale(1.15);
+  transform: scale(1.05);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   position: relative;
   z-index: 1;
@@ -760,6 +824,13 @@ onMounted(loadAll)
 /* The range being picked */
 .slot-picked {
   outline: 3px solid #0d6efd;
+  outline-offset: -2px;
+}
+
+
+/* The time the group already confirmed: dashed purple outline */
+.slot-chosen {
+  outline: 2px dashed #6f42c1;
   outline-offset: -2px;
 }
 

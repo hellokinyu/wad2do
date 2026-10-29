@@ -7,6 +7,8 @@ import { requestWithTimeout as timedRequest } from '@/lib/requestWithTimeout'
 
 const { user } = useAuth()
 const submitting = ref(false)
+const manualLocation = ref(false)
+const locationError = ref('')
 const submitted = ref(false)
 const recoveredSubmission = ref(false)
 const errorMessage = ref('')
@@ -157,7 +159,23 @@ const form = reactive({
   description: '',
   website: '',
 })
+watch(
+  () => form.google_place_id,
+  (id) => {
+    if (id) manualLocation.value = false
+  },
+)
+
+watch([() => form.google_place_id, manualLocation], () => {
+  locationError.value = ''
+})
+
 function submissionDetails(submittedBy) {
+  if (!form.google_place_id && !manualLocation.value) {
+    locationError.value =
+      'Choose a location from the search results, or select manual address entry for review.'
+    return
+  }
   const price = form.price
   if (
     !form.name.trim() ||
@@ -270,6 +288,7 @@ async function uploadPhoto(file, submittedBy) {
 async function submitActivity() {
   if (submitting.value || submitted.value || validatingImage.value) return
   errorMessage.value = ''
+  locationError.value = ''
   if (!user.value) {
     errorMessage.value = 'Please log in before submitting an activity.'
     return
@@ -425,7 +444,7 @@ async function submitActivity() {
           </div>
           <div class="col-md-8">
             <label for="submission-address" class="form-label"
-              >Singapore address or place name *</label
+              >Venue name or street address *</label
             >
             <input
               id="submission-address"
@@ -433,6 +452,10 @@ async function submitActivity() {
               class="form-control"
               required
               data-testid="submission-address"
+              maxlength="500"
+              placeholder="e.g. Funan, 107 North Bridge Road"
+              aria-describedby="submission-location-help submission-location-error"
+              :aria-invalid="!!locationError"
             />
           </div>
           <div class="col-md-4">
@@ -450,13 +473,44 @@ async function submitActivity() {
           </div>
         </div>
 
+        <p id="submission-location-help" class="form-text mt-2">
+          Search for the venue, not the activity title. Choose a specific place rather than an area.
+        </p>
         <GooglePlacePicker
+          single-query
           v-model="form.google_place_id"
           v-model:postal-code="form.postal_code"
           :name="form.name"
           :address="form.address"
           :area="form.area"
         />
+
+        <p
+          v-if="locationError"
+          id="submission-location-error"
+          role="alert"
+          class="text-danger small mt-2"
+          data-testid="submission-location-error"
+        >
+          {{ locationError }}
+        </p>
+        <div class="form-check mt-3">
+          <input
+            id="manual-location"
+            v-model="manualLocation"
+            type="checkbox"
+            class="form-check-input"
+            data-testid="submission-manual-location"
+            @change="form.google_place_id = null"
+          />
+          <label for="manual-location" class="form-check-label"
+            >I can't find this place — use a manual address for review</label
+          >
+        </div>
+        <p v-if="manualLocation" class="text-warning-emphasis small mt-2" role="status">
+          Enter the full street address above, including the building number. This location is
+          unverified; our team must check it before publishing.
+        </p>
 
         <p class="text-secondary small mt-3" data-testid="submission-hours-note">
           Our team will verify and add opening hours before publishing your activity.

@@ -57,8 +57,26 @@ const googleAttributions = computed(() =>
     .map((item) => ({ name: item.provider, url: getWebsiteUrl({ website: item.providerUri }) })),
 )
 const setting = computed(() => getSetting(activity.value?.indoor))
-const location = computed(() => getLocation(activity.value))
-const mapEmbedUrl = computed(() => getMapEmbedUrl(activity.value))
+const location = computed(() =>
+  getLocation({
+    ...activity.value,
+    address:
+      typeof googleDetails.value?.formattedAddress === 'string'
+        ? googleDetails.value.formattedAddress
+        : activity.value?.address,
+  }),
+)
+const venueUrl = computed(
+  () =>
+    'https://www.google.com/maps/search/?' +
+    new URLSearchParams({
+      api: '1',
+      query: activity.value?.name || '',
+      query_place_id: activity.value?.google_place_id || '',
+    }),
+)
+const liveMapUrl = computed(() => getMapEmbedUrl(null, googleDetails.value?.location))
+const mapEmbedUrl = computed(() => liveMapUrl.value || getMapEmbedUrl(activity.value))
 
 // A category such as Outdoor already describes the setting, so show one tag.
 const showSettingTag = computed(
@@ -422,6 +440,26 @@ onUnmounted(() => {
               {{ location.address || 'Location unavailable' }}
             </p>
             <p v-if="location.area" class="text-secondary">{{ location.area }}</p>
+            <p
+              v-if="activity.google_place_id && !liveMapUrl"
+              class="small text-secondary"
+              data-testid="detail-map-fallback"
+            >
+              {{
+                googleLoading
+                  ? 'Loading the venue pin…'
+                  : 'Venue pin unavailable. Any map below uses the saved location and may be approximate.'
+              }}
+            </p>
+            <a
+              v-if="activity.google_place_id"
+              :href="venueUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="d-inline-block mb-3"
+              data-testid="detail-venue-link"
+              >Open venue in Google Maps</a
+            >
             <iframe
               v-if="mapEmbedUrl"
               :src="mapEmbedUrl"
