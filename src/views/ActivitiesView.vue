@@ -9,6 +9,7 @@ import { getPrice } from '@/lib/activityDisplay'
 import { rankActivities } from '@/lib/activityRanking'
 import { useAuth } from '@/composables/useAuth'
 import { setActivitySaved } from '@/lib/activityFavourites'
+import { beginActivitiesRender } from '@/lib/activityScroll'
 
 const { user } = useAuth()
 const profile = ref(null)
@@ -135,6 +136,14 @@ const resultsSummary = ref(null)
 const filtersPanel = ref(null)
 const stickyControls = ref(null)
 const filtersTrigger = ref(null)
+
+const finishScrollRender = beginActivitiesRender()
+watch([loading, profileLoading, sortBy], async ([loading, profileLoading, sort]) => {
+  if (loading || (sort === 'best-match' && profileLoading)) return
+  await nextTick()
+  finishScrollRender()
+})
+onUnmounted(finishScrollRender)
 
 function openFilters(event) {
   event.currentTarget.focus({ preventScroll: true })
@@ -437,13 +446,37 @@ onMounted(loadActivities)
         <button
           type="button"
           ref="filtersTrigger"
-          class="btn btn-outline-dark"
+          class="filters-toggle"
+          :class="{ 'has-active-filters': activeFilters.length > 0 }"
+          :aria-label="
+            activeFilters.length ? `Filters (${activeFilters.length} active)` : 'Filters'
+          "
+          title="Filter activities"
           aria-haspopup="dialog"
           aria-controls="activity-filters"
           data-testid="filters-toggle"
           @click="openFilters"
         >
-          Filters<span v-if="activeFilters.length"> ({{ activeFilters.length }})</span>
+          <svg
+            class="filters-icon"
+            viewBox="0 0 28 28"
+            width="28"
+            height="28"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M4 6h20M4 14h20M4 22h20" />
+            <circle class="filter-knob filter-knob-top" cx="9" cy="6" r="3" />
+            <circle class="filter-knob filter-knob-middle" cx="20" cy="14" r="3" />
+            <circle class="filter-knob filter-knob-bottom" cx="11" cy="22" r="3" />
+          </svg>
+          <span v-if="activeFilters.length" class="filter-count" aria-hidden="true">{{
+            activeFilters.length
+          }}</span>
         </button>
       </div>
 
@@ -833,6 +866,73 @@ onMounted(loadActivities)
   border-radius: 12px;
 }
 
+.filters-toggle {
+  --filter-knob-fill: white;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  padding: 9px;
+  border: 1px solid #111;
+  border-radius: 12px;
+  background: white;
+  color: #111;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
+}
+.filters-toggle:is(:hover, :focus-visible),
+.filters-toggle.has-active-filters {
+  --filter-knob-fill: #111;
+  background: #111;
+  color: white;
+}
+.filters-toggle:focus-visible {
+  outline: 3px solid #86b7fe;
+  outline-offset: 2px;
+}
+.filters-icon {
+  pointer-events: none;
+}
+.filter-knob {
+  fill: var(--filter-knob-fill);
+  transition:
+    transform 420ms cubic-bezier(0.2, 0.9, 0.3, 1.2),
+    fill 180ms ease;
+}
+.filters-toggle:is(:hover, :focus-visible) .filter-knob-top {
+  transform: translateX(9px);
+}
+.filters-toggle:is(:hover, :focus-visible) .filter-knob-middle {
+  transform: translateX(-11px);
+  transition-delay: 70ms, 0ms;
+}
+.filters-toggle:is(:hover, :focus-visible) .filter-knob-bottom {
+  transform: translateX(8px);
+  transition-delay: 140ms, 0ms;
+}
+.filter-count {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: white;
+  color: #111;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+
 .category-chips {
   display: flex;
   gap: 8px;
@@ -951,8 +1051,14 @@ onMounted(loadActivities)
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .category-chip {
+  .category-chip,
+  .filters-toggle,
+  .filter-knob {
     transition: none;
+  }
+  .filters-toggle:is(:hover, :focus-visible) .filter-knob {
+    transform: none;
+    transition-delay: 0s;
   }
 }
 </style>
