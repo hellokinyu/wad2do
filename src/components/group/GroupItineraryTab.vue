@@ -505,54 +505,90 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
 </script>
 
 <template>
-  <div data-testid="group-itinerary-tab">
-    <h2 class="h4">Itinerary</h2>
-    <p v-if="loading" class="text-muted">Loading plan...</p>
+  <!-- Icons in this tab are adapted from Feather Icons (MIT licence), https://feathericons.com -->
+  <div class="itinerary-tab" data-testid="group-itinerary-tab">
+    <div class="tab-intro">
+      <h2 class="h5 fw-bold mb-1">Itinerary</h2>
+      <p class="text-secondary mb-0">Your day, planned from the group's votes and free time.</p>
+    </div>
+    <p v-if="loading" class="text-center text-secondary py-5">
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Loading plan...
+    </p>
     <div v-else-if="errorMessage" class="alert alert-danger" role="alert" data-testid="itinerary-error">
       <p>{{ errorMessage }}</p>
-      <button class="btn btn-outline-danger" data-testid="itinerary-retry" @click="loadPage">
+      <button
+        class="btn btn-outline-danger rounded-pill px-4"
+        data-testid="itinerary-retry"
+        @click="loadPage"
+      >
         Try again
       </button>
     </div>
 
     <!-- No plan yet -->
-    <div v-else-if="!itinerary" class="alert alert-secondary" data-testid="itinerary-empty">
-      No plan yet. Pick a time on the Availability tab, then press Plan.
+    <div v-else-if="!itinerary" class="empty-plan" data-testid="itinerary-empty">
+      <div class="empty-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="28" height="28">
+          <path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4zM8 2v16M16 6v16" />
+        </svg>
+      </div>
+      <p class="mb-3">No plan yet. Pick a time on the Availability tab, then press Plan.</p>
+      <RouterLink :to="{ name: 'group-availability' }" class="btn btn-dark rounded-pill px-4">
+        Go to Availability
+      </RouterLink>
     </div>
 
     <!-- There is a plan -->
     <div v-else data-testid="itinerary-plan">
-      <p v-if="weatherLoading" class="text-muted">Checking the weather...</p>
-      <div v-else-if="weather" class="alert alert-info" data-testid="itinerary-weather">
-        {{ weather.day }}: {{ weather.forecast.summary }}, {{ weather.temperature.low }}–{{
-          weather.temperature.high
-        }}°C
+      <p v-if="weatherLoading" class="text-secondary small">Checking the weather...</p>
+      <div v-else-if="weather" class="info-banner" data-testid="itinerary-weather">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+        </svg>
+        <span>
+          {{ weather.day }}: {{ weather.forecast.summary }}, {{ weather.temperature.low }}–{{
+            weather.temperature.high
+          }}°C
+        </span>
       </div>
-      <div v-else class="alert alert-secondary" data-testid="itinerary-weather-unavailable">
-        Forecast not available yet. Check back closer to the day.
+      <div v-else class="info-banner muted" data-testid="itinerary-weather-unavailable">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+        </svg>
+        <span>Forecast not available yet. Check back closer to the day.</span>
       </div>
-      <div class="card mb-3" data-testid="itinerary-summary">
-        <div class="card-body d-flex flex-wrap gap-4">
-          <div><strong>Date</strong><br />{{ itinerary.date }}</div>
-          <div><strong>Time</strong><br />{{ startTime }} – {{ endTime }}</div>
-          <div data-testid="itinerary-cost">
-            <strong>Cost per person</strong><br />
+      <dl class="summary-panel" data-testid="itinerary-summary">
+        <div>
+          <dt>Date</dt>
+          <dd>{{ itinerary.date }}</dd>
+        </div>
+        <div>
+          <dt>Time</dt>
+          <dd>{{ startTime }} – {{ endTime }}</dd>
+        </div>
+        <div data-testid="itinerary-cost">
+          <dt>Cost per person</dt>
+          <dd>
             <span :class="{ 'text-danger': isOverBudget }">${{ totalCost }}</span> of ${{ budget }}
             <span
               v-if="isOverBudget"
-              class="badge text-bg-warning ms-1"
+              class="badge rounded-pill text-bg-warning ms-1"
               data-testid="itinerary-over-budget"
             >
               Over budget
             </span>
-          </div>
-          <div><strong>Stops</strong><br />{{ itinerary.stops.length }}</div>
+          </dd>
         </div>
-      </div>
-      <div class="d-flex gap-2 mb-2">
+        <div>
+          <dt>Stops</dt>
+          <dd>{{ itinerary.stops.length }}</dd>
+        </div>
+      </dl>
+      <div class="edit-bar">
         <button
           v-if="!isEditing"
-          class="btn btn-outline-primary"
+          class="btn btn-outline-dark rounded-pill px-4"
           data-testid="itinerary-edit"
           @click="startEditing"
         >
@@ -560,7 +596,7 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
         </button>
         <template v-else>
           <button
-            class="btn btn-primary"
+            class="btn btn-dark rounded-pill px-4"
             :disabled="saving"
             data-testid="itinerary-save"
             @click="saveChanges"
@@ -568,23 +604,27 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
             {{ saving ? 'Saving...' : 'Save changes' }}
           </button>
           <button
-            class="btn btn-outline-secondary"
+            class="btn btn-outline-dark rounded-pill px-3"
             data-testid="itinerary-discard"
             @click="discardChanges"
           >
             Discard
           </button>
-          <button class="btn btn-outline-warning" data-testid="itinerary-replan" @click="replan">
+          <button
+            class="btn btn-outline-dark rounded-pill px-3"
+            data-testid="itinerary-replan"
+            @click="replan"
+          >
             Re-plan
           </button>
         </template>
-        <div v-if="isEditing" class="d-flex align-items-center gap-2 ms-auto">
-          <label for="day-start" class="form-label mb-0">Start at</label>
+        <div v-if="isEditing" class="d-flex align-items-center gap-2 ms-sm-auto">
+          <label for="day-start" class="form-label small fw-semibold mb-0">Start at</label>
           <input
             id="day-start"
             v-model="dayStart"
             type="time"
-            class="form-control form-control-sm"
+            class="form-control time-input"
             data-testid="itinerary-start-time"
             @change="recalculateTimes"
           />
@@ -592,47 +632,49 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
       </div>
       <p v-if="saveError" class="text-danger" data-testid="itinerary-save-error">{{ saveError }}</p>
 
-      <ol class="list-unstyled" data-testid="itinerary-timeline">
+      <ol class="list-unstyled mb-0" data-testid="itinerary-timeline">
         <template v-for="(stop, index) in displayStops" :key="stop.original.activity_id">
           <li
-            class="card"
-            :class="{ 'border-info border-2': stop.isRainyView }"
+            class="stop-card"
+            :class="{ rainy: stop.isRainyView }"
             data-testid="itinerary-stop"
           >
-            <div class="card-body d-flex gap-3">
-              <div class="fw-bold text-nowrap">{{ stop.start }}–{{ stop.end }}</div>
+            <div class="stop-body">
+              <div class="stop-time-row"><span class="stop-time">{{ stop.start }}–{{ stop.end }}</span></div>
               <img
                 v-if="stop.image_url"
                 :src="stop.image_url"
                 :alt="stop.name"
-                class="rounded"
+                class="stop-photo"
                 width="80"
                 height="80"
               />
-              <div class="flex-grow-1">
-                <h3 class="h6 mb-1">{{ index + 1 }}. {{ stop.name }}</h3>
-                <p class="mb-1">${{ stop.cost }} per person</p>
-                <p class="text-muted small mb-0">{{ stop.reason }}</p>
+              <div class="stop-main">
+                <h3 class="stop-name">{{ index + 1 }}. {{ stop.name }}</h3>
+                <p class="mb-1 small fw-semibold">${{ stop.cost }} per person</p>
+                <p class="text-secondary small mb-1">{{ stop.reason }}</p>
                 <span
                   v-for="warning in getStopWarnings(stop)"
                   :key="warning"
-                  class="badge text-bg-warning me-1"
+                  class="badge rounded-pill text-bg-warning me-1"
                   data-testid="itinerary-stop-warning"
                 >
                   {{ warning }}
                 </span>
-                <span v-if="isRainy && !stop.original.indoor" class="badge text-bg-warning me-1"
+                <span
+                  v-if="isRainy && !stop.original.indoor"
+                  class="badge rounded-pill text-bg-warning me-1"
                   >Rain forecast</span
                 >
                 <div
                   v-if="stop.isRainyView"
-                  class="small text-info mt-1"
+                  class="small rain-note mt-1"
                   data-testid="itinerary-rain-alternative"
                 >
                   🌧️ Instead of {{ stop.original.name }}
                   <button
                     v-if="isEditing"
-                    class="btn btn-sm btn-outline-dark ms-2"
+                    class="btn btn-sm btn-outline-dark rounded-pill px-3 ms-2"
                     data-testid="itinerary-swap"
                     @click="swapStop(index, getRainAlternative(stop.original))"
                   >
@@ -642,7 +684,7 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
               </div>
               <div
                 v-if="getRainAlternative(stop.original)"
-                class="form-check form-switch text-nowrap"
+                class="form-check form-switch text-nowrap small rainy-toggle"
               >
                 <input
                   :id="'rainy-' + stop.original.activity_id"
@@ -656,32 +698,32 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
                   >🌧️ Rainy option</label
                 >
               </div>
-              <div v-if="isEditing" class="d-flex flex-column gap-1">
+              <div v-if="isEditing" class="stop-controls">
                 <button
-                  class="btn btn-sm btn-outline-secondary"
+                  class="icon-button"
                   :disabled="index === 0"
                   aria-label="Move up"
                   data-testid="itinerary-move-up"
                   @click="moveStop(index, -1)"
                 >
-                  ↑
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 15l-6-6-6 6" /></svg>
                 </button>
                 <button
-                  class="btn btn-sm btn-outline-danger"
+                  class="icon-button danger"
                   aria-label="Remove stop"
                   data-testid="itinerary-remove"
                   @click="removeStop(index)"
                 >
-                  ✕
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
                 </button>
                 <button
-                  class="btn btn-sm btn-outline-secondary"
+                  class="icon-button"
                   :disabled="index === itinerary.stops.length - 1"
                   aria-label="Move down"
                   data-testid="itinerary-move-down"
                   @click="moveStop(index, 1)"
                 >
-                  ↓
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
                 </button>
               </div>
             </div>
@@ -697,18 +739,18 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
         </template>
       </ol>
       <div v-if="notInPlan.length" class="mt-4" data-testid="itinerary-not-in-plan">
-        <h3 class="h6">Also voted for, but not in the plan</h3>
-        <ul class="list-group">
+        <h3 class="h6 fw-bold mb-2">Also voted for, but not in the plan</h3>
+        <ul class="not-in-plan">
           <li
             v-for="activity in notInPlan"
             :key="activity.activity_id"
-            class="list-group-item d-flex align-items-center gap-2"
+            class="d-flex flex-wrap align-items-center gap-2"
           >
             <span class="flex-grow-1">{{ activity.name }} (${{ activity.cost }})</span>
-            <span class="badge text-bg-light">{{ whyNotInPlan(activity) }}</span>
+            <span class="reason-chip">{{ whyNotInPlan(activity) }}</span>
             <button
               v-if="isEditing"
-              class="btn btn-sm btn-outline-primary"
+              class="btn btn-sm btn-outline-dark rounded-pill px-3"
               data-testid="itinerary-add-stop"
               @click="addStop(activity)"
             >
@@ -720,3 +762,247 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Matches the Activities page: near-black accents, pill buttons, soft grey panels
+   and white cards with a light shadow */
+.tab-intro {
+  margin-bottom: 1.25rem;
+}
+
+.itinerary-tab svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.itinerary-tab :is(a, button):focus-visible {
+  outline: 2px solid #111;
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* No plan yet */
+.empty-plan {
+  padding: 2.5rem 1rem;
+  border: 1px solid #e5e5e5;
+  border-radius: 18px;
+  background: #fafafa;
+  text-align: center;
+}
+
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 1rem;
+  border-radius: 50%;
+  background: #f0f0f0;
+}
+
+.empty-icon svg {
+  width: 28px;
+  height: 28px;
+  color: #111;
+}
+
+/* Weather line */
+.info-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 1rem;
+  padding: 12px 16px;
+  border: 1px solid var(--bs-info-border-subtle);
+  border-radius: 16px;
+  background: var(--bs-info-bg-subtle);
+  color: var(--bs-info-text-emphasis);
+}
+
+.info-banner.muted {
+  border-color: #e5e5e5;
+  background: #fafafa;
+  color: var(--bs-secondary-color);
+}
+
+/* Date, time, cost and stops */
+.summary-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 16px 20px;
+  border: 1px solid #e5e5e5;
+  border-radius: 16px;
+  background: #fafafa;
+}
+
+.summary-panel dt {
+  margin-bottom: 2px;
+  color: var(--bs-secondary-color);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.summary-panel dd {
+  margin: 0;
+  color: var(--bs-emphasis-color);
+  font-weight: 600;
+}
+
+.edit-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 1rem;
+}
+
+.edit-bar .btn {
+  min-height: 44px;
+}
+
+.time-input {
+  width: auto;
+  min-height: 44px;
+  border-radius: 12px;
+}
+
+/* One stop on the timeline, styled like the activity cards */
+.stop-card {
+  padding: 16px;
+  border: 1px solid #eee;
+  border-radius: 18px;
+  background: white;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
+}
+
+.stop-card.rainy {
+  border: 2px solid var(--bs-info-border-subtle);
+}
+
+.stop-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px 16px;
+}
+
+.stop-time {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #111;
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.stop-photo {
+  flex-shrink: 0;
+  border-radius: 14px;
+  object-fit: cover;
+}
+
+.stop-main {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.stop-name {
+  margin-bottom: 4px;
+  color: var(--bs-emphasis-color);
+  font-size: 1.05rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.rain-note {
+  color: var(--bs-info-text-emphasis);
+}
+
+.rainy-toggle .form-check-input:checked {
+  border-color: #111;
+  background-color: #111;
+}
+
+/* Move up, remove and move down while editing */
+.stop-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #e5e5e5;
+  border-radius: 50%;
+  background: white;
+  color: #111;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: #f3f3f3;
+}
+
+.icon-button.danger {
+  color: var(--bs-danger);
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+}
+
+/* Voted-for activities that didn't fit */
+.not-in-plan {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  background: white;
+}
+
+.not-in-plan li {
+  min-height: 52px;
+  padding: 8px 12px;
+}
+
+.not-in-plan li + li {
+  border-top: 1px solid #eee;
+}
+
+.reason-chip {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #f3f3f3;
+  color: var(--bs-secondary-color);
+  font-size: 0.8rem;
+}
+
+/* Phones: the time sits on its own line above the photo and details,
+   and the edit buttons go in a row */
+@media (max-width: 575.98px) {
+  .stop-time-row {
+    flex-basis: 100%;
+  }
+
+  .stop-controls {
+    flex-direction: row;
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
+}
+</style>

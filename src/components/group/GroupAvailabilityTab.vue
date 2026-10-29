@@ -1,17 +1,21 @@
 <template>
   <!-- Root element: the starter file's data-testid is kept for Playwright -->
-  <div data-testid="group-availability-tab">
-    <h2 class="h4">Availability 🗓️</h2>
+  <div class="availability-tab" data-testid="group-availability-tab">
+    <div class="tab-intro">
+      <h2 class="h5 fw-bold mb-1">Availability</h2>
+      <p class="text-secondary mb-0">Mark when you're free, then pick a time that works for everyone.</p>
+    </div>
 
     <!-- LOADING: spinner controlled by the `loading` variable with v-if (handbook "Shared on every page") -->
-    <div v-if="loading" class="text-center py-5" data-testid="avail-loading">
-      <div class="spinner-border" role="status"></div>
+    <div v-if="loading" class="text-center text-secondary py-5" data-testid="avail-loading">
+      <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+      Loading availability…
     </div>
 
     <!-- ERROR: red alert with a Try again button -->
     <div v-else-if="errorMsg" class="alert alert-danger" data-testid="avail-error">
       {{ errorMsg }}
-      <button class="btn btn-sm btn-outline-danger ms-2" @click="loadAll">Try again</button>
+      <button class="btn btn-sm btn-outline-danger rounded-pill px-3 ms-2" @click="loadAll">Try again</button>
     </div>
 
     <div v-else>
@@ -24,48 +28,58 @@
             Found {{ fullWindows.length }} time window{{ fullWindows.length === 1 ? '' : 's' }}
             where all {{ members.length }} of you are free.
           </p>
-          <button class="btn btn-success" data-testid="popup-view" @click="viewHeatmap">See the heatmap</button>
-          <button class="btn btn-link text-muted" @click="closePopup">Close</button>
+          <button class="btn btn-dark rounded-pill px-4" data-testid="popup-view" @click="viewHeatmap">
+            See the heatmap
+          </button>
+          <button class="btn btn-link text-secondary" @click="closePopup">Close</button>
         </div>
       </div>
 
       <!-- CHOSEN SLOT: shown above the grid once the group has confirmed a time -->
-      <div v-if="group.chosen_start" class="alert alert-success" data-testid="chosen-slot">
-        Chosen time:
-        <a href="#" class="alert-link" @click.prevent="goToDay(fromDb(group.chosen_start).slice(0, 10))">
-          {{ chosenLabel }}
-        </a>
+      <!-- Icons in this tab are adapted from Feather Icons (MIT licence), https://feathericons.com -->
+      <div v-if="group.chosen_start" class="status-banner chosen" data-testid="chosen-slot">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+        <span>
+          Chosen time:
+          <a href="#" class="chosen-link" @click.prevent="goToDay(fromDb(group.chosen_start).slice(0, 10))">
+            {{ chosenLabel }}
+          </a>
+        </span>
       </div>
 
       <!-- ALL-FREE BANNER: lists every window where all members are free; click one to select it -->
-      <div v-if="everyoneCanMeet" class="alert alert-success celebrate" data-testid="all-free-banner">
-        <strong>🎉 Everyone is free at these times:</strong>
-        <div class="d-flex flex-wrap gap-2 mt-2">
-          <button
-            v-for="w in fullWindows"
-            :key="w.startKey"
-            class="btn btn-sm btn-warning"
-            @click="useWindow(w)"
-          >
-            {{ w.label }}
-          </button>
+      <div v-if="everyoneCanMeet" class="status-banner all-free celebrate" data-testid="all-free-banner">
+        <div class="w-100">
+          <strong>Everyone is free at these times</strong>
+          <div class="d-flex flex-wrap gap-2 mt-2">
+            <button
+              v-for="w in fullWindows"
+              :key="w.startKey"
+              class="window-chip"
+              @click="useWindow(w)"
+            >
+              {{ w.label }}
+            </button>
+          </div>
+          <div class="small text-secondary mt-2">Tap a time to select it, then press "Confirm time".</div>
         </div>
-        <div class="small mt-2">Tap a time to select it, then press "Confirm time".</div>
       </div>
 
       <!-- MODE TOGGLE: "My availability" / "Group heatmap" -->
-      <div class="btn-group mb-3" role="group">
+      <div class="mode-toggle mb-3" role="group" aria-label="View">
         <button
-          class="btn"
-          :class="mode === 'mine' ? 'btn-primary' : 'btn-outline-primary'"
+          class="mode-option"
+          :class="{ active: mode === 'mine' }"
+          :aria-pressed="mode === 'mine'"
           data-testid="mode-mine"
           @click="mode = 'mine'"
         >
           My availability
         </button>
         <button
-          class="btn"
-          :class="mode === 'heatmap' ? 'btn-primary' : 'btn-outline-primary'"
+          class="mode-option"
+          :class="{ active: mode === 'heatmap' }"
+          :aria-pressed="mode === 'heatmap'"
           data-testid="mode-heatmap"
           @click="mode = 'heatmap'"
         >
@@ -82,15 +96,21 @@
             {{ formatDay(bestSlot.day) }} {{ formatTime(bestSlot.time) }}
           </a>.
         </span>
-        <button class="btn btn-sm btn-outline-dark ms-2" data-testid="extend-range" @click="extendDateRange">
+        <button
+          class="btn btn-sm btn-outline-dark rounded-pill px-3 ms-2"
+          data-testid="extend-range"
+          @click="extendDateRange"
+        >
           Extend date range
         </button>
       </div>
 
+      <!-- The grid and everything about it sit together in one card -->
+      <div class="avail-card">
       <!-- PAGE NAV: 3 days per page on phones, 7 on laptops -->
-      <div v-if="pageCount > 1" class="d-flex align-items-center justify-content-center gap-3 mb-2" data-testid="day-pager">
+      <div v-if="pageCount > 1" class="d-flex align-items-center justify-content-center gap-3 mb-3" data-testid="day-pager">
         <button
-          class="btn btn-outline-primary px-3"
+          class="btn btn-outline-dark rounded-pill px-3"
           :disabled="page === 0"
           aria-label="Previous days"
           data-testid="prev-days"
@@ -100,10 +120,10 @@
         </button>
         <span class="fw-semibold text-center">
           {{ pageLabel }}
-          <span class="d-block small text-muted fw-normal">Page {{ page + 1 }} of {{ pageCount }}</span>
+          <span class="d-block small text-secondary fw-normal">Page {{ page + 1 }} of {{ pageCount }}</span>
         </span>
         <button
-          class="btn btn-outline-primary px-3"
+          class="btn btn-outline-dark rounded-pill px-3"
           :disabled="page === pageCount - 1"
           aria-label="Next days"
           data-testid="next-days"
@@ -151,14 +171,20 @@
           </div>
         </div>
       </div>
-      <p v-if="saving" class="text-muted small mt-1">Saving...</p>
+      <p v-if="saving" class="text-secondary small mt-2 mb-0">Saving...</p>
       <div v-if="saveError" class="alert alert-danger mt-2" role="alert" data-testid="availability-save-error">
         {{ saveError }}
-        <button class="btn btn-sm btn-outline-danger ms-2" :disabled="saving" @click="saveMySlots">Try again</button>
+        <button
+          class="btn btn-sm btn-outline-danger rounded-pill px-3 ms-2"
+          :disabled="saving"
+          @click="saveMySlots"
+        >
+          Try again
+        </button>
       </div>
 
       <!-- LEGEND: one swatch per shade so the colours are easy to read -->
-      <div v-if="mode === 'heatmap'" class="small text-muted d-flex flex-wrap align-items-center gap-2 mt-2">
+      <div v-if="mode === 'heatmap'" class="small text-secondary d-flex flex-wrap align-items-center gap-2 mt-3">
         <span>Nobody</span>
         <span v-for="c in shadeColors" :key="c" class="swatch" :style="{ backgroundColor: c }"></span>
         <span>Everyone 🎉</span>
@@ -172,17 +198,17 @@
             <strong>{{ inspect.free }} of {{ inspect.total }} free</strong>
             <span v-if="inspect.missing.length"> (missing: {{ inspect.missing.join(', ') }})</span>
           </span>
-          <span v-else class="text-muted">Hover or tap a slot to see who is free.</span>
+          <span v-else class="text-secondary">Hover or tap a slot to see who is free.</span>
         </p>
 
         <!-- PICK A SLOT: click a start slot, then an end slot on the same day, then Confirm -->
-        <div class="d-flex align-items-center gap-2 my-2">
+        <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
           <span class="small">
             <span v-if="pickLabel">Selected: <strong>{{ pickLabel }}</strong></span>
-            <span v-else class="text-muted">Click a start slot, then an end slot.</span>
+            <span v-else class="text-secondary">Click a start slot, then an end slot.</span>
           </span>
           <button
-            class="btn btn-success btn-sm"
+            class="btn btn-dark rounded-pill px-4 ms-auto"
             :disabled="!pickStart"
             data-testid="confirm-time"
             @click="confirmSlot"
@@ -191,20 +217,23 @@
           </button>
         </div>
       </div>
+      </div>
 
       <!-- WHO HAS RESPONDED: tick or "not yet" for each member -->
-      <h3 class="h6 mt-3">Who has responded</h3>
-      <ul class="list-unstyled" data-testid="responded-list">
-        <li v-for="m in members" :key="m.id">
-          <span v-if="respondedIds.includes(m.id)" class="text-success">&#10003;</span>
-          <span v-else class="text-muted small">not yet</span>
+      <h3 class="h6 fw-bold mt-4 mb-2">Who has responded</h3>
+      <ul class="responded-list" data-testid="responded-list">
+        <li v-for="m in members" :key="m.id" :class="{ done: respondedIds.includes(m.id) }">
+          <svg v-if="respondedIds.includes(m.id)" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
           {{ m.name }}
+          <span v-if="!respondedIds.includes(m.id)" class="text-secondary small">· not yet</span>
         </li>
       </ul>
 
       <!-- PLAN BUTTON: disabled until a slot is picked; spinner while planning runs -->
       <button
-        class="btn btn-primary btn-lg w-100 mt-2"
+        class="btn btn-dark btn-lg rounded-pill w-100 mt-3 plan-button"
         :disabled="!group.chosen_start || planning"
         data-testid="plan-button"
         @click="onPlan"
@@ -823,10 +852,149 @@ onMounted(loadAll)
 
 /* The range being picked */
 .slot-picked {
-  outline: 3px solid #0d6efd;
+  outline: 3px solid #111;
   outline-offset: -2px;
 }
 
+/* ---------- Page styling, matching the Activities page: near-black accents,
+   pill buttons and soft grey panels ---------- */
+.tab-intro {
+  margin-bottom: 1.25rem;
+}
+
+.availability-tab svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.availability-tab :is(a, button):focus-visible {
+  outline: 2px solid #111;
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* Chosen time and "everyone is free" messages */
+.status-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 1rem;
+  padding: 14px 16px;
+  border: 1px solid #e5e5e5;
+  border-radius: 16px;
+  background: #fafafa;
+}
+
+.status-banner.chosen {
+  border-color: var(--bs-success-border-subtle);
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-success-text-emphasis);
+}
+
+.chosen-link {
+  color: inherit;
+  font-weight: 700;
+}
+
+.status-banner.chosen svg {
+  margin-top: 3px;
+  stroke-width: 3;
+}
+
+.window-chip {
+  min-height: 40px;
+  padding: 6px 14px;
+  border: 1px solid #e5e5e5;
+  border-radius: 999px;
+  background: white;
+  color: #111;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: background-color 0.2s ease;
+}
+
+.window-chip:hover {
+  background: #f3f3f3;
+}
+
+/* "My availability" / "Group heatmap" switch, styled like the category chips */
+.mode-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #e5e5e5;
+  border-radius: 999px;
+  background: #fafafa;
+}
+
+.mode-option {
+  min-height: 40px;
+  padding: 6px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #111;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: background-color 0.2s ease;
+}
+
+.mode-option:hover {
+  background: #f0f0f0;
+}
+
+.mode-option.active {
+  background: #111;
+  color: white;
+}
+
+/* The grid, legend and slot picker share one card, like the activity cards */
+.avail-card {
+  padding: 16px;
+  border: 1px solid #eee;
+  border-radius: 18px;
+  background: white;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
+}
+
+
+/* Who has responded, as name chips */
+.responded-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.responded-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #e5e5e5;
+  border-radius: 999px;
+  background: white;
+  font-size: 0.875rem;
+}
+
+.responded-list li.done {
+  border-color: var(--bs-success-border-subtle);
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-success-text-emphasis);
+  font-weight: 600;
+}
+
+.plan-button {
+  min-height: 52px;
+}
 
 /* The time the group already confirmed: dashed purple outline */
 .slot-chosen {
@@ -860,7 +1028,7 @@ onMounted(loadAll)
 }
 .popup-card {
   background: #fff;
-  border-radius: 16px;
+  border-radius: 20px;
   padding: 1.5rem 2rem;
   text-align: center;
   max-width: 22rem;
@@ -890,7 +1058,9 @@ onMounted(loadAll)
   .celebrate,
   .popup-backdrop,
   .popup-card,
-  .popup-emoji {
+  .popup-emoji,
+  .window-chip,
+  .mode-option {
     animation: none;
     transition: none;
   }
