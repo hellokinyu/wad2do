@@ -2,12 +2,14 @@ export const placeCandidates = [
   {
     id: 'ChIJ_studio_one',
     name: 'Google studio one',
+    location: { latitude: 1.2914, longitude: 103.8501 },
     address: '1 Studio Road, Singapore 012345',
     attributions: [{ provider: 'Example provider', providerUri: 'https://example.com/provider' }],
   },
   {
     id: 'ChIJ_studio_two',
     name: 'Google studio two',
+    location: { latitude: 1.3, longitude: 103.84 },
     address: '2 Studio Road, Singapore 012345',
     attributions: [],
   },

@@ -1,7 +1,7 @@
 // Paste this entire file into Supabase's google-place-search index.ts editor.
 // No external imports: the same handler is exercised with mocked fetch in Node tests.
 export const GOOGLE_FIELD_MASK =
-  'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.attributions'
+  'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.attributions,places.location,places.types'
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
@@ -48,6 +48,11 @@ async function readInput(req: Request, signal: AbortSignal) {
     offset += chunk.length
   }
   const body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
+  if (body && typeof body === 'object' && !Array.isArray(body) && 'query' in body) {
+    return Object.keys(body).length === 1 && validText(body.query, 500)
+      ? { query: `${body.query.trim()}, Singapore` }
+      : null
+  }
   if (
     !body ||
     typeof body !== 'object' ||
@@ -59,14 +64,18 @@ async function readInput(req: Request, signal: AbortSignal) {
       (typeof body.postalCode !== 'string' || !/^(?:\d{6})?$/.test(body.postalCode)))
   )
     return null
-  return { name: body.name.trim(), address: body.address.trim(), postalCode: body.postalCode || '' }
+  return {
+    query: `${body.name.trim()}, ${body.address.trim()}, ${body.postalCode || ''} Singapore`,
+  }
 }
 
 type GooglePlace = {
   id?: unknown
   displayName?: { text?: unknown }
   formattedAddress?: unknown
-  addressComponents?: { types?: unknown; shortText?: unknown }[]
+  addressComponents?: { types?: unknown[]; shortText?: unknown }[]
+  location?: { latitude?: unknown; longitude?: unknown }
+  types?: unknown[]
   attributions?: { provider?: unknown; providerUri?: unknown }[]
 }
 
@@ -86,7 +95,23 @@ function candidatesFrom(data: { places?: GooglePlace[] }) {
         seen.has(place.id) ||
         !validText(place.displayName?.text, 1000) ||
         !validText(place.formattedAddress, 2000) ||
-        !Array.isArray(place.addressComponents)
+        !Array.isArray(place.addressComponents) ||
+        !Array.isArray(place.types) ||
+        !place.types.some((type) =>
+          [
+            'establishment',
+            'point_of_interest',
+            'premise',
+            'street_address',
+            'subpremise',
+          ].includes(String(type)),
+        ) ||
+        typeof place.location?.latitude !== 'number' ||
+        typeof place.location?.longitude !== 'number' ||
+        !Number.isFinite(place.location.latitude) ||
+        !Number.isFinite(place.location.longitude) ||
+        Math.abs(place.location.latitude) > 90 ||
+        Math.abs(place.location.longitude) > 180
       )
         return false
       const countries = place.addressComponents.filter(
@@ -101,6 +126,7 @@ function candidatesFrom(data: { places?: GooglePlace[] }) {
       id: place.id,
       name: place.displayName?.text,
       address: place.formattedAddress,
+      location: place.location,
       attributions: (Array.isArray(place.attributions) ? place.attributions : [])
         .filter((item) => validText(item?.provider, 1000))
         .map((item) => ({
@@ -181,7 +207,7 @@ export function createHandler({
           'X-Goog-FieldMask': GOOGLE_FIELD_MASK,
         },
         body: JSON.stringify({
-          textQuery: `${input.name}, ${input.address}, ${input.postalCode} Singapore`,
+          textQuery: input.query,
           regionCode: 'SG',
           languageCode: 'en',
           pageSize: 5,

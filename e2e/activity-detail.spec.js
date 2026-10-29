@@ -695,3 +695,23 @@ test('phone detail page fits the viewport and falls back from a broken photo', a
     fullPage: true,
   })
 })
+
+test('published venue uses live coordinates and address instead of a wrong submitted location', async ({
+  page,
+}) => {
+  await mockBackend(page, { records: [googlePottery] })
+  await page.route('**/functions/v1/google-place-details', (route) =>
+    route.fulfill({
+      json: {
+        ...googleDetails,
+        formattedAddress: '107 North Bridge Road, Singapore 179105',
+        location: { latitude: 1.2914, longitude: 103.8501 },
+      },
+    }),
+  )
+  await page.goto(`/activities/${potteryId}`)
+  await expect(page.getByTestId('detail-map')).toHaveAttribute('src', /q=1.2914%2C103.8501/)
+  await expect(
+    page.getByText('107 North Bridge Road, Singapore 179105', { exact: true }),
+  ).toBeVisible()
+})

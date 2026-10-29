@@ -28,3 +28,16 @@ test('maps preserve saved embeds and use coordinates or addresses instead of uns
   assert.equal(getMapEmbedUrl({ google_place_id: 'ChIJ6etOYDQZ2jERlLhZt3ShWI8' }), null)
   assert.equal(getMapEmbedUrl({ lat: 100, lng: 200 }), null)
 })
+
+test('live venue coordinates take precedence over an old broad map or mistyped address', () => {
+  const url = new URL(
+    getMapEmbedUrl(
+      { address: 'wrong place', map_embed_url: 'old' },
+      {
+        latitude: 1.2914,
+        longitude: 103.8501,
+      },
+    ),
+  )
+  assert.equal(url.searchParams.get('q'), '1.2914,103.8501')
+})
