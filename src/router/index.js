@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
+import { waitForActivitiesRender } from '@/lib/activityScroll'
 
 import LandingView from '@/views/LandingView.vue'
 import SignUpView from '@/views/SignUpView.vue'
@@ -86,8 +87,13 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
-  scrollBehavior() {
-    return { top: 0 }
+  async scrollBehavior(to, from, savedPosition) {
+    if (to.name !== 'activities' || from.name !== 'activity-detail' || !savedPosition) {
+      return { top: 0 }
+    }
+    await waitForActivitiesRender()
+    // A later navigation must not be scrolled by a catalogue request finishing late.
+    return router.currentRoute.value === to ? { ...savedPosition, behavior: 'instant' } : false
   },
 })
 

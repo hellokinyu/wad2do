@@ -85,6 +85,24 @@ async function clearFilters(page) {
   await page.getByTestId('filter-confirm').click()
 }
 
+async function openActivityAndRememberPosition(page, link) {
+  // Capture the position at the tap, after any browser scroll adjustment.
+  await link.evaluate((element) => {
+    element.addEventListener(
+      'click',
+      () => {
+        window.activityDeparture = {
+          scrollTop: window.scrollY,
+          cardTop: element.getBoundingClientRect().y,
+        }
+      },
+      { once: true, capture: true },
+    )
+  })
+  await link.click()
+  return page.evaluate(() => window.activityDeparture)
+}
+
 test('demo searches, combines filters and clears them', async ({ page }) => {
   await mockActivities(page)
   await page.goto('/activities')
@@ -323,6 +341,107 @@ const paginatedCatalogue = Array.from({ length: 45 }, (_, index) => ({
   name: 'Workshop ' + index,
   price_per_person: 45 - index,
 }))
+
+for (const width of [375, 1440]) {
+  for (const backAction of [
+    { name: 'browser Back', run: (page) => page.goBack() },
+    { name: 'activity Back', run: (page) => page.getByTestId('activity-back').click() },
+  ]) {
+    test(`${backAction.name} restores the scrolled activity page after a slow reload at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 })
+      let returning = false
+      let releaseCatalogue
+      await page.route('**/rest/v1/activities?*', async (route) => {
+        const id = new URL(route.request().url()).searchParams.get('id')?.slice(3)
+        if (id) return route.fulfill({ json: paginatedCatalogue.find((row) => row.id === id) })
+        if (returning)
+          await new Promise((resolve) => {
+            releaseCatalogue = resolve
+          })
+        return route.fulfill({ json: paginatedCatalogue })
+      })
+      await page.goto('/activities')
+      await selectFilter(page, 'area-filter', 'Tiong Bahru')
+      await selectFilter(page, 'price-filter', '20-50')
+      await page.getByTestId('activity-search').fill('Workshop')
+      await page.getByTestId('sort-filter').selectOption('price-asc')
+      await page.getByRole('button', { name: 'Page 2', exact: true }).click()
+      const link = page.getByTestId('activity-name-link').nth(3)
+      const name = await link.textContent()
+      await link.evaluate((element) =>
+        element.scrollIntoView({ block: 'center', behavior: 'instant' }),
+      )
+      const { scrollTop, cardTop } = await openActivityAndRememberPosition(page, link)
+      expect(scrollTop).toBeGreaterThan(200)
+      await expect(
+        page.getByTestId('activity-detail-page').getByRole('heading', { level: 1 }),
+      ).toHaveText(name.trim())
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0)
+      returning = true
+      await backAction.run(page)
+      await expect.poll(() => Boolean(releaseCatalogue)).toBe(true)
+      await expect(page.getByTestId('activities-loading')).toBeVisible()
+      releaseCatalogue()
+      await expect(page.getByTestId('activity-name-link')).toHaveCount(6)
+      await expect
+        .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - scrollTop))
+        .toBeLessThanOrEqual(1)
+      expect(Math.abs((await link.boundingBox()).y - cardTop)).toBeLessThanOrEqual(1)
+      await expect(link).toHaveText(name.trim())
+      await expect(page.getByTestId('activity-search')).toHaveValue('Workshop')
+      await expect(page.getByTestId('area-filter')).toHaveValue('Tiong Bahru')
+      await expect(page.getByTestId('price-filter')).toHaveValue('20-50')
+      await expect(page.getByTestId('sort-filter')).toHaveValue('price-asc')
+      await expect(page.getByRole('button', { name: 'Page 2', exact: true })).toHaveAttribute(
+        'aria-current',
+        'page',
+      )
+    })
+  }
+}
+
+test('returning to Best match waits for preferences before restoring scroll', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 800 })
+  await mockActivities(page, paginatedCatalogue)
+  await page.route('**/rest/v1/activities?*id=eq.*', (route) =>
+    route.fulfill({ json: paginatedCatalogue[9] }),
+  )
+  let returning = false
+  let releasePreferences
+  await page.route('**/rest/v1/profiles?*', async (route) => {
+    const select = new URL(route.request().url()).searchParams.get('select')
+    if (!select?.includes('interests')) return route.fulfill({ json: [] })
+    if (returning)
+      await new Promise((resolve) => {
+        releasePreferences = resolve
+      })
+    return route.fulfill({ json: { interests: ['Workshops'], budget: '', home_area: '' } })
+  })
+  await page.goto('/activities')
+  await expect(page.getByTestId('activities-sort-description')).toContainText(
+    'Based on your saved interests',
+  )
+  const link = page.getByTestId('activity-name-link').nth(9)
+  await link.evaluate((element) => element.scrollIntoView({ block: 'center', behavior: 'instant' }))
+  const { scrollTop } = await openActivityAndRememberPosition(page, link)
+  expect(scrollTop).toBeGreaterThan(200)
+  await expect(
+    page.getByTestId('activity-detail-page').getByRole('heading', { level: 1 }),
+  ).toBeVisible()
+  returning = true
+  await page.getByTestId('activity-back').click()
+  await expect.poll(() => Boolean(releasePreferences)).toBe(true)
+  await expect(page.getByTestId('activities-loading')).toBeVisible()
+  releasePreferences()
+  await expect(page.getByTestId('activities-sort-description')).toContainText(
+    'Based on your saved interests',
+  )
+  await expect
+    .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - scrollTop))
+    .toBeLessThanOrEqual(1)
+})
 
 for (const count of [40, 45]) {
   test(`pagination shows 20 per page with ${count} activities on a phone`, async ({ page }) => {

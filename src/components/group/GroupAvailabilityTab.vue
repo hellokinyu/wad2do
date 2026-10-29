@@ -39,7 +39,12 @@
       <!-- Icons in this tab are adapted from Feather Icons (MIT licence), https://feathericons.com -->
       <div v-if="group.chosen_start" class="status-banner chosen" data-testid="chosen-slot">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
-        <span>Chosen time: <strong>{{ chosenLabel }}</strong></span>
+        <span>
+          Chosen time:
+          <a href="#" class="chosen-link" @click.prevent="goToDay(fromDb(group.chosen_start).slice(0, 10))">
+            {{ chosenLabel }}
+          </a>
+        </span>
       </div>
 
       <!-- ALL-FREE BANNER: lists every window where all members are free; click one to select it -->
@@ -87,7 +92,9 @@
         <strong>No time works for everyone.</strong>
         <span v-if="bestSlot">
           Best slots (⭐): {{ bestSlot.count }} of {{ members.length }} free, e.g.
-          {{ formatDay(bestSlot.day) }} {{ formatTime(bestSlot.time) }}.
+          <a href="#" class="alert-link" @click.prevent="mode = 'heatmap'; goToDay(bestSlot.day)">
+            {{ formatDay(bestSlot.day) }} {{ formatTime(bestSlot.time) }}
+          </a>.
         </span>
         <button
           class="btn btn-sm btn-outline-dark rounded-pill px-3 ms-2"
@@ -101,28 +108,28 @@
       <!-- The grid and everything about it sit together in one card -->
       <div class="avail-card">
       <!-- PAGE NAV: 3 days per page on phones, 7 on laptops -->
-      <div v-if="pageCount > 1" class="d-flex align-items-center justify-content-between mb-3" data-testid="day-pager">
+      <div v-if="pageCount > 1" class="d-flex align-items-center justify-content-center gap-3 mb-3" data-testid="day-pager">
         <button
-          class="pager-button"
+          class="btn btn-outline-dark rounded-pill px-3"
           :disabled="page === 0"
           aria-label="Previous days"
           data-testid="prev-days"
           @click="prevPage"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+          &larr; <span class="d-none d-md-inline">Prev</span>
         </button>
-        <span class="small fw-semibold">
+        <span class="fw-semibold text-center">
           {{ pageLabel }}
-          <span class="text-secondary fw-normal">({{ page + 1 }} / {{ pageCount }})</span>
+          <span class="d-block small text-secondary fw-normal">Page {{ page + 1 }} of {{ pageCount }}</span>
         </span>
         <button
-          class="pager-button"
+          class="btn btn-outline-dark rounded-pill px-3"
           :disabled="page === pageCount - 1"
           aria-label="Next days"
           data-testid="next-days"
           @click="nextPage"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
+          <span class="d-none d-md-inline">Next</span> &rarr;
         </button>
       </div>
 
@@ -152,6 +159,7 @@
                 'slot-free': mode === 'mine' && mySlots[makeKey(day, t)],
                 'slot-picked': mode === 'heatmap' && isInPick(makeKey(day, t)),
                 'slot-all': mode === 'heatmap' && isEveryoneFree(day, t),
+                'slot-chosen': isChosen(makeKey(day, t)),
               }"
               :style="cellStyle(day, t)"
               :data-testid="'slot-' + makeKey(day, t)"
@@ -283,8 +291,8 @@ const isDragging = ref(false)
 const paintValue = ref(true) // true = marking free, false = unmarking
 
 // ---------- heatmap shades ----------
-// 6 clearly different colours: index 0 = nobody free ... index 5 = everyone free
-const shadeColors = ['#ffffff', '#f3f9c8', '#c5e8a5', '#7ccf8a', '#2f9e6a', '#0b5d3b']
+// One green that gets darker as more people are free: index 0 = nobody ... index 5 = everyone
+const shadeColors = ['#ffffff', '#d8f0df', '#a3dbb3', '#5fbf80', '#2a8f57', '#0b5d3b']
 
 // ---------- slot keys and time helpers ----------
 // A slot is identified by a string like "2026-10-17T14:00" (Singapore time).
@@ -523,6 +531,12 @@ function isInPick(key) {
   if (!pickStart.value) return false
   const end = pickEnd.value || pickStart.value
   return key >= pickStart.value && key <= end
+}
+
+// True when this slot is inside the time the group already confirmed
+function isChosen(key) {
+  if (!group.value.chosen_start) return false
+  return key >= fromDb(group.value.chosen_start) && key < fromDb(group.value.chosen_end)
 }
 
 // ---------- celebration popup (shown once per group, remembered with localStorage) ----------
@@ -809,7 +823,7 @@ onMounted(loadAll)
 }
 /* Hover: the slot lifts up a little */
 .slot:hover {
-  transform: scale(1.15);
+  transform: scale(1.05);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   position: relative;
   z-index: 1;
@@ -883,6 +897,11 @@ onMounted(loadAll)
   color: var(--bs-success-text-emphasis);
 }
 
+.chosen-link {
+  color: inherit;
+  font-weight: 700;
+}
+
 .status-banner.chosen svg {
   margin-top: 3px;
   stroke-width: 3;
@@ -944,24 +963,6 @@ onMounted(loadAll)
   box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
 }
 
-.pager-button {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border: 1px solid #e5e5e5;
-  border-radius: 50%;
-  background: white;
-  color: #111;
-}
-
-.pager-button:hover:not(:disabled) {
-  background: #f3f3f3;
-}
-
-.pager-button:disabled {
-  opacity: 0.4;
-}
 
 /* Who has responded, as name chips */
 .responded-list {
@@ -993,6 +994,12 @@ onMounted(loadAll)
 
 .plan-button {
   min-height: 52px;
+}
+
+/* The time the group already confirmed: dashed purple outline */
+.slot-chosen {
+  outline: 2px dashed #6f42c1;
+  outline-offset: -2px;
 }
 
 /* Legend swatches (same colours as the heatmap) */
