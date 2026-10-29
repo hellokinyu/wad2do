@@ -73,6 +73,14 @@ async function onReviewed(submission) {
   await loadSubmissions()
 }
 
+async function onDeleted(submission) {
+  successMessage.value =
+    submission.status === 'approved'
+      ? `${submission.name} and its published activity deleted.`
+      : `${submission.name} deleted.`
+  await loadSubmissions()
+}
+
 watch([selectedStatus, page], loadSubmissions)
 onMounted(loadSubmissions)
 </script>
@@ -81,7 +89,7 @@ onMounted(loadSubmissions)
   <div class="container admin-page py-4 py-md-5" data-testid="admin-review-page">
     <header class="mb-4">
       <h1 class="fw-bold">Review submissions</h1>
-      <p class="text-secondary">Review community suggestions before sharing them with everyone.</p>
+      <p class="text-secondary">Review, edit and manage community activities.</p>
     </header>
     <div class="d-flex flex-wrap gap-2 mb-4" role="group" aria-label="Submission status">
       <button
@@ -124,6 +132,7 @@ onMounted(loadSubmissions)
           :submission="submission"
           @saved="onSaved"
           @reviewed="onReviewed"
+          @deleted="onDeleted"
         />
       </div>
       <nav

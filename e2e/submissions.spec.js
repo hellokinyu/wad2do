@@ -93,7 +93,7 @@ async function fillActivity(page) {
   await page.getByTestId('submission-name').fill('  Weekend art studio  ')
   await page.getByTestId('submission-category').selectOption('Arts and culture')
   await page.getByTestId('submission-duration').selectOption('90')
-  await page.getByTestId('submission-price').fill('25.50')
+  await page.getByTestId('submission-price').fill('25')
   await page.getByTestId('submission-setting').selectOption('indoor')
   await page.getByTestId('submission-address').fill('  10 Orchard Road  ')
   await page.getByTestId('submission-area').selectOption('Orchard')
@@ -112,8 +112,17 @@ for (const width of [1280, 375]) {
     await expect(page.locator('input[type=time]')).toHaveCount(0)
     await expect(page.getByTestId('submission-hours-note')).toContainText('before publishing')
     const free = width === 375
-    await page.getByTestId('submission-free').setChecked(free)
-    await expect(page.getByTestId('submission-price')).toHaveJSProperty('disabled', free)
+    await expect(page.getByTestId('submission-free')).toHaveCount(0)
+    const price = page.getByTestId('submission-price')
+    await price.fill('0')
+    await expect(page.locator('#submission-price-help')).toHaveText('This activity is free.')
+    await price.press('ArrowUp')
+    await expect(price).toHaveValue('1')
+    await expect(page.locator('#submission-price-help')).toHaveText('Enter 0 for a free activity.')
+    await price.fill('')
+    await expect(page.locator('#submission-price-help')).toHaveText('Enter 0 for a free activity.')
+    await price.fill(free ? '0' : '25')
+    await expect(price).toBeEnabled()
     await page.getByTestId('submission-setting').selectOption(free ? 'outdoor' : 'indoor')
     await page
       .getByTestId('submission-description')
@@ -135,7 +144,7 @@ for (const width of [1280, 375]) {
       submitted_by: mockUser.id,
       name: 'Weekend art studio',
       category: 'Arts and culture',
-      price_per_person: free ? 0 : 25.5,
+      price_per_person: free ? 0 : 25,
       duration_min: 90,
       indoor: !free,
       address: '10 Orchard Road',
@@ -504,12 +513,15 @@ test('replaces and removes a photo, revokes previews and allows selecting the sa
   await page.goto('/activities/submit')
   await fillActivity(page)
   const file = await photoFile(page)
-  await page.getByTestId('submission-image').setInputFiles(file)
+  const imageInput = page.getByTestId('submission-image')
+  await imageInput.setInputFiles(file)
   const preview = page.getByTestId('submission-image-preview')
   await expect(preview).toBeVisible()
+  await expect(imageInput).toHaveValue(`C:\\fakepath\\${file.name}`)
   const first = await preview.getAttribute('src')
-  await page.getByTestId('submission-image').setInputFiles({ ...file, name: 'second.png' })
+  await imageInput.setInputFiles({ ...file, name: 'second.png' })
   await expect(preview).toBeVisible()
+  await expect(imageInput).toHaveValue('C:\\fakepath\\second.png')
   await expect(preview).not.toHaveAttribute('src', first)
   expect(
     await page.evaluate(async (url) => {
@@ -525,6 +537,7 @@ test('replaces and removes a photo, revokes previews and allows selecting the sa
   await page.getByTestId('submission-image-remove').focus()
   await page.keyboard.press('Enter')
   await expect(preview).toHaveCount(0)
+  await expect(imageInput).toHaveValue('')
   expect(
     await page.evaluate(async (url) => {
       try {
@@ -535,8 +548,9 @@ test('replaces and removes a photo, revokes previews and allows selecting the sa
       }
     }, second),
   ).toBe(false)
-  await page.getByTestId('submission-image').setInputFiles(file)
+  await imageInput.setInputFiles(file)
   await expect(preview).toBeVisible()
+  await expect(imageInput).toHaveValue(`C:\\fakepath\\${file.name}`)
   await page.getByTestId('submission-image-remove').click()
   await page.getByTestId('submission-submit').click()
   await expect(page.getByTestId('submission-success')).toBeVisible()

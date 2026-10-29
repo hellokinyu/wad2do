@@ -27,7 +27,7 @@ let submissionId = crypto.randomUUID()
 let confirmedUpload
 let requestController
 
-function removePhoto() {
+function resetPhoto() {
   selectionNumber += 1
   if (imagePreview.value) URL.revokeObjectURL(imagePreview.value)
   imagePreview.value = ''
@@ -35,13 +35,17 @@ function removePhoto() {
   imageError.value = ''
   validatingImage.value = false
   confirmedUpload = undefined
+}
+
+function removePhoto() {
+  resetPhoto()
   if (imageInput.value) imageInput.value.value = ''
 }
 
 async function selectPhoto(event) {
   const file = event.target.files?.[0]
   if (!file) return
-  removePhoto()
+  resetPhoto()
   imageFile.value = file
   if (!Object.hasOwn(imageExtensions, file.type)) {
     imageError.value = 'Choose a JPEG, PNG or WebP photo.'
@@ -144,7 +148,6 @@ const form = reactive({
   name: '',
   category: '',
   price: '',
-  free: false,
   duration: '',
   address: '',
   postal_code: '',
@@ -155,7 +158,7 @@ const form = reactive({
   website: '',
 })
 function submissionDetails(submittedBy) {
-  const price = form.free ? 0 : form.price
+  const price = form.price
   if (
     !form.name.trim() ||
     !form.address.trim() ||
@@ -396,22 +399,15 @@ async function submitActivity() {
               v-model.number="form.price"
               type="number"
               min="0"
-              step="0.01"
-              :required="!form.free"
-              :disabled="form.free"
+              step="1"
+              required
               class="form-control"
+              aria-describedby="submission-price-help"
               data-testid="submission-price"
             />
-            <div class="form-check mt-2">
-              <input
-                id="submission-free"
-                v-model="form.free"
-                type="checkbox"
-                class="form-check-input"
-                data-testid="submission-free"
-              />
-              <label for="submission-free" class="form-check-label">This activity is free</label>
-            </div>
+            <p id="submission-price-help" class="form-text mt-2" aria-live="polite">
+              {{ form.price === 0 ? 'This activity is free.' : 'Enter 0 for a free activity.' }}
+            </p>
           </div>
           <div class="col-md-6">
             <label for="submission-setting" class="form-label">Indoor or outdoor *</label>
