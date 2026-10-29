@@ -76,36 +76,86 @@ async function leaveGroup() {
 </script>
 
 <template>
-  <div class="card mt-3" data-testid="members-panel">
-    <div class="card-body">
-      <h2 class="h5">Members</h2>
-      <ul class="list-group mb-3">
-        <li
-          v-for="member in members"
-          :key="member.id"
-          class="list-group-item d-flex justify-content-between align-items-center"
-          data-testid="member-item"
+  <section class="group-panel mt-3" aria-label="Members" data-testid="members-panel">
+    <h2 class="h6 fw-bold mb-3">Members</h2>
+    <ul class="member-list mb-3">
+      <li v-for="member in members" :key="member.id" class="member-row" data-testid="member-item">
+        <span class="member-initial" aria-hidden="true">{{ member.name.charAt(0) }}</span>
+        <span class="flex-grow-1 min-width-0">
+          {{ member.name }}
+          <span v-if="member.id === userId" class="text-secondary">(you)</span>
+        </span>
+        <button
+          v-if="member.id !== userId"
+          class="btn btn-sm btn-outline-danger rounded-pill px-3"
+          data-testid="remove-member-button"
+          @click="removeMember(member)"
         >
-          <span>
-            {{ member.name }}
-            <span v-if="member.id === userId" class="text-muted">(you)</span>
-          </span>
-          <button
-            v-if="member.id !== userId"
-            class="btn btn-sm btn-outline-danger"
-            data-testid="remove-member-button"
-            @click="removeMember(member)"
-          >
-            Remove
-          </button>
-        </li>
-      </ul>
+          Remove
+        </button>
+      </li>
+    </ul>
 
-      <p v-if="memberError" class="text-danger" data-testid="member-error">{{ memberError }}</p>
+    <p v-if="memberError" class="text-danger" data-testid="member-error">{{ memberError }}</p>
 
-      <button class="btn btn-outline-danger" data-testid="leave-group-button" @click="leaveGroup">
-        Leave group
-      </button>
-    </div>
-  </div>
+    <button
+      class="btn btn-outline-danger rounded-pill px-4"
+      data-testid="leave-group-button"
+      @click="leaveGroup"
+    >
+      Leave group
+    </button>
+  </section>
 </template>
+
+<style scoped>
+/* Same soft grey panel as the filters on the Activities page */
+.group-panel {
+  padding: 20px;
+  border: 1px solid #e5e5e5;
+  border-radius: 16px;
+  background: #fafafa;
+}
+
+.member-list {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  background: white;
+}
+
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 12px;
+}
+
+.member-row + .member-row {
+  border-top: 1px solid #eee;
+}
+
+/* First letter of the member's name in a circle */
+.member-initial {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #111;
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.min-width-0 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+</style>
