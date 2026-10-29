@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/composables/useAuth'
 import { requestWithTimeout as timedRequest } from '@/lib/requestWithTimeout'
 import GooglePlacePicker from '@/components/GooglePlacePicker.vue'
+import AdminActionButton from '@/components/AdminActionButton.vue'
 import { hasCompleteOpeningHours } from '@/lib/openingHours'
 import {
   formatPrice,
@@ -505,42 +506,36 @@ async function reject() {
             >
 
             <div v-if="!editing && !rejecting && !deleting" class="d-flex flex-wrap gap-2 mt-4">
-              <button
+              <AdminActionButton
                 v-if="editable"
-                class="btn btn-outline-dark"
-                :disabled="busy"
+                action="edit"
+                :busy="busy"
                 data-testid="admin-edit"
                 @click="startEdit"
-              >
-                Edit
-              </button>
-              <button
+              />
+              <AdminActionButton
                 v-if="pending"
-                class="btn btn-dark"
-                :disabled="busy || !hoursReady"
+                action="approve"
+                :busy="busy"
+                :disabled="!hoursReady"
                 :aria-describedby="!hoursReady ? `hours-required-${submission.id}` : undefined"
                 data-testid="admin-approve"
                 @click="approve"
-              >
-                {{ busy ? 'Saving...' : 'Approve' }}
-              </button>
-              <button
+              />
+              <AdminActionButton
                 v-if="pending"
-                class="btn btn-outline-danger"
-                :disabled="busy"
+                action="reject"
+                :busy="busy"
                 data-testid="admin-reject"
                 @click="startReject"
-              >
-                Reject
-              </button>
-              <button
-                class="btn btn-outline-danger"
-                :disabled="busy"
+              />
+              <AdminActionButton
+                action="delete"
+                class="ms-auto"
+                :busy="busy"
                 data-testid="admin-delete"
                 @click="startDelete"
-              >
-                Delete
-              </button>
+              />
             </div>
             <div
               v-if="deleting"
