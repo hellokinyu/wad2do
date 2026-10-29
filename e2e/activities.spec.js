@@ -80,7 +80,7 @@ test('demo searches, combines filters and clears them', async ({ page }) => {
   await expect(page.getByTestId('activities-sort-summary')).toHaveText('Showing catalogue order')
   await expect(page.getByTestId('activities-sort-description')).toHaveCount(0)
   await expect(page.getByTestId('activity-save')).toHaveCount(4)
-  await expect(page.getByTestId('activity-share')).toHaveCount(0)
+  await expect(page.getByTestId('activity-share')).toHaveCount(4)
   await expect(cards.getByRole('link')).toHaveCount(8)
 
   await page.getByRole('button', { name: 'Outdoor', exact: true }).click()

@@ -3,6 +3,7 @@ import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import ActivityCard from '@/components/ActivityCard.vue'
+import ActivityShareDialog from '@/components/ActivityShareDialog.vue'
 import { getPrice } from '@/lib/activityDisplay'
 import { rankActivities } from '@/lib/activityRanking'
 import { useAuth } from '@/composables/useAuth'
@@ -20,6 +21,20 @@ const saveError = ref('')
 const saveMessage = ref('')
 let favouritesRequest = 0
 let saveMessageTimer
+const shareTarget = ref(null)
+
+function announce(text) {
+  saveError.value = ''
+  saveMessage.value = text
+  clearTimeout(saveMessageTimer)
+  saveMessageTimer = setTimeout(() => {
+    saveMessage.value = ''
+  }, 3000)
+}
+
+function openShare(activityId) {
+  shareTarget.value = activities.value.find((activity) => activity.id === activityId) ?? null
+}
 
 async function loadFavourites() {
   const userId = user.value?.id
@@ -73,11 +88,7 @@ async function toggleSaved(activityId) {
 
     if (isSaved) savedIds.value.add(activityId)
     else savedIds.value.delete(activityId)
-    saveMessage.value = isSaved ? 'Activity saved.' : 'Removed from saved activities.'
-    clearTimeout(saveMessageTimer)
-    saveMessageTimer = setTimeout(() => {
-      saveMessage.value = ''
-    }, 3000)
+    announce(isSaved ? 'Activity saved.' : 'Removed from saved activities.')
   } catch {
     if (request === favouritesRequest) {
       saveError.value = "Couldn't update your saved activities. Please try again."
@@ -588,6 +599,7 @@ onMounted(loadActivities)
         </p>
       </div>
       <p
+        id="activities-results-summary"
         ref="resultsSummary"
         class="text-secondary mb-3"
         role="status"
@@ -628,8 +640,8 @@ onMounted(loadActivities)
             :saved="savedIds.has(activity.id)"
             :saving="savingIds.has(activity.id)"
             :save-disabled="favouritesLoading || Boolean(favouritesError)"
-            :show-share="false"
             @save="toggleSaved"
+            @share="openShare"
           />
         </div>
       </div>
@@ -679,6 +691,7 @@ onMounted(loadActivities)
         </p>
       </nav>
     </template>
+    <ActivityShareDialog :activity="shareTarget" @close="shareTarget = null" @shared="announce" />
   </div>
 </template>
 
