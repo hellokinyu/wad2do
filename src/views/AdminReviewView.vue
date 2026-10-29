@@ -1,12 +1,14 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import AdminSubmissionCard from '@/components/AdminSubmissionCard.vue'
 
 const statuses = ['pending', 'approved', 'rejected']
 const selectedStatus = ref('pending')
+const searchInput = ref('')
+const searchTerm = ref('')
 const submissions = ref([])
-const pendingCount = ref(0)
+const statusCounts = ref({ pending: 0, approved: 0, rejected: 0 })
 const totalCount = ref(0)
 const page = ref(1)
 const pageSize = 10
@@ -14,27 +16,41 @@ const loading = ref(true)
 const errorMessage = ref('')
 const successMessage = ref('')
 let requestNumber = 0
+let searchTimer
 const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize)))
 
 async function loadSubmissions() {
   // An older response must not replace the results of a newer tab or page.
   const request = ++requestNumber
+  const status = selectedStatus.value
+  const term = searchTerm.value
+  const firstRow = (page.value - 1) * pageSize
+  const pattern = `%${term.replace(/[\\%_]/g, '\\$&')}%`
+  const filterSearch = (query) => (term ? query.ilike('name', pattern) : query)
   loading.value = true
   errorMessage.value = ''
   try {
-    const pending = await supabase
-      .from('submissions')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'pending')
-    if (pending.error) throw pending.error
+    const counts = await Promise.all(
+      statuses.map((status) =>
+        filterSearch(
+          supabase
+            .from('submissions')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', status),
+        ),
+      ),
+    )
+    const failedCount = counts.find((result) => result.error)
+    if (failedCount) throw failedCount.error
 
-    const firstRow = (page.value - 1) * pageSize
-    const { data, count, error } = await supabase
-      .from('submissions')
-      .select('*, submitter:profiles!submissions_submitted_by_fkey(display_name)', {
-        count: 'exact',
-      })
-      .eq('status', selectedStatus.value)
+    const { data, count, error } = await filterSearch(
+      supabase
+        .from('submissions')
+        .select('*, submitter:profiles!submissions_submitted_by_fkey(display_name)', {
+          count: 'exact',
+        })
+        .eq('status', status),
+    )
       .order('created_at', { ascending: false })
       .order('id')
       .range(firstRow, firstRow + pageSize - 1)
@@ -43,7 +59,9 @@ async function loadSubmissions() {
 
     submissions.value = data ?? []
     totalCount.value = count ?? 0
-    pendingCount.value = pending.count ?? 0
+    statusCounts.value = Object.fromEntries(
+      statuses.map((status, index) => [status, counts[index].count ?? 0]),
+    )
     // If the last card on a page was reviewed, return to an existing page.
     if (page.value > totalPages.value) page.value = totalPages.value
   } catch {
@@ -60,9 +78,13 @@ function selectStatus(status) {
   successMessage.value = ''
 }
 
-function onSaved(updated) {
+async function onSaved(updated) {
   const submission = submissions.value.find((row) => row.id === updated.id)
   if (submission) Object.assign(submission, updated)
+  if (searchTerm.value) {
+    successMessage.value = `${updated.name} updated.`
+    await loadSubmissions()
+  }
 }
 
 async function onReviewed(submission) {
@@ -81,8 +103,20 @@ async function onDeleted(submission) {
   await loadSubmissions()
 }
 
-watch([selectedStatus, page], loadSubmissions)
+watch(searchInput, () => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    searchTerm.value = searchInput.value.trim()
+    page.value = 1
+    successMessage.value = ''
+  }, 250)
+})
+watch([selectedStatus, page, searchTerm], loadSubmissions)
 onMounted(loadSubmissions)
+onUnmounted(() => {
+  clearTimeout(searchTimer)
+  requestNumber += 1
+})
 </script>
 
 <template>
@@ -91,6 +125,31 @@ onMounted(loadSubmissions)
       <h1 class="fw-bold">Review submissions</h1>
       <p class="text-secondary">Review, edit and manage community activities.</p>
     </header>
+    <div role="search" aria-label="Search submissions" class="mb-4">
+      <label for="admin-search" class="form-label">Search activity names</label>
+      <div class="d-flex gap-2">
+        <input
+          id="admin-search"
+          v-model="searchInput"
+          type="search"
+          class="form-control"
+          placeholder="Search by part of an activity name"
+          aria-describedby="admin-search-help"
+          data-testid="admin-search"
+        />
+        <button
+          v-if="searchInput"
+          type="button"
+          class="btn btn-outline-dark"
+          @click="searchInput = ''"
+        >
+          Clear
+        </button>
+      </div>
+      <p id="admin-search-help" class="form-text">
+        Search all status tabs. Counts show matching activities.
+      </p>
+    </div>
     <div class="d-flex flex-wrap gap-2 mb-4" role="group" aria-label="Submission status">
       <button
         v-for="status in statuses"
@@ -103,7 +162,7 @@ onMounted(loadSubmissions)
         @click="selectStatus(status)"
       >
         {{ status.charAt(0).toUpperCase() + status.slice(1)
-        }}<span v-if="status === 'pending'"> ({{ pendingCount }})</span>
+        }}<span> ({{ statusCounts[status] }})</span>
       </button>
     </div>
     <p v-if="successMessage" class="alert alert-success" role="status">{{ successMessage }}</p>
@@ -120,9 +179,11 @@ onMounted(loadSubmissions)
         data-testid="admin-empty"
       >
         {{
-          selectedStatus === 'pending'
-            ? 'All caught up. No submissions to review.'
-            : `No ${selectedStatus} submissions yet.`
+          searchTerm
+            ? `No ${selectedStatus} activities match “${searchTerm}”.`
+            : selectedStatus === 'pending'
+              ? 'All caught up. No submissions to review.'
+              : `No ${selectedStatus} submissions yet.`
         }}
       </div>
       <div v-else class="d-grid gap-4">
