@@ -40,3 +40,8 @@ __screenshots__/
 
 test-results/
 playwright-report/
+
+# Personal AI tool folders (Claude Code, Cursor, Impeccable). Keep them on your own machine.
+.claude/
+.cursor/
+.impeccable/
