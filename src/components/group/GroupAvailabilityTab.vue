@@ -31,7 +31,10 @@
 
       <!-- CHOSEN SLOT: shown above the grid once the group has confirmed a time -->
       <div v-if="group.chosen_start" class="alert alert-success" data-testid="chosen-slot">
-        Chosen time: <strong>{{ chosenLabel }}</strong>
+        Chosen time:
+        <a href="#" class="alert-link" @click.prevent="goToDay(fromDb(group.chosen_start).slice(0, 10))">
+          {{ chosenLabel }}
+        </a>
       </div>
 
       <!-- ALL-FREE BANNER: lists every window where all members are free; click one to select it -->
@@ -75,7 +78,9 @@
         <strong>No time works for everyone.</strong>
         <span v-if="bestSlot">
           Best slots (⭐): {{ bestSlot.count }} of {{ members.length }} free, e.g.
-          {{ formatDay(bestSlot.day) }} {{ formatTime(bestSlot.time) }}.
+          <a href="#" class="alert-link" @click.prevent="mode = 'heatmap'; goToDay(bestSlot.day)">
+            {{ formatDay(bestSlot.day) }} {{ formatTime(bestSlot.time) }}
+          </a>.
         </span>
         <button class="btn btn-sm btn-outline-dark ms-2" data-testid="extend-range" @click="extendDateRange">
           Extend date range
@@ -83,28 +88,28 @@
       </div>
 
       <!-- PAGE NAV: 3 days per page on phones, 7 on laptops -->
-      <div v-if="pageCount > 1" class="d-flex align-items-center justify-content-between mb-2" data-testid="day-pager">
+      <div v-if="pageCount > 1" class="d-flex align-items-center justify-content-center gap-3 mb-2" data-testid="day-pager">
         <button
-          class="btn btn-sm btn-outline-secondary"
+          class="btn btn-outline-primary px-3"
           :disabled="page === 0"
           aria-label="Previous days"
           data-testid="prev-days"
           @click="prevPage"
         >
-          &larr;
+          &larr; <span class="d-none d-md-inline">Prev</span>
         </button>
-        <span class="small fw-semibold">
+        <span class="fw-semibold text-center">
           {{ pageLabel }}
-          <span class="text-muted fw-normal">({{ page + 1 }} / {{ pageCount }})</span>
+          <span class="d-block small text-muted fw-normal">Page {{ page + 1 }} of {{ pageCount }}</span>
         </span>
         <button
-          class="btn btn-sm btn-outline-secondary"
+          class="btn btn-outline-primary px-3"
           :disabled="page === pageCount - 1"
           aria-label="Next days"
           data-testid="next-days"
           @click="nextPage"
         >
-          &rarr;
+          <span class="d-none d-md-inline">Next</span> &rarr;
         </button>
       </div>
 
@@ -134,6 +139,7 @@
                 'slot-free': mode === 'mine' && mySlots[makeKey(day, t)],
                 'slot-picked': mode === 'heatmap' && isInPick(makeKey(day, t)),
                 'slot-all': mode === 'heatmap' && isEveryoneFree(day, t),
+                'slot-chosen': isChosen(makeKey(day, t)),
               }"
               :style="cellStyle(day, t)"
               :data-testid="'slot-' + makeKey(day, t)"
@@ -256,8 +262,8 @@ const isDragging = ref(false)
 const paintValue = ref(true) // true = marking free, false = unmarking
 
 // ---------- heatmap shades ----------
-// 6 clearly different colours: index 0 = nobody free ... index 5 = everyone free
-const shadeColors = ['#ffffff', '#f3f9c8', '#c5e8a5', '#7ccf8a', '#2f9e6a', '#0b5d3b']
+// One green that gets darker as more people are free: index 0 = nobody ... index 5 = everyone
+const shadeColors = ['#ffffff', '#d8f0df', '#a3dbb3', '#5fbf80', '#2a8f57', '#0b5d3b']
 
 // ---------- slot keys and time helpers ----------
 // A slot is identified by a string like "2026-10-17T14:00" (Singapore time).
@@ -496,6 +502,12 @@ function isInPick(key) {
   if (!pickStart.value) return false
   const end = pickEnd.value || pickStart.value
   return key >= pickStart.value && key <= end
+}
+
+// True when this slot is inside the time the group already confirmed
+function isChosen(key) {
+  if (!group.value.chosen_start) return false
+  return key >= fromDb(group.value.chosen_start) && key < fromDb(group.value.chosen_end)
 }
 
 // ---------- celebration popup (shown once per group, remembered with localStorage) ----------
@@ -782,7 +794,7 @@ onMounted(loadAll)
 }
 /* Hover: the slot lifts up a little */
 .slot:hover {
-  transform: scale(1.15);
+  transform: scale(1.05);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   position: relative;
   z-index: 1;
@@ -812,6 +824,13 @@ onMounted(loadAll)
 /* The range being picked */
 .slot-picked {
   outline: 3px solid #0d6efd;
+  outline-offset: -2px;
+}
+
+
+/* The time the group already confirmed: dashed purple outline */
+.slot-chosen {
+  outline: 2px dashed #6f42c1;
   outline-offset: -2px;
 }
 
