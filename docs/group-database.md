@@ -6,7 +6,24 @@ the connected WAD2Do project on 28 Oct 2026 confirmed PostgreSQL 17.11, the expe
 columns and keys, and overly broad existing policies. No user records were fetched.
 Database changes must be announced before they are applied.
 
-## Planning consistency repair — 30 Oct 2026 (prepared; not applied)
+## Planning consistency repair — 30 Oct 2026 (applied)
+
+With explicit approval, the frontend was published on `fix/group-planning-consistency`
+and `group_planning_consistency` was applied to shared WAD2Do Supabase. Teammates must
+use this branch (or its eventual merge), restart their local app and refresh older tabs.
+Live read-only checks confirmed the revision column, both triggers, checked-save grants,
+closed direct itinerary writes and the five expected Realtime tables. Anonymous execution,
+missing-identity saves and browser revision forgery are denied; row-level security remains
+enabled. All seven inspected tables kept identical existing-data fingerprints, including
+all five saved itineraries. No live user records were created, edited or deleted for tests.
+
+The only added security advisory is the expected
+[signed-in SECURITY DEFINER function notice](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable)
+for `save_group_itinerary`. Signed-in execution is intentional; the function checks identity,
+membership and revision internally, and anonymous/trigger-function execution is denied.
+Existing advisories were unchanged. Validation passed: 283 Chromium tests, 40 local tests
+(including isolated PostgreSQL checks), lint and production build. Successful live browser
+saves and actual multi-client Realtime events remain untested.
 
 After sharing the updated frontend, run [group_planning.sql](sql/group_planning.sql)
 **last**, after the existing group scripts. It adds `groups.plan_revision`, checked
