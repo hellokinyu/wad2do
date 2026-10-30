@@ -1,16 +1,31 @@
 <script setup>
-import { ref, computed, nextTick, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
+import {
+  stages,
+  getStatus,
+  getToday,
+  getOutingDay,
+  isPast as isPastOn,
+  getWhenText,
+  getBudgetText,
+  getStageStyle,
+} from '@/lib/groupDisplay'
+import { findProfileAnimal } from '@/data/profileAnimals'
 import AnimalAvatar from '@/components/AnimalAvatar.vue'
 import GroupInviteCode from '@/components/group/GroupInviteCode.vue'
+import GroupTicketStub from '@/components/group/GroupTicketStub.vue'
 
 const router = useRouter()
 
 const groups = ref([]) // array of the user's groups
 const loading = ref(true)
 const errorMessage = ref('')
+// group id -> [{ animal, initial }], filled in after the list shows
+const memberFaces = ref({})
+const freshGroupId = ref(null) // the group just created, marked "New" in the list
 
 // Create group form
 const showCreateForm = ref(false)
@@ -18,7 +33,8 @@ const groupName = ref('')
 const startDate = ref('')
 const endDate = ref('')
 const budget = ref('')
-const createError = ref('')
+const fieldErrors = ref({}) // { name, start, end, budget } -> message
+const createError = ref('') // for when saving fails, not for form mistakes
 const newGroup = ref(null) // the group we just made, so we can show its invite code
 const creating = ref(false)
 let newGroupId = crypto.randomUUID()
@@ -33,6 +49,10 @@ const joining = ref(false)
 const createButton = ref(null)
 const joinButton = ref(null)
 const groupNameInput = ref(null)
+const startDateInput = ref(null)
+const endDateInput = ref(null)
+const budgetInput = ref(null)
+const createSubmitButton = ref(null)
 const joinCodeInput = ref(null)
 const inviteHeading = ref(null)
 
@@ -59,13 +79,14 @@ async function loadGroups() {
     const { data, error } = await supabase
       .from('group_members')
       .select(
-        'groups(id, name, start_date, end_date, chosen_start, group_members(count), itineraries(group_id))',
+        'groups(id, name, start_date, end_date, budget_per_person, chosen_start, chosen_end, group_members(count), itineraries(group_id))',
       )
       .eq('user_id', user.id)
 
     if (error) throw error
 
     groups.value = data.map((row) => row.groups)
+    groups.value.forEach(loadMemberFaces)
   } catch (error) {
     console.log(error)
     errorMessage.value = "Couldn't load your groups. Please try again."
@@ -76,73 +97,87 @@ async function loadGroups() {
 
 onMounted(loadGroups)
 
-// "Voting" -> "Time picked" -> "Planned"
-const stages = ['Voting', 'Time picked', 'Planned']
+// The members' avatars for one card. If this fails the card just shows the member count.
+// { get: true } because it only reads, and get_group_member_names is a "stable" function.
+async function loadMemberFaces(group) {
+  try {
+    const { data, error } = await supabase.rpc(
+      'get_group_member_names',
+      { p_group_id: group.id },
+      { get: true },
+    )
+    if (error) throw error
+    memberFaces.value = {
+      ...memberFaces.value,
+      [group.id]: data.map((member) => ({
+        id: member.id,
+        animal: findProfileAnimal(member.avatar_animal)?.id || '',
+        initial: (member.display_name || 'M').charAt(0).toUpperCase(),
+      })),
+    }
+  } catch (error) {
+    console.log(error)
+  }
+}
+
+// Stages, dates and stage colours come from @/lib/groupDisplay, shared with the group page
 const nextSteps = {
   Voting: 'Next: pick a time',
   'Time picked': 'Next: make the plan',
   Planned: 'Itinerary ready',
 }
 
-function getStatus(group) {
-  // No plan yet comes back as [] or null, depending on how the table is set up
-  if (group.itineraries && group.itineraries.length !== 0) return 'Planned'
-  if (group.chosen_start) return 'Time picked'
-  return 'Voting'
+// A past group that never reached "Planned" ended without a plan
+function getStepText(group) {
+  const status = getStatus(group)
+  if (!isPast(group)) return nextSteps[status]
+  return status === 'Planned' ? 'Ended' : 'Ended without a plan'
+}
+
+// A planned group opens straight on its itinerary; the rest open on Activities (the default tab)
+function getGroupLink(group) {
+  const link = '/groups/' + group.id
+  return getStatus(group) === 'Planned' ? link + '/itinerary' : link
 }
 
 function getMemberCount(group) {
-  return group.group_members[0].count
+  return group.group_members?.[0]?.count ?? 0
 }
 
 // ----- Dates on the group cards -----
 
 // Today as YYYY-MM-DD in the user's time zone, so it compares with start_date/end_date
-const today = new Date().toLocaleDateString('en-CA')
+const today = getToday()
 
 function isPast(group) {
-  return group.end_date < today
+  return isPastOn(group, today)
 }
 
 // Upcoming groups first (soonest at the top), then past ones (most recent first)
 const upcomingGroups = computed(() =>
   groups.value
     .filter((group) => !isPast(group))
-    .sort((a, b) => a.start_date.localeCompare(b.start_date)),
+    .sort((a, b) =>
+      (getOutingDay(a) || a.start_date).localeCompare(getOutingDay(b) || b.start_date),
+    ),
 )
 const pastGroups = computed(() =>
-  groups.value.filter(isPast).sort((a, b) => b.end_date.localeCompare(a.end_date)),
+  groups.value
+    .filter(isPast)
+    .sort((a, b) => (getOutingDay(b) || b.end_date).localeCompare(getOutingDay(a) || a.end_date)),
 )
+// "Coming up" always shows (with a note if it's empty); "Past outings" only if there are some
 const groupSections = computed(() =>
   [
-    { key: 'upcoming', title: 'Upcoming', list: upcomingGroups.value },
-    { key: 'past', title: 'Past', list: pastGroups.value },
-  ].filter((section) => section.list.length > 0),
+    { key: 'upcoming', title: 'Coming up', list: upcomingGroups.value },
+    { key: 'past', title: 'Past outings', list: pastGroups.value },
+  ].filter((section) => section.key === 'upcoming' || section.list.length > 0),
 )
 
-// "2026-10-30" -> a local Date (new Date("2026-10-30") would read it as UTC)
-function toDate(value) {
-  const [year, month, day] = value.split('-').map(Number)
-  return new Date(year, month - 1, day)
-}
-
-function formatPart(value, options) {
-  return toDate(value).toLocaleDateString('en-SG', options)
-}
-
-function formatRange(group) {
-  // The ticket stub already shows the weekday, so the range stays short
-  const options = { day: 'numeric', month: 'short' }
-  if (group.start_date.slice(0, 4) !== today.slice(0, 4)) options.year = 'numeric'
-  const start = formatPart(group.start_date, options)
-  if (group.end_date === group.start_date) return start
-  return start + ' – ' + formatPart(group.end_date, options)
-}
-
-function getDayCount(group) {
-  const days = Math.round((toDate(group.end_date) - toDate(group.start_date)) / 86400000) + 1
-  return days === 1 ? '1 day' : days + ' days'
-}
+// Past outings start folded away so the list leads with what's next.
+// With nothing coming up there's nothing to lead with, so they're shown straight away.
+const pastOpen = ref(false)
+const showPast = computed(() => pastOpen.value || upcomingGroups.value.length === 0)
 
 // Make a random 6-character code like "K7Q2XM"
 function makeInviteCode() {
@@ -169,36 +204,62 @@ async function openCreateForm() {
   if (creating.value) return
   showCreateForm.value = true
   showJoinForm.value = false
-  groupName.value = ''
-  startDate.value = ''
-  endDate.value = ''
-  budget.value = ''
+  // Keep a half-filled form (and its id, so a retry can't make the group twice).
+  // Only start fresh after a group was made.
+  if (newGroup.value) {
+    groupName.value = ''
+    startDate.value = ''
+    endDate.value = ''
+    budget.value = ''
+    newGroup.value = null
+    newGroupId = crypto.randomUUID()
+  }
+  fieldErrors.value = {}
   createError.value = ''
-  newGroup.value = null
-  newGroupId = crypto.randomUUID()
   await nextTick()
   groupNameInput.value?.focus()
 }
+
+// Check every field at once, so each mistake shows under its own field
+function checkCreateForm() {
+  const errors = {}
+  if (groupName.value.trim() === '') errors.name = 'Please enter a group name.'
+  if (startDate.value === '') errors.start = 'Please pick a start date.'
+  if (endDate.value === '') errors.end = 'Please pick an end date.'
+  else if (startDate.value !== '' && endDate.value < startDate.value) {
+    errors.end = "The end date can't be before the start date."
+  }
+  if (typeof budget.value !== 'number' || !Number.isFinite(budget.value) || budget.value < 0) {
+    errors.budget = 'Please enter a budget of S$0 or more.'
+  }
+  return errors
+}
+
+// Once a field is flagged, re-check it as the user fixes it (but don't flag new ones mid-typing)
+watch([groupName, startDate, endDate, budget], () => {
+  const errors = checkCreateForm()
+  fieldErrors.value = Object.fromEntries(
+    Object.keys(fieldErrors.value)
+      .filter((key) => errors[key])
+      .map((key) => [key, errors[key]]),
+  )
+})
 
 async function createGroup() {
   if (creating.value) return
   createError.value = ''
 
-  // Check the form first
-  if (groupName.value.trim() === '') {
-    createError.value = 'Please enter a group name.'
-    return
-  }
-  if (startDate.value === '' || endDate.value === '') {
-    createError.value = 'Please pick a start and end date.'
-    return
-  }
-  if (endDate.value < startDate.value) {
-    createError.value = 'The end date must be after the start date.'
-    return
-  }
-  if (typeof budget.value !== 'number' || !Number.isFinite(budget.value) || budget.value < 0) {
-    createError.value = 'Please enter a budget of $0 or more.'
+  fieldErrors.value = checkCreateForm()
+  if (Object.keys(fieldErrors.value).length > 0) {
+    // Move to the first field that needs fixing
+    const inputs = {
+      name: groupNameInput,
+      start: startDateInput,
+      end: endDateInput,
+      budget: budgetInput,
+    }
+    const first = Object.keys(inputs).find((key) => fieldErrors.value[key])
+    inputs[first].value?.focus()
     return
   }
 
@@ -221,6 +282,7 @@ async function createGroup() {
     if (error) throw error
 
     newGroup.value = data // shows the invite panel
+    freshGroupId.value = data.id
     loadGroups()
     await nextTick()
     inviteHeading.value?.focus()
@@ -229,6 +291,12 @@ async function createGroup() {
     createError.value = "Couldn't create the group. Please try again."
   } finally {
     creating.value = false
+  }
+
+  // The form was disabled while saving, which drops focus; put it back so retrying is one tap
+  if (createError.value) {
+    await nextTick()
+    createSubmitButton.value?.focus()
   }
 }
 
@@ -243,8 +311,18 @@ async function openJoinForm() {
   joinCodeInput.value?.focus()
 }
 
+// Codes only use these characters (see makeInviteCode), so drop anything else as it's typed
+watch(joinCode, (value) => {
+  const cleaned = value
+    .toUpperCase()
+    .replace(/[^A-HJ-NP-Z2-9]/g, '')
+    .slice(0, 6)
+  if (cleaned !== value) joinCode.value = cleaned
+  joinError.value = ''
+})
+
 async function joinGroup() {
-  if (joining.value) return
+  if (joining.value || joinCode.value.length !== 6) return
   joinError.value = ''
   const code = joinCode.value.trim().toUpperCase()
 
@@ -264,6 +342,11 @@ async function joinGroup() {
     joinError.value = "Couldn't join the group. Please try again."
   } finally {
     joining.value = false
+    // Back to the code box so it can be fixed (the form was disabled while checking)
+    if (joinError.value) {
+      await nextTick()
+      joinCodeInput.value?.focus()
+    }
   }
 }
 </script>
@@ -276,11 +359,13 @@ async function joinGroup() {
         <p class="text-secondary mb-0">Vote on activities, pick a time and get a plan together.</p>
       </div>
 
+      <!-- Black marks the panel that's open; with nothing open, Create is the main action -->
       <div class="group-actions">
         <button
           ref="createButton"
           type="button"
-          class="group-action group-action-primary"
+          class="group-action"
+          :class="{ active: !showJoinForm }"
           :aria-expanded="showCreateForm"
           aria-controls="group-panel"
           data-testid="create-group-button"
@@ -316,6 +401,7 @@ async function joinGroup() {
           class="panel"
           aria-labelledby="create-panel-title"
           data-testid="create-group-form"
+          @keydown.esc="closePanel"
         >
           <!-- After creating: show the QR code and group code -->
           <div v-if="newGroup" data-testid="invite-panel">
@@ -333,7 +419,11 @@ async function joinGroup() {
               </div>
             </div>
 
-            <GroupInviteCode :group-id="newGroup.id" :invite-code="newGroup.invite_code" />
+            <GroupInviteCode
+              :group-id="newGroup.id"
+              :group-name="newGroup.name"
+              :invite-code="newGroup.invite_code"
+            />
 
             <div class="panel-footer">
               <button type="button" class="btn btn-link text-secondary" @click="closePanel">
@@ -352,7 +442,7 @@ async function joinGroup() {
                 <div>
                   <h2 id="create-panel-title" class="panel-title">Create a group</h2>
                   <p class="text-secondary mb-0">
-                    You'll get an invite link to share once it's made.
+                    Then you'll get a QR code and a group code for friends to join.
                   </p>
                 </div>
               </div>
@@ -365,49 +455,79 @@ async function joinGroup() {
                     ref="groupNameInput"
                     v-model="groupName"
                     class="form-control"
+                    :class="{ 'is-invalid': fieldErrors.name }"
+                    :aria-invalid="Boolean(fieldErrors.name)"
+                    :aria-describedby="fieldErrors.name ? 'group-name-error' : undefined"
                     autocomplete="off"
                     placeholder="e.g. Saturday makan crew"
                     data-testid="group-name-input"
                   />
+                  <p v-if="fieldErrors.name" id="group-name-error" class="field-error">
+                    {{ fieldErrors.name }}
+                  </p>
                 </div>
                 <div class="col-6 col-md-4">
                   <label for="start-date" class="form-label">Start date</label>
                   <input
                     id="start-date"
+                    ref="startDateInput"
                     v-model="startDate"
                     type="date"
+                    :min="today"
                     class="form-control"
+                    :class="{ 'is-invalid': fieldErrors.start }"
+                    :aria-invalid="Boolean(fieldErrors.start)"
+                    :aria-describedby="fieldErrors.start ? 'start-date-error' : undefined"
                     data-testid="group-start-input"
                   />
+                  <p v-if="fieldErrors.start" id="start-date-error" class="field-error">
+                    {{ fieldErrors.start }}
+                  </p>
                 </div>
                 <div class="col-6 col-md-4">
                   <label for="end-date" class="form-label">End date</label>
                   <input
                     id="end-date"
+                    ref="endDateInput"
                     v-model="endDate"
                     type="date"
-                    :min="startDate || undefined"
+                    :min="startDate || today"
                     class="form-control"
+                    :class="{ 'is-invalid': fieldErrors.end }"
+                    :aria-invalid="Boolean(fieldErrors.end)"
+                    :aria-describedby="fieldErrors.end ? 'end-date-error' : undefined"
                     data-testid="group-end-input"
                   />
+                  <p v-if="fieldErrors.end" id="end-date-error" class="field-error">
+                    {{ fieldErrors.end }}
+                  </p>
                 </div>
                 <div class="col-12 col-md-4">
                   <label for="budget" class="form-label">Budget per person</label>
-                  <div class="input-group">
+                  <div class="input-group" :class="{ 'has-validation': fieldErrors.budget }">
                     <span class="input-group-text">S$</span>
                     <input
                       id="budget"
+                      ref="budgetInput"
                       v-model.number="budget"
                       type="number"
                       min="0"
                       inputmode="decimal"
                       class="form-control"
+                      :class="{ 'is-invalid': fieldErrors.budget }"
+                      :aria-invalid="Boolean(fieldErrors.budget)"
+                      :aria-describedby="
+                        fieldErrors.budget ? 'budget-error budget-hint' : 'budget-hint'
+                      "
                       data-testid="group-budget-input"
                     />
                   </div>
+                  <p v-if="fieldErrors.budget" id="budget-error" class="field-error">
+                    {{ fieldErrors.budget }}
+                  </p>
+                  <p id="budget-hint" class="field-hint">The plan only picks stops within this.</p>
                 </div>
               </div>
-
               <p
                 v-if="createError"
                 class="form-error"
@@ -422,6 +542,7 @@ async function joinGroup() {
                   Cancel
                 </button>
                 <button
+                  ref="createSubmitButton"
                   type="submit"
                   class="btn btn-dark rounded-pill px-4"
                   data-testid="create-group-submit"
@@ -445,26 +566,37 @@ async function joinGroup() {
           class="panel join-panel"
           aria-labelledby="join-panel-title"
           data-testid="join-group-form"
+          @keydown.esc="closePanel"
         >
           <form novalidate @submit.prevent="joinGroup">
             <fieldset :disabled="joining">
               <div class="panel-heading">
-                <div>
+                <div class="flex-grow-1">
                   <h2 id="join-panel-title" class="panel-title">Join a group</h2>
                   <p class="text-secondary mb-0">
-                    Ask a friend for their group's 6-character code.
+                    Ask a friend for their group code, or scan their QR code.
                   </p>
                 </div>
+                <button
+                  type="button"
+                  class="btn-close"
+                  aria-label="Close"
+                  @click="closePanel"
+                ></button>
               </div>
 
-              <label for="join-code" class="form-label">Invite code</label>
+              <label for="join-code" class="form-label">Group code</label>
               <div class="join-row">
                 <input
                   id="join-code"
                   ref="joinCodeInput"
                   v-model="joinCode"
                   class="form-control code-input"
-                  maxlength="6"
+                  :class="{ 'is-invalid': joinError }"
+                  :aria-invalid="Boolean(joinError)"
+                  :aria-describedby="
+                    joinError ? 'join-code-error join-code-hint' : 'join-code-hint'
+                  "
                   autocomplete="off"
                   autocapitalize="characters"
                   spellcheck="false"
@@ -474,6 +606,7 @@ async function joinGroup() {
                 <button
                   type="submit"
                   class="btn btn-dark rounded-pill px-4"
+                  :disabled="joinCode.length !== 6"
                   data-testid="join-group-submit"
                 >
                   <span
@@ -485,15 +618,18 @@ async function joinGroup() {
                 </button>
               </div>
 
-              <p v-if="joinError" class="form-error" role="alert" data-testid="join-group-error">
+              <p
+                v-if="joinError"
+                id="join-code-error"
+                class="field-error"
+                role="alert"
+                data-testid="join-group-error"
+              >
                 {{ joinError }}
               </p>
-
-              <div class="panel-footer">
-                <button type="button" class="btn btn-link text-secondary" @click="closePanel">
-                  Cancel
-                </button>
-              </div>
+              <p id="join-code-hint" class="field-hint">
+                6 letters and numbers ({{ joinCode.length }}/6). Codes never use O, 0, I or 1.
+              </p>
             </fieldset>
           </form>
         </section>
@@ -504,7 +640,7 @@ async function joinGroup() {
     <div v-if="loading" class="ticket-grid" role="status">
       <span class="visually-hidden">Loading your groups…</span>
       <div v-for="n in 3" :key="n" class="ticket ticket-skeleton" aria-hidden="true">
-        <div class="ticket-stub"></div>
+        <div class="skeleton-stub"></div>
         <div class="ticket-body">
           <span class="skeleton-line w-75"></span>
           <span class="skeleton-line w-50"></span>
@@ -533,9 +669,9 @@ async function joinGroup() {
           decorative
         />
       </div>
-      <h2 class="h4 fw-bold">You're not in any groups yet.</h2>
+      <h2 class="h4 fw-bold">You're not in any groups yet</h2>
       <p class="text-secondary mb-0">
-        Create one for your next outing, or join a friend's group with their invite code.
+        Planning an outing? Tap Create. Got a code or QR code from a friend? Tap Join.
       </p>
     </div>
 
@@ -544,35 +680,61 @@ async function joinGroup() {
         v-for="section in groupSections"
         :key="section.key"
         class="group-section"
-        :aria-labelledby="pastGroups.length ? 'groups-' + section.key : undefined"
+        :class="'group-section-' + section.key"
+        :aria-labelledby="'groups-' + section.key"
       >
-        <h2 v-if="pastGroups.length" :id="'groups-' + section.key" class="section-title">
-          {{ section.title }} <span class="section-count">{{ section.list.length }}</span>
-        </h2>
+        <div class="section-head">
+          <h2 :id="'groups-' + section.key" class="section-title">
+            {{ section.title }} <span class="section-count">{{ section.list.length }}</span>
+          </h2>
 
-        <ul class="ticket-grid">
+          <button
+            v-if="section.key === 'past' && upcomingGroups.length > 0"
+            type="button"
+            class="past-toggle"
+            :aria-expanded="showPast"
+            aria-controls="groups-past-list"
+            data-testid="past-outings-toggle"
+            @click="pastOpen = !pastOpen"
+          >
+            {{
+              showPast
+                ? 'Hide past outings'
+                : 'Show ' +
+                  section.list.length +
+                  (section.list.length === 1 ? ' past outing' : ' past outings')
+            }}
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+          </button>
+        </div>
+
+        <p v-if="section.key === 'upcoming' && section.list.length === 0" class="nothing-next">
+          Nothing coming up. Tap Create to plan your next outing.
+        </p>
+
+        <ul
+          v-show="section.key !== 'past' || showPast"
+          :id="'groups-' + section.key + '-list'"
+          class="ticket-grid"
+        >
           <li v-for="group in section.list" :key="group.id">
             <RouterLink
-              :to="'/groups/' + group.id"
+              :to="getGroupLink(group)"
               class="ticket"
               :class="{ past: isPast(group) }"
+              :style="getStageStyle(group, today)"
               :aria-labelledby="'group-' + group.id + '-name'"
               :aria-describedby="'group-' + group.id + '-details'"
               data-testid="group-card"
             >
-              <div class="ticket-stub" aria-hidden="true">
-                <span class="stub-weekday">{{
-                  formatPart(group.start_date, { weekday: 'short' })
-                }}</span>
-                <span class="stub-day">{{ formatPart(group.start_date, { day: 'numeric' }) }}</span>
-                <span class="stub-month">{{
-                  formatPart(group.start_date, { month: 'short' })
-                }}</span>
-              </div>
+              <GroupTicketStub :group="group" />
 
               <div class="ticket-body">
                 <div class="ticket-top">
-                  <h3 :id="'group-' + group.id + '-name'" class="ticket-name">{{ group.name }}</h3>
+                  <h3 :id="'group-' + group.id + '-name'" class="ticket-name" :title="group.name">
+                    {{ group.name }}
+                  </h3>
+                  <span v-if="group.id === freshGroupId" class="new-badge">New</span>
                   <svg class="ticket-arrow" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M5 12h14M13 6l6 6-6 6" />
                   </svg>
@@ -585,10 +747,7 @@ async function joinGroup() {
                         <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
                         <path d="M3.5 10h17M8 3v4M16 3v4" />
                       </svg>
-                      <span
-                        >{{ formatRange(group) }}
-                        <span class="text-secondary">· {{ getDayCount(group) }}</span></span
-                      >
+                      <span>{{ getWhenText(group) }}</span>
                     </li>
                     <li>
                       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -597,8 +756,32 @@ async function joinGroup() {
                           d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"
                         />
                       </svg>
-                      {{ getMemberCount(group) }}
-                      {{ getMemberCount(group) === 1 ? 'member' : 'members' }}
+                      <span>
+                        {{ getMemberCount(group) }}
+                        {{ getMemberCount(group) === 1 ? 'member' : 'members' }}
+                      </span>
+                      <!-- After the count, so the text doesn't shift when the faces load -->
+                      <span v-if="memberFaces[group.id]" class="faces" aria-hidden="true">
+                        <template v-for="face in memberFaces[group.id].slice(0, 4)" :key="face.id">
+                          <AnimalAvatar
+                            v-if="face.animal"
+                            :animal="face.animal"
+                            :size="24"
+                            decorative
+                          />
+                          <span v-else class="face-initial">{{ face.initial }}</span>
+                        </template>
+                        <span v-if="memberFaces[group.id].length > 4" class="face-initial face-more"
+                          >+{{ memberFaces[group.id].length - 4 }}</span
+                        >
+                      </span>
+                    </li>
+                    <li>
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <rect x="3" y="6" width="18" height="13" rx="2.5" />
+                        <path d="M3 10h18M16.5 14.5h1" />
+                      </svg>
+                      {{ getBudgetText(group) }}
                     </li>
                   </ul>
 
@@ -614,10 +797,7 @@ async function joinGroup() {
                       <span class="stage-name" data-testid="group-status">{{
                         getStatus(group)
                       }}</span>
-                      <span v-if="isPast(group)" class="text-secondary"> · Ended</span>
-                      <span v-else class="text-secondary">
-                        · {{ nextSteps[getStatus(group)] }}</span
-                      >
+                      <span class="stage-step"> · {{ getStepText(group) }}</span>
                     </p>
                   </div>
                 </div>
@@ -650,7 +830,9 @@ async function joinGroup() {
   box-shadow: none;
 }
 
-svg {
+/* Line icons. Not the animal avatars: they're SVGs too, and this stroke would outline every
+   shape in them, so they'd look different from everywhere else in the app. */
+svg:not(.animal-avatar) {
   flex-shrink: 0;
   fill: none;
   stroke: currentColor;
@@ -671,6 +853,10 @@ svg {
 
 .groups-header h1 {
   letter-spacing: -0.02em;
+}
+
+.groups-header p {
+  text-wrap: pretty;
 }
 
 .group-actions {
@@ -707,7 +893,6 @@ svg {
   height: 18px;
 }
 
-.group-action-primary,
 .group-action.active {
   background: var(--ink);
   color: white;
@@ -723,6 +908,15 @@ svg {
 .group-action:active {
   box-shadow: none;
   transform: translateY(0);
+}
+
+/* The button whose panel is open gets a ring, so it reads as "pressed in" */
+.group-action[aria-expanded='true'],
+.group-action[aria-expanded='true']:hover {
+  box-shadow:
+    0 0 0 3px white,
+    0 0 0 5px var(--ink);
+  transform: none;
 }
 
 /* ----- Create / join panels ----- */
@@ -821,10 +1015,44 @@ svg {
   --bs-btn-border-color: var(--ink);
 }
 
-.form-error {
-  margin: 1rem 0 0;
+/* Mistakes show under their field; Bootstrap's warning icon would cover the date picker */
+.panel .form-control.is-invalid {
+  padding-right: 0.75rem;
+  border-color: #b02a37;
+  background-image: none;
+}
+
+.panel .form-control.is-invalid:focus {
+  box-shadow: 0 0 0 3px rgb(176 42 55 / 15%);
+}
+
+.form-error,
+.field-error {
   color: #b02a37;
   font-weight: 600;
+}
+
+.form-error {
+  margin: 1rem 0 0;
+}
+
+.field-error,
+.field-hint {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+}
+
+.field-hint {
+  color: var(--bs-secondary-color);
+}
+
+.panel-heading .btn-close {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  margin: -10px -10px 0 0;
+  padding: 0;
+  background-size: 14px;
 }
 
 .panel-footer {
@@ -891,13 +1119,74 @@ svg {
   margin-top: 2.5rem;
 }
 
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 1rem;
+}
+
 .section-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 1rem;
+  margin: 0;
   font-size: 1.1rem;
   font-weight: 700;
+}
+
+/* Past outings sit under a divider, folded away until asked for */
+.group-section-past {
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.group-section-past .section-head {
+  margin-bottom: 0;
+}
+
+.group-section-past .ticket-grid {
+  margin-top: 1rem;
+}
+
+.past-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: white;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: background-color 180ms ease;
+}
+
+.past-toggle:hover {
+  background: #f3f3f3;
+}
+
+.past-toggle svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.past-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.nothing-next {
+  margin: 0;
+  padding: 20px;
+  border: 1px dashed #d4d4d4;
+  border-radius: 18px;
+  background: var(--panel);
+  color: var(--bs-secondary-color);
 }
 
 .section-count {
@@ -964,40 +1253,6 @@ a.ticket:hover {
   transform: translateY(-3px);
 }
 
-.ticket-stub {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: var(--stub-width);
-  padding: 16px 8px;
-  border-right: 2px dashed rgb(255 255 255 / 40%);
-  background: var(--ink);
-  color: white;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.stub-weekday,
-.stub-month {
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.stub-weekday {
-  color: rgb(255 255 255 / 70%);
-}
-
-.stub-day {
-  margin: 6px 0 4px;
-  font-size: 2.6rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-}
-
 .ticket-body {
   display: flex;
   flex-direction: column;
@@ -1047,6 +1302,50 @@ a.ticket:hover .ticket-arrow {
   transform: translateX(4px);
 }
 
+.new-badge {
+  flex-shrink: 0;
+  margin-top: 2px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* Members' avatars, overlapping, after the member count */
+.faces {
+  display: inline-flex;
+  margin: -2px 0 -2px 2px;
+}
+
+.faces > :deep(svg),
+.face-initial {
+  width: 24px;
+  height: 24px;
+  margin-left: -6px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px white;
+}
+
+.faces > :first-child {
+  margin-left: 0;
+}
+
+.face-initial {
+  display: inline-grid;
+  place-items: center;
+  background: #ececec;
+  color: #444;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.face-more {
+  background: var(--ink);
+  color: white;
+}
+
 .ticket-meta {
   display: grid;
   gap: 4px;
@@ -1062,7 +1361,7 @@ a.ticket:hover .ticket-arrow {
   gap: 8px;
 }
 
-.ticket-meta svg {
+.ticket-meta li > svg {
   width: 16px;
   height: 16px;
   margin-top: 2px;
@@ -1088,37 +1387,46 @@ a.ticket:hover .ticket-arrow {
 }
 
 .stage-track span.done {
-  background: var(--ink);
+  background: var(--stage-mark, var(--stage));
 }
 
 .stage-label {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.875rem;
 }
 
 .stage-name {
   font-weight: 700;
 }
 
-/* Past outings fade back so the upcoming ones lead */
-.ticket.past .ticket-stub {
-  border-right-color: rgb(0 0 0 / 15%);
-  background: #ececec;
-  color: #555;
+/* A dot in the stage colour, matching the ticket stub */
+.stage-name::before {
+  content: '';
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--stage-mark, var(--stage));
+  vertical-align: 0.05em;
 }
 
-.ticket.past .stub-weekday {
-  color: #6b6b6b;
+/* The next step is what the reader acts on, so it stays in ink, not grey */
+.stage-step {
+  font-weight: 500;
 }
 
-.ticket.past .stage-track span.done {
-  background: #9a9a9a;
+.ticket.past .stage-step {
+  color: var(--bs-secondary-color);
+  font-weight: 400;
 }
 
 /* ----- Loading ----- */
-.ticket-skeleton .ticket-stub {
+.skeleton-stub {
+  flex-shrink: 0;
+  width: var(--stub-width);
+  border-right: 2px dashed rgb(0 0 0 / 8%);
   background: #ececec;
-  border-right-color: rgb(0 0 0 / 8%);
 }
 
 .ticket-skeleton .ticket-body {
@@ -1203,10 +1511,6 @@ a.ticket:hover .ticket-arrow {
     flex-direction: column;
   }
 
-  .stub-day {
-    font-size: 2.25rem;
-  }
-
   .ticket-body {
     padding: 14px 14px 14px 18px;
   }
@@ -1216,6 +1520,8 @@ a.ticket:hover .ticket-arrow {
   .group-action,
   .ticket,
   .ticket-arrow,
+  .past-toggle,
+  .past-toggle svg,
   .panel-enter-active,
   .panel-leave-active {
     transition: none;
