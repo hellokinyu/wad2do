@@ -17,7 +17,6 @@ const errorMessage = ref('')
 const savingIds = ref([]) // activities whose vote or removal is being saved
 const confirmRemoveId = ref('') // the activity asking "Remove from this group?"
 const brokenImages = ref({}) // activity id -> true when its photo failed to load
-const showHelp = ref(false)
 const toast = ref(null) // { text, retry } for removals and saves that failed
 const announcement = ref('') // read out by screen readers
 const votersFor = ref('') // the activity whose "who voted" popup is open
@@ -565,28 +564,14 @@ onUnmounted(() => {
 <template>
   <div class="activities-tab" data-testid="group-activities-tab">
     <!-- Same intro as the Availability and Itinerary tabs: heading, then one line about it.
-         "How it works" sits at the end of that line, and adding more sits beside the heading,
-         so the whole header stays two lines, even on a phone. -->
+         Adding more sits beside the heading, so the header stays two lines, even on a phone. -->
     <div class="tab-intro">
       <div class="intro-text">
         <h2 class="h5 fw-bold mb-1">
           Shared with the group
           <span v-if="showList" class="list-count">{{ shownActivities.length }}</span>
         </h2>
-        <p class="text-secondary mb-0">
-          Vote on the ideas everyone has shared.
-          <button
-            v-if="showList"
-            type="button"
-            class="btn btn-link help-toggle hit-area"
-            :aria-expanded="showHelp"
-            aria-controls="voting-help"
-            data-testid="voting-help-toggle"
-            @click="showHelp = !showHelp"
-          >
-            How it works
-          </button>
-        </p>
+        <p class="text-secondary mb-0">Vote for your favourite activities!</p>
       </div>
       <!-- A round + on a phone; the full label from tablet width up -->
       <RouterLink
@@ -655,21 +640,6 @@ onUnmounted(() => {
     </div>
 
     <template v-else>
-      <div v-if="showHelp" id="voting-help" class="help-panel" data-testid="voting-help">
-        <ul class="small mb-0">
-          <li>Thumbs up if you're keen, thumbs down if you're not. Tap again to take it back.</li>
-          <li>
-            Activities with more thumbs up than thumbs down go into the itinerary, top first, as
-            long as each fits your time and budget.
-          </li>
-          <li>Tap "voted" on an activity to see who gave it a thumbs up or down.</li>
-          <li>
-            The list stays still while people vote, and each card shows where it would move. Tap
-            <strong>Update rankings</strong> at the bottom of the screen to re-sort it.
-          </li>
-        </ul>
-      </div>
-
       <div ref="listRef" tabindex="-1" class="list-focus">
         <TransitionGroup
           tag="div"
@@ -1078,23 +1048,10 @@ onUnmounted(() => {
 }
 
 /* Text buttons in near-black, like the links on the Activities page */
-.help-toggle,
 .voters-button {
   --bs-btn-color: #111;
   --bs-btn-hover-color: #111;
   --bs-btn-active-color: #111;
-}
-
-/* "How it works" reads as a link at the end of the line; hit-area enlarges its tap target */
-.help-toggle {
-  padding: 0;
-  border: 0;
-  font-size: inherit;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  vertical-align: baseline;
-  white-space: nowrap;
 }
 
 .add-button {
@@ -1115,17 +1072,6 @@ onUnmounted(() => {
   stroke: currentColor;
   stroke-width: 2;
   stroke-linecap: round;
-}
-
-.help-panel {
-  margin: -0.25rem 0 1rem;
-  padding: 0.75rem 1rem 0.75rem 2rem;
-  border-radius: 12px;
-  background: var(--bs-tertiary-bg);
-}
-
-.help-panel li + li {
-  margin-top: 0.25rem;
 }
 
 /* Two columns of cards, read left to right then down (one column on smaller screens).
