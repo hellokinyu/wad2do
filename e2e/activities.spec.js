@@ -791,7 +791,7 @@ for (const width of [375, 1440]) {
     const dialog = page.getByRole('dialog', { name: 'Filter activities' })
     const trigger = page.getByTestId('filters-toggle')
     await expect(dialog).toBeHidden()
-    await expect(page.getByTestId('sort-filter')).toBeVisible()
+    await expect(page.getByTestId('sort-filter')).toBeVisible({ visible: width >= 768 })
     const initialTop = (await page.getByTestId('activity-card').first().boundingBox()).y
     await trigger.click()
     await expect(page.getByRole('button', { name: 'Close filters', exact: true })).toBeFocused()
@@ -799,6 +799,7 @@ for (const width of [375, 1440]) {
     await expect(page.getByTestId('filter-confirm')).toBeFocused()
     await page.keyboard.press('Tab')
     await expect(page.getByRole('button', { name: 'Close filters', exact: true })).toBeFocused()
+    await expect(page.getByTestId('mobile-sort-filter')).toBeVisible({ visible: width < 768 })
     await page.getByTestId('area-filter').selectOption('Tiong Bahru')
     await page.getByTestId('price-filter').selectOption('20-50')
     await expect(page.getByTestId('filter-confirm')).toHaveText('Show 2 activities')

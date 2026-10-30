@@ -1,5 +1,5 @@
 <template>
-  <div class="container py-4 py-md-5" data-testid="login-page">
+  <div class="login-page container py-4 py-md-5" data-testid="login-page">
     <section class="auth-card card rounded-4 mx-auto">
       <div class="card-body p-4 p-md-5">
         <h1 class="h2 fw-bold">Log in</h1>
@@ -142,5 +142,20 @@ async function resendConfirmation() {
 <style scoped>
 .auth-card {
   max-width: 480px;
+}
+
+@media (max-width: 600px) {
+  .login-page {
+    min-height: calc(100svh - var(--navbar-height, 86px));
+    display: grid;
+    place-items: center;
+  }
+  .auth-card {
+    width: 100%;
+    text-align: center;
+  }
+  .auth-card form {
+    text-align: left;
+  }
 }
 </style>

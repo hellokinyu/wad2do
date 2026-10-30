@@ -2,6 +2,8 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import LandingActionLink from '@/components/LandingActionLink.vue'
 import LandingFeatureCard from '@/components/LandingFeatureCard.vue'
+import LandingSkyline from '@/components/LandingSkyline.vue'
+import brandLogo from '@/assets/wad2do-logo.png'
 import { useAuth } from '@/composables/useAuth'
 
 const { user } = useAuth()
@@ -110,7 +112,7 @@ function resume() {
   if (!reducedMotion) {
     timer = setInterval(() => {
       activeSlide.value = (activeSlide.value + 1) % slides.length
-    }, 5000)
+    }, 3500)
   }
 }
 
@@ -130,7 +132,9 @@ onUnmounted(pause)
 <template>
   <div class="landing w-100" data-testid="landing-page">
     <header class="landing-nav d-flex align-items-center">
-      <RouterLink to="/" class="wordmark" aria-label="WAD2Do home">WAD2Do</RouterLink>
+      <RouterLink to="/" class="wordmark" aria-label="WAD2Do home">
+        <img :src="brandLogo" alt="WAD2Do" class="brand-logo" width="180" height="60" />
+      </RouterLink>
     </header>
 
     <section class="hero" aria-labelledby="hero-title">
@@ -212,34 +216,7 @@ onUnmounted(pause)
       <LandingFeatureCard v-for="feature in features" :key="feature.title" :feature="feature" />
     </section>
 
-    <footer class="skyline" aria-hidden="true">
-      <svg
-        viewBox="0 0 1000 110"
-        preserveAspectRatio="none"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <path
-          d="M0 65C65 110 125 20 205 55S310 95 370 74s82-10 128 5 84 25 113-4 82-7 124 7 75 7 113-15 102-31 152-14"
-        />
-        <g transform="translate(640 0)">
-          <path
-            d="M0 93h292M16 91l6-45h10l-3 45m14 0 2-48h11l4 48m11 0-3-48h10l10 48M12 43l70-9 10 5-71 10Z M24 48l-5 42m30-44 1 45m23-46 9 46"
-          />
-          <path
-            d="M94 91V72h8v19m5 0V61h8v30m5 0V68h9v23m5 0V55h9v36m5 0V66h9v25m-21-36v-7m-3 17h3m-26 9h3m18 4h3"
-          />
-          <circle cx="189" cy="65" r="27" />
-          <path
-            d="m189 65-8 27m8-27 8 27m-37-1h59m-30-53v-3m0 60v-3m-29-27h-3m64 0h-3m-49-20-2-2m43 44-2-2m-39 0-2 2m43-44-2 2M234 91l8-24-15-10h35l-15 10 8 24m-13-24h5m-20-10c10 9 25 9 35 0M266 91l6-18-10-7h25l-11 7 6 18m-10-18h4"
-          />
-        </g>
-      </svg>
-      <!-- Draw the Singapore skyline using SVG paths and shapes. -->
-    </footer>
+    <LandingSkyline />
   </div>
 </template>
 
@@ -247,6 +224,7 @@ onUnmounted(pause)
 /* Weeks 2–3: Bootstrap handles common utilities; scoped CSS defines this page's design. */
 .landing {
   --page-gutter: clamp(24px, 5vw, 100px);
+  --landing-skyline-height: clamp(100px, 15svh, 160px);
   min-height: 100vh;
   min-height: 100svh;
   display: grid;
@@ -256,14 +234,16 @@ onUnmounted(pause)
   font-family: Arial, Helvetica, sans-serif;
 }
 .landing-nav {
-  padding: clamp(20px, 3svh, 40px) var(--page-gutter) 12px;
+  padding: clamp(12px, 2svh, 24px) var(--page-gutter) 8px;
 }
 .wordmark {
-  color: #111;
-  text-decoration: none;
-  font-weight: 800;
-  font-size: clamp(28px, 2.2vw, 40px);
-  letter-spacing: -1.8px;
+  display: inline-flex;
+}
+.brand-logo {
+  display: block;
+  width: 180px;
+  height: 60px;
+  object-fit: contain;
 }
 .carousel-dots button:focus-visible {
   outline: 3px solid #8b7151;
@@ -273,7 +253,7 @@ onUnmounted(pause)
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
   gap: clamp(28px, 4vw, 88px);
-  padding: clamp(20px, 3svh, 40px) var(--page-gutter);
+  padding: clamp(16px, 2svh, 28px) var(--page-gutter);
   align-items: center;
 }
 .hero-copy,
@@ -287,7 +267,7 @@ onUnmounted(pause)
   margin-bottom: 22px;
 }
 h1 {
-  font-size: clamp(36px, 3.5vw, 68px);
+  font-size: clamp(36px, 3.4vw, 64px);
   line-height: 1.12;
   font-weight: 750;
   letter-spacing: -1.8px;
@@ -313,7 +293,7 @@ h1 {
   color: #777;
   font-size: clamp(14px, 1vw, 18px);
   line-height: 1.6;
-  margin-bottom: 36px;
+  margin-bottom: clamp(20px, 3svh, 32px);
 }
 .hero-actions {
   gap: 18px;
@@ -323,7 +303,7 @@ h1 {
 .photo-set {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
-  grid-template-rows: repeat(2, clamp(160px, 24svh, 300px));
+  grid-template-rows: repeat(2, clamp(130px, 20svh, 240px));
   gap: clamp(10px, 1vw, 18px);
 }
 .photo {
@@ -396,16 +376,7 @@ h1 {
 .features {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: clamp(20px, 3svh, 40px) var(--page-gutter) 0;
-}
-.skyline {
-  margin-top: clamp(20px, 3svh, 40px);
-  color: #898985;
-}
-.skyline svg {
-  width: 100%;
-  height: clamp(65px, 12svh, 150px);
-  display: block;
+  padding: clamp(16px, 2svh, 24px) var(--page-gutter) 0;
 }
 .phrase-enter-active,
 .phrase-leave-active,
@@ -427,41 +398,60 @@ h1 {
 .photos-leave-to {
   opacity: 0;
 }
-/* Compress spacing on short desktops while allowing smaller screens to scroll. */
-@media (min-width: 901px) and (max-height: 800px) {
-  .landing-nav {
-    padding-top: 20px;
-    padding-bottom: 8px;
+/* Give desktop sections a shared viewport budget, including the complete skyline. */
+@media (min-width: 1100px) and (min-height: 650px) {
+  .landing {
+    height: 100svh;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
   }
   .hero {
-    padding-top: 12px;
-    padding-bottom: 12px;
+    min-height: 0;
+  }
+  .carousel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-height: min(46svh, 500px);
+    min-height: 0;
+  }
+  .photo-grid {
+    flex: 1;
+    min-height: 0;
   }
   .photo-set {
-    grid-template-rows: repeat(2, clamp(110px, 21svh, 155px));
+    height: 100%;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+  .carousel-dots {
+    flex-shrink: 0;
   }
   .eyebrow {
-    margin-bottom: 16px;
+    margin-bottom: clamp(12px, 2svh, 20px);
   }
   h1 {
-    margin-bottom: 18px;
+    margin-bottom: clamp(16px, 2svh, 24px);
   }
-  .intro {
-    margin-bottom: 26px;
+  .desktop-break {
+    display: none;
   }
-  .features {
-    padding-top: 16px;
+}
+/* Balance taller screens between the hero, feature row and waterfront artwork. */
+@media (min-width: 1100px) and (min-height: 800px) {
+  .landing {
+    --landing-skyline-height: clamp(140px, 19svh, 200px);
   }
-  .skyline {
-    margin-top: 16px;
-  }
-  .skyline svg {
-    height: 60px;
+}
+/* Short landscape windows keep their natural scroll instead of squeezing content. */
+@media (min-width: 901px) and (max-height: 649px) {
+  .photo-set {
+    grid-template-rows: repeat(2, clamp(110px, 23svh, 160px));
   }
 }
 @media (max-width: 900px) {
   .landing {
     --page-gutter: clamp(24px, 5vw, 40px);
+    --landing-skyline-height: clamp(100px, 25vw, 150px);
+    grid-template-rows: repeat(4, auto);
   }
   .landing-nav {
     padding: 24px var(--page-gutter) 12px;
@@ -481,15 +471,87 @@ h1 {
     display: none;
   }
   .photo-set {
-    grid-template-rows: repeat(2, clamp(140px, 25svh, 220px));
+    grid-template-rows: repeat(2, clamp(130px, 24vw, 200px));
   }
   .features {
     grid-template-columns: 1fr;
     padding: 8px var(--page-gutter) 0;
     gap: 24px;
   }
-  .skyline {
-    margin-top: 26px;
+}
+@media (max-width: 600px) {
+  .landing {
+    --landing-skyline-height: clamp(70px, 12svh, 100px);
+    grid-template-rows: auto 1fr auto;
+  }
+  .intro,
+  .features {
+    display: none;
+  }
+  .landing-nav {
+    padding-top: 16px;
+    padding-bottom: 8px;
+  }
+  .hero {
+    grid-template-areas:
+      'eyebrow'
+      'headline'
+      'photos'
+      'actions';
+    padding-top: 16px;
+    padding-bottom: 8px;
+    gap: 20px;
+    align-content: center;
+  }
+  .hero-copy {
+    display: contents;
+  }
+  .eyebrow {
+    grid-area: eyebrow;
+    margin-bottom: 0;
+  }
+  h1 {
+    grid-area: headline;
+    font-size: clamp(35px, 9.5vw, 44px);
+    /* Reserve three lines so the rotating phrases do not move the photos. */
+    min-height: 3.36em;
+    margin-bottom: 0;
+    letter-spacing: -1.3px;
+  }
+  .carousel {
+    grid-area: photos;
+  }
+  .hero-actions {
+    grid-area: actions;
+  }
+  .photo-set {
+    grid-template-rows: repeat(2, clamp(110px, 18svh, 160px));
+  }
+}
+@media (max-width: 600px) and (min-height: 740px) {
+  .hero {
+    /* Balance the taller photos with a little less space above the heading. */
+    padding-top: 32px;
+    padding-bottom: 0;
+  }
+}
+@media (max-width: 480px) {
+  .brand-logo {
+    width: 150px;
+    height: 50px;
+  }
+  .hero-actions {
+    width: 100%;
+    gap: 12px;
+  }
+  .hero-actions :deep(.pill) {
+    flex: 1;
+    min-width: 0;
+    padding-inline: 16px;
+  }
+  .photo figcaption {
+    font-size: 10px;
+    padding: 5px 7px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

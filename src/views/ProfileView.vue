@@ -1,5 +1,8 @@
 <template>
-  <div class="container py-4 py-md-5" data-testid="profile-page">
+  <div class="profile-page container py-4 py-md-5" data-testid="profile-page">
+    <div class="profile-theme-control">
+      <NavBarTheme picker placement="profile" />
+    </div>
     <!-- Owner: Charmaine -->
     <div v-if="loading" class="text-center py-5">
       <div class="spinner-border text-dark" role="status">
@@ -34,7 +37,7 @@
             <button type="button" class="btn btn-link text-body small p-0" :disabled="!!profileError || savingAvatar" data-testid="profile-edit-avatar" @click="startEditAvatar">Change picture</button>
           </div>
 
-          <div class="flex-grow-1">
+          <div class="flex-grow-1 text-center text-md-start">
             <p class="eyebrow mb-2">Your profile</p>
 
             <div v-if="!editingName">
@@ -71,7 +74,7 @@
             </div>
           </div>
 
-          <div v-if="!editingName" class="d-flex gap-2 align-self-md-start">
+          <div v-if="!editingName" class="d-flex gap-2 justify-content-center justify-content-md-start align-self-md-start">
             <button
               type="button"
               class="btn btn-grey btn-sm"
@@ -112,7 +115,10 @@
           <p class="stat-label mb-0">Submitted</p>
         </div>
         <div class="col-4 stat">
-          <p class="stat-number stat-text mb-0" data-testid="profile-stat-area">{{ savedPrefs.homeArea || '—' }}</p>
+          <p class="stat-number stat-text mb-0" data-testid="profile-stat-area">
+            <span v-if="savedPrefs.homeArea === 'City / Downtown'" class="d-md-none">City</span>
+            <span :class="{ 'd-none d-md-inline': savedPrefs.homeArea === 'City / Downtown' }">{{ savedPrefs.homeArea || '—' }}</span>
+          </p>
           <p class="stat-label mb-0">Home area</p>
         </div>
       </div>
@@ -328,6 +334,7 @@ import { supabase } from '@/lib/supabase'
 import MrtStationPicker from '@/components/MrtStationPicker.vue'
 import AnimalAvatar from '@/components/AnimalAvatar.vue'
 import AnimalAvatarPicker from '@/components/AnimalAvatarPicker.vue'
+import NavBarTheme from '@/components/NavBarTheme.vue'
 import { findProfileAnimal } from '@/data/profileAnimals'
 import { homeAreas } from '@/data/homeAreas'
 import { findStation } from '@/data/mrtStations'
@@ -692,6 +699,22 @@ function statusClass(status) {
 </script>
 
 <style scoped>
+.profile-page {
+  position: relative;
+}
+.profile-theme-control {
+  display: none;
+}
+@media (max-width: 767.98px) {
+  .profile-theme-control {
+    display: block;
+    position: absolute;
+    top: 8px;
+    right: calc(var(--bs-gutter-x, 1.5rem) / 2);
+    z-index: 5;
+  }
+}
+
 .title {
   color: #111;
   letter-spacing: -0.03em;
@@ -768,6 +791,16 @@ function statusClass(status) {
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: #6b6b6b;
+}
+
+@media (max-width: 767.98px) {
+  .stat:last-child {
+    padding-right: 0;
+  }
+  .stat-text {
+    font-size: clamp(0.75rem, 3.5vw, 1rem);
+    white-space: nowrap;
+  }
 }
 
 .count {
