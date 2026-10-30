@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getPrice } from '@/lib/activityDisplay'
 import GroupSettingsForm from '@/components/group/GroupSettingsForm.vue'
 import GroupMembersPanel from '@/components/group/GroupMembersPanel.vue'
+import GroupInviteCode from '@/components/group/GroupInviteCode.vue'
 
 const route = useRoute()
 const groupId = route.params.id
@@ -20,7 +21,6 @@ const errorMessage = ref('')
 const showInvite = ref(false)
 const showMembers = ref(false)
 const showSettings = ref(false)
-const copyMessage = ref('')
 const joinError = ref('')
 
 // Get the logged-in user from Supabase Auth (null if nobody is logged in)
@@ -84,26 +84,6 @@ function getDateText() {
 function getBudgetText() {
   const budget = getPrice(group.value.budget_per_person)
   return budget === null ? 'No budget set' : 'S$' + budget.toFixed(2) + ' per person'
-}
-
-function getInviteLink() {
-  return (
-    window.location.origin +
-    '/groups/' +
-    groupId +
-    '?invite=' +
-    encodeURIComponent(group.value.invite_code)
-  )
-}
-
-async function copyInviteLink() {
-  try {
-    await navigator.clipboard.writeText(getInviteLink())
-    copyMessage.value = 'Link copied!'
-  } catch {
-    // Some browsers block clipboard access, so let the user copy it by hand.
-    copyMessage.value = "Couldn't copy automatically. Select the link above and copy it."
-  }
 }
 
 // For someone who opened an invite link but isn't in the group yet
@@ -294,34 +274,10 @@ function onSettingsSaved() {
       >
         <h2 class="h6 fw-bold mb-1">Invite friends</h2>
         <p class="text-secondary small mb-3">
-          Send them the link, or share the code for them to type in.
+          Get them to scan the QR code, or give them the group code to type in.
         </p>
 
-        <label for="invite-link" class="form-label">Invite link</label>
-        <div class="d-flex gap-2 mb-2">
-          <input
-            id="invite-link"
-            class="form-control invite-input"
-            :value="getInviteLink()"
-            readonly
-            data-testid="invite-link"
-          />
-          <button
-            type="button"
-            class="btn btn-dark rounded-pill px-4 flex-shrink-0"
-            data-testid="copy-invite-link"
-            @click="copyInviteLink"
-          >
-            Copy
-          </button>
-        </div>
-        <p v-if="copyMessage" class="small text-success fw-semibold mb-2" role="status">
-          {{ copyMessage }}
-        </p>
-        <p class="mb-0 mt-3 d-flex align-items-center gap-2 flex-wrap">
-          <span class="small fw-semibold">Group code</span>
-          <strong class="invite-code" data-testid="invite-code">{{ group.invite_code }}</strong>
-        </p>
+        <GroupInviteCode :group-id="groupId" :invite-code="group.invite_code" />
       </section>
 
       <!-- Tabs, styled like the category chips on the Activities page -->
@@ -463,27 +419,6 @@ function onSettingsSaved() {
 
 .join-panel {
   max-width: 34rem;
-}
-
-.form-label {
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.invite-input {
-  min-height: 44px;
-  border-radius: 12px;
-}
-
-/* The 6-character code, spaced out so it's easy to read aloud or type */
-.invite-code {
-  padding: 4px 14px;
-  border: 1px solid #e5e5e5;
-  border-radius: 10px;
-  background: white;
-  font-size: 1.25rem;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.2em;
 }
 
 /* Tabs */

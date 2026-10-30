@@ -291,9 +291,11 @@ test('creation uses one transaction and retry recovers the same group after a lo
   expect(calls(state, 'create_group')).toHaveLength(2)
   expect(calls(state, 'create_group')[1].body.p_group_id).toBe(first.p_group_id)
   expect(first.p_invite_code).toMatch(/^[A-HJ-NP-Z2-9]{6}$/)
-  await expect(page.getByTestId('invite-link')).toHaveValue(
+  await expect(page.getByTestId('invite-qr')).toHaveAttribute(
+    'data-invite-link',
     new RegExp(`/groups/${first.p_group_id}\\?invite=ABC234$`),
   )
+  await expect(page.getByTestId('invite-code')).toHaveText('ABC234')
   expect(
     state.requests.filter(
       (request) =>
@@ -467,7 +469,8 @@ test('invite-link preview joins through the checked function without direct memb
     p_invite_code: 'ABC234',
   })
   await page.getByTestId('invite-button').click()
-  await expect(page.getByTestId('invite-link')).toHaveValue(
+  await expect(page.getByTestId('invite-qr')).toHaveAttribute(
+    'data-invite-link',
     new RegExp(`/groups/${groupId}\\?invite=ABC234$`),
   )
   expect(calls(state, 'group_members').filter((request) => request.method !== 'GET')).toHaveLength(
