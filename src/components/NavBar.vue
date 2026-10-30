@@ -26,6 +26,8 @@
               class="nav-link"
               active-class="active"
               to="/activities"
+              aria-label="Activities"
+              title="Activities"
               data-testid="nav-activities"
             >
               <svg
@@ -41,7 +43,7 @@
                 <circle cx="12" cy="12" r="9" />
                 <path d="m16 8-2.5 5.5L8 16l2.5-5.5z" />
               </svg>
-              Activities
+              <span class="nav-label">Activities</span>
             </RouterLink>
           </li>
           <li class="nav-item">
@@ -49,6 +51,8 @@
               class="nav-link"
               active-class="active"
               to="/groups"
+              aria-label="Groups"
+              title="Groups"
               data-testid="nav-groups"
             >
               <svg
@@ -64,7 +68,7 @@
                 <circle cx="9" cy="8" r="3" />
                 <path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v2" />
               </svg>
-              Groups
+              <span class="nav-label">Groups</span>
             </RouterLink>
           </li>
           <li v-if="user && isAdmin" class="nav-item">
@@ -72,6 +76,8 @@
               class="nav-link nav-admin-link"
               active-class="active"
               to="/admin/submissions"
+              aria-label="Admin"
+              title="Admin"
               data-testid="nav-admin"
             >
               <svg
@@ -88,7 +94,7 @@
                 <path d="m12 3 8 3v6c0 4-3.4 7-8 9-4.6-2-8-5-8-9V6Z" />
                 <path class="admin-tick" d="m8 12 2.7 2.7L16 9.5" pathLength="1" />
               </svg>
-              Admin
+              <span class="nav-label">Admin</span>
             </RouterLink>
           </li>
           <li v-if="user" class="nav-item">
@@ -96,16 +102,37 @@
               class="nav-link"
               active-class="active"
               to="/profile"
+              aria-label="Profile"
+              title="Profile"
               data-testid="nav-profile"
             >
               <AnimalAvatar :animal="avatarAnimal" :size="34" data-testid="nav-profile-avatar" />
-              Profile
+              <span class="nav-label">Profile</span>
             </RouterLink>
           </li>
           <li v-else class="nav-item">
-            <RouterLink class="nav-link" active-class="active" to="/login" data-testid="nav-login"
-              >Log in</RouterLink
+            <RouterLink
+              class="nav-link"
+              active-class="active"
+              to="/login"
+              aria-label="Log in"
+              title="Log in"
+              data-testid="nav-login"
             >
+              <svg
+                class="nav-icon nav-login-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M14 4h5v16h-5M3 12h12m-4-4 4 4-4 4" />
+              </svg>
+              <span class="nav-label">Log in</span>
+            </RouterLink>
           </li>
           <NavBarTheme picker />
         </ul>
@@ -185,6 +212,62 @@ onUnmounted(() => {
   width: 22px;
   height: 22px;
   transition: transform 180ms ease;
+}
+.nav-login-icon {
+  display: none;
+}
+@media (max-width: 767.98px) {
+  .navbar > .container {
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding-inline: 12px;
+  }
+  .navbar-brand {
+    flex-shrink: 0;
+    margin: 0;
+    padding: 0;
+  }
+  .brand-logo {
+    width: clamp(96px, 26vw, 124px);
+    height: 44px;
+  }
+  .navbar-toggler {
+    display: none;
+  }
+  .navbar-collapse {
+    display: flex !important;
+    flex: 1;
+    min-width: 0;
+  }
+  .navbar-nav {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-evenly;
+    gap: 4px;
+  }
+  .navbar-nav > .nav-item {
+    flex-shrink: 0;
+  }
+  .navbar .nav-link {
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    gap: 0;
+  }
+  .nav-label {
+    display: none;
+  }
+  .nav-login-icon {
+    display: block;
+  }
+  /* Give the navigation the full mobile row; decorative art stays on desktop. */
+  .navbar :deep(.nt-item),
+  .navbar :deep(.nt-walker),
+  .navbar :deep(.nt-picker) {
+    display: none;
+  }
 }
 .nav-admin-link:is(:hover, :focus-visible) .admin-icon {
   transform: rotate(-5deg);

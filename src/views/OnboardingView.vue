@@ -1,5 +1,9 @@
 <template>
-  <div class="container py-4 py-md-5" data-testid="onboarding-page">
+  <div
+    class="onboarding-page container py-4 py-md-5"
+    :class="{ 'has-footer': step <= 5 && !loading && !loadError, 'has-back': step > 1 && step <= 5 }"
+    data-testid="onboarding-page"
+  >
     <!-- Owner: Charmaine -->
     <div class="onboarding-box mx-auto">
       <div v-if="loading" class="text-center py-5">
@@ -38,7 +42,7 @@
           <section v-if="step === 1" key="interests" data-testid="onboarding-step-interests">
             <h1 class="display-5 fw-bold title mb-3">What do you <span class="hl">love</span> doing?</h1>
             <p class="lead-text mb-4">Pick at least 3 and we'll line up hangouts that fit you.</p>
-            <div class="d-flex flex-wrap gap-2">
+            <div class="onboarding-choices d-flex flex-wrap gap-2">
               <template v-for="item in interestOptions" :key="item">
                 <input
                   type="checkbox"
@@ -48,7 +52,7 @@
                   v-model="interests"
                   :data-testid="'interest-' + slug(item)"
                 />
-                <label class="chip chip-lg" :for="'interest-' + slug(item)">{{ item }}</label>
+                <label class="chip chip-lg" :for="'interest-' + slug(item)">{{ item }}<span class="mobile-choice-mark" aria-hidden="true"></span></label>
               </template>
             </div>
             <p class="hint mt-3 mb-0" :class="{ ready: interests.length >= 3 }" data-testid="interest-count">
@@ -59,7 +63,7 @@
           <section v-else-if="step === 2" key="budget" data-testid="onboarding-step-budget">
             <h1 class="display-5 fw-bold title mb-3">What's your usual <span class="hl">budget?</span></h1>
             <p class="lead-text mb-4">Per person, per hangout. No judgement.</p>
-            <div class="row g-3">
+            <div class="onboarding-budgets row g-3">
               <div v-for="option in budgetOptions" :key="option.id" class="col-12 col-sm-6">
                 <input
                   type="radio"
@@ -96,7 +100,7 @@
           <section v-else-if="step === 4" key="company" data-testid="onboarding-step-company">
             <h1 class="display-5 fw-bold title mb-3">Who do you usually <span class="hl">hang out</span> with?</h1>
             <p class="lead-text mb-4">Optional. Pick any that apply.</p>
-            <div class="d-flex flex-wrap gap-2">
+            <div class="onboarding-choices d-flex flex-wrap gap-2">
               <template v-for="item in companyOptions" :key="item">
                 <input
                   type="checkbox"
@@ -106,7 +110,7 @@
                   v-model="company"
                   :data-testid="'company-' + slug(item)"
                 />
-                <label class="chip chip-lg" :for="'company-' + slug(item)">{{ item }}</label>
+                <label class="chip chip-lg" :for="'company-' + slug(item)">{{ item }}<span class="mobile-choice-mark" aria-hidden="true"></span></label>
               </template>
             </div>
 
@@ -188,7 +192,7 @@
         <div v-if="step <= 5" class="footer-bar d-flex justify-content-between align-items-center mt-5 pt-4">
           <button
             type="button"
-            class="btn btn-line"
+            class="onboarding-back btn btn-line"
             :class="{ invisible: step === 1 }"
             :disabled="saving"
             data-testid="onboarding-back"
@@ -196,7 +200,7 @@
           >
             ← Back
           </button>
-          <div class="d-flex align-items-center gap-3">
+          <div class="footer-actions d-flex align-items-center gap-3">
             <button
               v-if="step < 5"
               type="button"
@@ -209,7 +213,7 @@
             </button>
             <button
               type="button"
-              class="btn btn-ink"
+              class="onboarding-next btn btn-ink"
               :disabled="!canNext || saving"
               data-testid="onboarding-next"
               @click="goNext"
@@ -225,7 +229,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import MrtStationPicker from '@/components/MrtStationPicker.vue'
@@ -261,6 +265,11 @@ const budgetOptions = [
 const companyOptions = ['Friends', 'Family', 'Partner']
 
 const step = ref(1)
+watch(step, () => {
+  if (window.matchMedia('(max-width: 767.98px)').matches) {
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }
+})
 const interests = ref([])
 const budget = ref('')
 const homeArea = ref('')
@@ -447,6 +456,9 @@ function exploreActivities() {
 <style scoped>
 .onboarding-box {
   max-width: 720px;
+}
+.mobile-choice-mark {
+  display: none;
 }
 
 .title {
@@ -707,6 +719,120 @@ function exploreActivities() {
 .step-leave-to {
   opacity: 0;
   transform: translateY(-8px);
+}
+
+@media (max-width: 767.98px) {
+  .onboarding-page.has-footer {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .onboarding-page.has-footer.has-back {
+    padding-bottom: calc(144px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .onboarding-choices {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .onboarding-choices .chip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    min-height: 52px;
+    padding: 12px 16px;
+    border-radius: 14px;
+  }
+  .mobile-choice-mark {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 22px;
+    height: 22px;
+    border: 1.5px solid #c8c8c8;
+    border-radius: 50%;
+  }
+  .btn-check:checked + .chip .mobile-choice-mark {
+    border-color: #fff;
+    background: #fff;
+    color: #111;
+  }
+  .btn-check:checked + .chip .mobile-choice-mark::after {
+    content: '✓';
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .onboarding-budgets > div {
+    flex: 0 0 100%;
+    width: 100%;
+  }
+  .option-tile {
+    padding: 16px 52px 16px 16px;
+  }
+  .option-tile .tick {
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .onboarding-box :deep(.animal-options) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .onboarding-box :deep(.animal-tile) {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 12px 40px 12px 16px;
+  }
+  .onboarding-box :deep(.animal-tile .animal-avatar) {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+  }
+  .onboarding-box :deep(.selection-mark) {
+    top: 50%;
+    right: 16px;
+    transform: translateY(-50%);
+  }
+  .footer-bar {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 1030;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
+    gap: 8px 12px;
+    margin-top: 0 !important;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+    background: #fff;
+    box-shadow: 0 -4px 16px rgb(0 0 0 / 4%);
+  }
+  .footer-actions {
+    display: contents !important;
+  }
+  .onboarding-back {
+    grid-row: 1;
+    grid-column: 1 / -1;
+    justify-self: start;
+    min-height: 44px;
+  }
+  .onboarding-back.invisible {
+    display: none;
+  }
+  .skip-link {
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 52px;
+    padding-inline: 8px;
+  }
+  .onboarding-next {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 52px;
+    width: 100%;
+  }
+  .has-back .skip-link,
+  .has-back .onboarding-next {
+    grid-row: 2;
+  }
+  .footer-actions .onboarding-next:only-child {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -124,7 +124,13 @@ const selectedCategory = ref(String(previousFilters.category ?? ''))
 const selectedSetting = ref(String(previousFilters.setting ?? ''))
 const selectedArea = ref(String(previousFilters.area ?? ''))
 const selectedPrice = ref(String(previousFilters.price ?? ''))
-const allowedSorts = ['best-match', 'catalogue', 'price-asc', 'price-desc']
+const sortOptions = [
+  { value: 'best-match', label: 'Best match' },
+  { value: 'catalogue', label: 'Catalogue order' },
+  { value: 'price-asc', label: 'Price: low to high' },
+  { value: 'price-desc', label: 'Price: high to low' },
+]
+const allowedSorts = sortOptions.map((option) => option.value)
 const sortBy = ref(
   allowedSorts.includes(previousFilters.sort) ? previousFilters.sort : 'best-match',
 )
@@ -506,10 +512,9 @@ onMounted(loadActivities)
         <div class="sort-control">
           <label for="sort-filter" class="visually-hidden">Sort by</label>
           <select id="sort-filter" v-model="sortBy" class="form-select" data-testid="sort-filter">
-            <option value="best-match">Best match</option>
-            <option value="catalogue">Catalogue order</option>
-            <option value="price-asc">Price: low to high</option>
-            <option value="price-desc">Price: high to low</option>
+            <option v-for="option in sortOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
           </select>
         </div>
       </div>
@@ -615,6 +620,19 @@ onMounted(loadActivities)
               <option value="outdoor">Outdoor</option>
             </select>
           </div>
+          <div class="col-12 mobile-sort-control">
+            <label for="mobile-sort-filter" class="form-label">Sort by</label>
+            <select
+              id="mobile-sort-filter"
+              v-model="sortBy"
+              class="form-select"
+              data-testid="mobile-sort-filter"
+            >
+              <option v-for="option in sortOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
         </div>
       </div>
       <footer class="filter-footer d-flex gap-2">
@@ -716,7 +734,7 @@ onMounted(loadActivities)
     </p>
 
     <template v-else>
-      <div :class="{ 'mb-3': sortBy === 'best-match' }">
+      <div class="activities-sort-info" :class="{ 'mb-3': sortBy === 'best-match' }">
         <p
           :class="
             sortBy === 'best-match' && !hasRankingPreferences
@@ -1002,6 +1020,9 @@ onMounted(loadActivities)
   width: min(100%, 230px);
   flex-shrink: 0;
 }
+.mobile-sort-control {
+  display: none;
+}
 #activities-results-summary {
   scroll-margin-top: calc(var(--navbar-height, 0px) + 16px);
 }
@@ -1012,6 +1033,20 @@ onMounted(loadActivities)
 }
 
 @media (max-width: 767.98px) {
+  /* Keep result announcements and pagination's focus target without taking space. */
+  .activities-sort-info,
+  #activities-results-summary {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px !important;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
   .save-feedback {
     left: 1rem;
     text-align: center;
@@ -1026,7 +1061,10 @@ onMounted(loadActivities)
     flex: auto;
   }
   .sort-control {
-    width: 100%;
+    display: none;
+  }
+  .mobile-sort-control {
+    display: block;
   }
 }
 

@@ -1,21 +1,23 @@
 <template>
-  <!-- Dev-only "Theme" dropdown, rendered by <NavBarTheme picker /> inside the navbar links.
-       import.meta.env.DEV is false in production builds, so it never shows on the live site.
-       Opens on hover with a mouse, or on tap/click/keyboard otherwise. -->
-  <li
-    v-if="picker && isDev"
+  <!-- Shared theme choices for the desktop navbar and mobile profile picker. -->
+  <component
+    :is="placement === 'profile' ? 'div' : 'li'"
+    v-if="picker"
     ref="pickerEl"
-    class="nav-item dropdown nt-picker"
+    class="dropdown nt-picker"
+    :class="placement === 'profile' ? 'nt-profile-picker' : 'nav-item'"
     @pointerenter="onPointerEnter"
     @pointerleave="onPointerLeave"
   >
     <button
+      ref="pickerToggle"
       class="nav-link nt-picker-toggle"
-      aria-label="Theme"
+      :aria-label="placement === 'profile' ? 'Change theme' : 'Theme'"
       title="Theme"
       type="button"
+      :aria-controls="pickerId"
       :aria-expanded="open"
-      data-testid="nav-theme-picker"
+      :data-testid="placement === 'profile' ? 'profile-theme-picker' : 'nav-theme-picker'"
       @click="onToggleClick"
     >
       <svg
@@ -36,19 +38,37 @@
         <circle cx="15.5" cy="7.5" r="1.2" />
       </svg>
     </button>
-    <ul v-if="open" class="dropdown-menu dropdown-menu-end show">
+    <ul v-if="open" :id="pickerId" class="dropdown-menu dropdown-menu-end show">
       <li v-for="option in PICKER_OPTIONS" :key="option.value">
         <button
-          class="dropdown-item"
+          class="dropdown-item nt-theme-option"
+          :data-theme="option.value === 'auto' ? seasonalTheme() : option.value"
           :class="{ active: preview === option.value }"
+          :aria-pressed="preview === option.value"
           type="button"
           @click="choose(option.value)"
         >
-          {{ option.label }}
+          <span class="nt-theme-option-symbol" aria-hidden="true">{{
+            THEME_SYMBOLS[option.value === 'auto' ? seasonalTheme() : option.value]
+          }}</span>
+          <span>{{ option.label }}</span>
+          <svg
+            class="nt-theme-option-check"
+            :class="{ selected: preview === option.value }"
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m4 10 4 4 8-8" />
+          </svg>
         </button>
       </li>
     </ul>
-  </li>
+  </component>
 
   <!-- Seasonal background + small animated cartoons behind the navbar content.
        Purely decorative: it sits under the links and ignores clicks. -->
@@ -820,6 +840,7 @@
 import { ref } from 'vue'
 
 const THEMES = ['halloween', 'christmas', 'light', 'dark']
+const THEME_SYMBOLS = { halloween: '🎃', christmas: '🎄', light: '☀', dark: '☾' }
 const PREVIEW_KEY = 'wad2do-nav-theme'
 const PICKER_OPTIONS = [
   { value: 'auto', label: 'Auto (by date)' },
@@ -871,44 +892,47 @@ function setPreview(value) {
 </script>
 
 <script setup>
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, useId, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 
 const props = defineProps({
-  // true renders the "Theme" dropdown (dev only) instead of the background layer.
+  // Render theme choices instead of the decorative navbar background.
   picker: { type: Boolean, default: false },
+  placement: { type: String, default: 'navbar' },
 })
 
 const route = useRoute()
 const { avatarAnimal } = useAuth()
 // Logged-out visitors (or anyone without an avatar yet) get the dog.
 const pet = computed(() => avatarAnimal.value || 'dog')
-const isDev = import.meta.env.DEV
 const open = ref(false)
 const pickerEl = ref(null)
+const pickerToggle = ref(null)
+const pickerId = useId()
 
 let closeTimer
 
 function choose(value) {
   setPreview(value)
   open.value = false
+  if (props.placement === 'profile') pickerToggle.value?.focus({ preventScroll: true })
 }
 
 // Hover only applies to a real mouse; touch taps go through the click handler instead.
 function onPointerEnter(event) {
-  if (event.pointerType !== 'mouse') return
+  if (props.placement === 'profile' || event.pointerType !== 'mouse') return
   clearTimeout(closeTimer)
   open.value = true
 }
 function onPointerLeave(event) {
-  if (event.pointerType !== 'mouse') return
+  if (props.placement === 'profile' || event.pointerType !== 'mouse') return
   // Short delay so moving the mouse across the small gap into the menu doesn't close it.
   closeTimer = setTimeout(() => (open.value = false), 200)
 }
 function onToggleClick(event) {
   // A mouse click while hovering keeps it open; taps and keyboard toggle it.
-  open.value = event.pointerType === 'mouse' ? true : !open.value
+  open.value = props.placement !== 'profile' && event.pointerType === 'mouse' ? true : !open.value
 }
 
 // You can also preview with ?navTheme=halloween|christmas|light|dark|auto in the URL.
@@ -933,7 +957,10 @@ function onDocumentClick(event) {
   if (open.value && !pickerEl.value?.contains(event.target)) open.value = false
 }
 function onKeydown(event) {
-  if (event.key === 'Escape') open.value = false
+  if (event.key === 'Escape' && open.value) {
+    open.value = false
+    if (props.placement === 'profile') pickerToggle.value?.focus({ preventScroll: true })
+  }
 }
 onMounted(() => {
   if (!props.picker) return
@@ -1385,7 +1412,7 @@ onUnmounted(() => {
   }
 }
 
-/* ---------- Dev-only "Theme" pill, pinned to the far right of the navbar ---------- */
+/* ---------- Theme picker, pinned to the far right of the desktop navbar ---------- */
 .nt-picker {
   display: flex;
   align-items: center;
@@ -1455,12 +1482,110 @@ onUnmounted(() => {
   right: 0;
   left: auto;
   margin-top: 0.25rem;
-  --bs-dropdown-min-width: 8.5rem;
+  --bs-dropdown-min-width: 15rem;
   --bs-dropdown-font-size: 0.85rem;
   --bs-dropdown-item-padding-y: 0.3rem;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - var(--navbar-height, 86px) - 72px);
+  overflow-y: auto;
+  padding: 4px;
 }
-.nt-picker .dropdown-item.active {
-  background-color: #2b1b3d;
+.nt-picker .dropdown-menu > li + li {
+  margin-top: 4px;
+}
+.nt-picker .nt-theme-option {
+  --option-background: #fff;
+  --option-accent: #111;
+  --option-foreground: #111;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: var(--option-background);
+  color: var(--option-foreground);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 12%);
+  text-align: left;
+}
+.nt-picker .nt-theme-option[data-theme='halloween'] {
+  --option-background: linear-gradient(180deg, #2b1b3d, #3a2452);
+  --option-accent: #ff7518;
+  --option-foreground: #f3e9ff;
+}
+.nt-picker .nt-theme-option[data-theme='christmas'] {
+  --option-background: linear-gradient(180deg, #1b4332, #24573f);
+  --option-accent: #c8102e;
+  --option-foreground: #fff;
+}
+.nt-picker .nt-theme-option[data-theme='dark'] {
+  --option-background: linear-gradient(180deg, #111827, #1f2937);
+  --option-accent: #f3f4f6;
+  --option-foreground: #d1d5db;
+}
+.nt-picker .nt-theme-option.active {
+  background: var(--option-background);
+  color: var(--option-foreground);
+  font-weight: 600;
+  box-shadow:
+    inset 3px 0 0 var(--option-accent),
+    inset 0 0 0 1px rgb(0 0 0 / 12%);
+}
+.nt-picker .nt-theme-option:is(:hover, :focus-visible) {
+  background: var(--option-background);
+  color: var(--option-foreground);
+  outline: 2px solid var(--option-accent);
+  outline-offset: -2px;
+}
+.nt-theme-option-symbol {
+  font-size: 22px;
+  line-height: 1;
+  text-align: center;
+}
+.nt-theme-option-check {
+  width: 18px;
+  height: 18px;
+  visibility: hidden;
+}
+.nt-theme-option-check.selected {
+  visibility: visible;
+}
+
+/* Mobile profile control, independent of the themed navbar's text colours. */
+.nt-profile-picker {
+  position: relative;
+  margin: 0;
+}
+.nt-profile-picker .nt-picker-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid #ddd;
+  border-radius: 50%;
+  color: #555;
+  background: #fff;
+}
+.nt-profile-picker .nt-picker-icon {
+  width: 20px;
+  height: 20px;
+}
+.nt-profile-picker .nt-picker-toggle:hover,
+.nt-profile-picker .nt-picker-toggle[aria-expanded='true'] {
+  color: #111;
+  background: #f1f1ef;
+}
+.nt-profile-picker .nt-picker-toggle:focus-visible {
+  outline: 2px solid #111;
+  outline-offset: 3px;
+}
+.nt-profile-picker .dropdown-menu {
+  --bs-dropdown-min-width: 15rem;
+  --bs-dropdown-item-padding-y: 0.65rem;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
 }
 
 @keyframes nt-snowfall {

@@ -29,12 +29,13 @@ const isHovered = ref(false)
 .pill {
   position: relative;
   gap: 20px;
-  min-width: 150px;
-  padding: 12px 25px;
+  min-width: 180px;
+  min-height: 60px;
+  padding: 16px 32px;
   border: 1px solid #222;
   border-radius: 100px;
   color: #111;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
   text-decoration: none;
   transition:
@@ -114,7 +115,24 @@ const isHovered = ref(false)
 
 @media (max-width: 1000px) {
   .pill {
+    min-width: 160px;
+    min-height: 56px;
+    padding: 14px 26px;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 600px) {
+  .action-spark {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .pill {
     min-width: 125px;
+    gap: 16px;
+    padding: 14px 22px;
   }
 }
 
