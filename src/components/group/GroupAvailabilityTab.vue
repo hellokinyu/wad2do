@@ -66,6 +66,10 @@
       </div>
 
       <!-- MODE TOGGLE: "My availability" / "Group heatmap" -->
+      <div v-if="refreshError" class="alert alert-warning" role="alert" data-testid="availability-refresh-error">
+        {{ refreshError }}
+        <button class="btn btn-sm btn-outline-dark ms-2" @click="refreshShared">Try again</button>
+      </div>
       <div class="mode-toggle mb-3" role="group" aria-label="View">
         <button
           class="mode-option"
@@ -209,7 +213,7 @@
           </span>
           <button
             class="btn btn-dark rounded-pill px-4 ms-auto"
-            :disabled="!pickStart"
+            :disabled="!pickStart || confirming"
             data-testid="confirm-time"
             @click="confirmSlot"
           >
@@ -234,7 +238,7 @@
       <!-- PLAN BUTTON: disabled until a slot is picked; spinner while planning runs -->
       <button
         class="btn btn-dark btn-lg rounded-pill w-100 mt-3 plan-button"
-        :disabled="!group.chosen_start || planning"
+        :disabled="!group.chosen_start || planning || confirming"
         data-testid="plan-button"
         @click="onPlan"
       >
@@ -266,6 +270,11 @@ let saveQueued = false
 let saveController
 let disposed = false
 const planning = ref(false)
+const confirming = ref(false)
+const refreshError = ref('')
+let refreshNumber = 0
+let refreshTimer
+let channel
 
 // ---------- pagination: 3 days per page on phones, 7 on laptops ----------
 const isPhone = ref(window.innerWidth < 768) // same breakpoint as Bootstrap's md
@@ -572,38 +581,53 @@ function useWindow(w) {
 }
 
 // ---------- loading data from Supabase ----------
+async function refreshShared() {
+  const request = ++refreshNumber
+  const requestedGroup = groupId.value
+  const requestedUser = userId.value
+  try {
+    const [groupResult, memberResult, availabilityResult] = await requestWithTimeout((signal) =>
+      Promise.all([
+        supabase
+          .from('groups')
+          .select('start_date, end_date, chosen_start, chosen_end')
+          .eq('id', requestedGroup).single().abortSignal(signal),
+        supabase.rpc('get_group_member_names', { p_group_id: requestedGroup }).abortSignal(signal),
+        supabase
+          .from('availability')
+          .select('user_id, slot_start')
+          .eq('group_id', requestedGroup).abortSignal(signal),
+      ]),
+    )
+    if (disposed || request !== refreshNumber || groupId.value !== requestedGroup || userId.value !== requestedUser)
+      return false
+    const failed = [groupResult, memberResult, availabilityResult].find((result) => result.error)
+    if (failed) throw failed.error
+    group.value = groupResult.data
+    members.value = memberResult.data.map((member) => ({ id: member.id, name: member.display_name || 'Member' }))
+    const memberIds = new Set(members.value.map((member) => member.id))
+    allSlots.value = availabilityResult.data
+      .map((r) => ({ user_id: r.user_id, key: fromDb(r.slot_start) }))
+      .filter((row) => memberIds.has(row.user_id) && days.value.includes(row.key.slice(0, 10)) && times.value.includes(row.key.slice(11)))
+    refreshError.value = ''
+    maybeShowPopup()
+    return true
+  } catch {
+    if (!disposed && request === refreshNumber)
+      refreshError.value = "Couldn't refresh the group's availability. Your selection is still here."
+    return false
+  }
+}
+
 async function loadAll() {
   loading.value = true
   errorMsg.value = ''
   try {
-    const { data: auth } = await supabase.auth.getUser()
+    const { data: auth, error } = await supabase.auth.getUser()
+    if (error || !auth.user) throw error || new Error('Log in again.')
     userId.value = auth.user.id
-
-    // 1. the group (dates + chosen slot)
-    const { data: g, error: e1 } = await supabase
-      .from('groups')
-      .select('start_date, end_date, chosen_start, chosen_end')
-      .eq('id', groupId.value)
-      .single()
-    if (e1) throw e1
-    group.value = g
-
-    // 2. the members and their display names
-    const { data: gm, error: e2 } = await supabase.rpc('get_group_member_names', {
-      p_group_id: groupId.value,
-    })
-    if (e2) throw e2
-    members.value = gm.map((member) => ({ id: member.id, name: member.display_name || 'Member' }))
-
-    // 3. everyone's saved availability
-    const { data: av, error: e4 } = await supabase
-      .from('availability')
-      .select('user_id, slot_start')
-      .eq('group_id', groupId.value)
-    if (e4) throw e4
-    allSlots.value = av
-      .map((r) => ({ user_id: r.user_id, key: fromDb(r.slot_start) }))
-      .filter((row) => days.value.includes(row.key.slice(0, 10)) && times.value.includes(row.key.slice(11)))
+    if (!(await refreshShared())) throw new Error('Availability unavailable.')
+    if (disposed) return
 
     // 4. split out my own slots so the "My availability" grid is pre-filled
     const mine = {}
@@ -654,6 +678,9 @@ onMounted(() => {
 })
 onUnmounted(() => {
   disposed = true
+  refreshNumber += 1
+  clearTimeout(refreshTimer)
+  if (channel) supabase.removeChannel(channel)
   saveQueued = false
   saveController?.abort()
   window.removeEventListener('mouseup', onMouseUp)
@@ -687,11 +714,13 @@ async function saveMySlots() {
       )
       if (disposed || groupId.value !== savedGroupId || userId.value !== savedUserId) return
       if (error) throw error
+      refreshNumber += 1
       allSlots.value = allSlots.value
         .filter((row) => row.user_id !== savedUserId)
         .concat(keys.map((key) => ({ user_id: savedUserId, key })))
     } while (saveQueued)
     maybeShowPopup()
+    void refreshShared()
   } catch {
     if (!disposed) saveError.value = "Couldn't confirm your availability was saved. Your selection is still here. Try again."
   } finally {
@@ -718,20 +747,29 @@ function pickCell(key) {
   }
 }
 async function confirmSlot() {
+  if (confirming.value || !pickStart.value) return
+  confirming.value = true
   const endKey = pickEnd.value || pickStart.value
   const chosen_start = toDb(pickStart.value)
   const chosen_end = toDb(nextSlotKey(endKey)) // end of the last selected 30-min slot
-  const { error } = await supabase
-    .from('groups')
-    .update({ chosen_start, chosen_end })
-    .eq('id', groupId.value)
-  if (error) {
+  try {
+    const { data, error } = await requestWithTimeout((signal) =>
+      supabase.from('groups')
+        .update({ chosen_start, chosen_end })
+        .eq('id', groupId.value)
+        .select('chosen_start, chosen_end').single().abortSignal(signal),
+    )
+    if (error) throw error
+    if (disposed) return
+    refreshNumber += 1
+    group.value = { ...group.value, ...data }
+    pickStart.value = null
+    pickEnd.value = null
+  } catch {
     errorMsg.value = "Couldn't save the chosen time"
-    return
+  } finally {
+    confirming.value = false
   }
-  group.value = { ...group.value, chosen_start, chosen_end }
-  pickStart.value = null
-  pickEnd.value = null
 }
 
 // ---------- no overlap: extend the date range by one day ----------
@@ -764,7 +802,29 @@ async function onPlan() {
   }
 }
 
-onMounted(loadAll)
+function queueRefresh(payload) {
+  const row = payload.eventType === 'DELETE' ? payload.old : payload.new
+  const changedGroup = payload.table === 'groups' ? row?.id : row?.group_id
+  if (changedGroup && changedGroup !== groupId.value) return
+  clearTimeout(refreshTimer)
+  refreshTimer = setTimeout(refreshShared, 50)
+}
+
+onMounted(async () => {
+  await loadAll()
+  if (disposed) return
+  channel = supabase.channel('group-availability-' + groupId.value, {
+    config: { postgres_changes_options: { wait: true } },
+  })
+  for (const table of ['availability', 'group_members', 'groups']) {
+    channel.on('postgres_changes', { event: '*', schema: 'public', table }, queueRefresh)
+  }
+  channel.subscribe((status) => {
+    if (status === 'SUBSCRIBED') void refreshShared()
+    if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status) && !disposed)
+      refreshError.value = 'Live updates disconnected. Try again to refresh the group.'
+  })
+})
 </script>
 
 <style scoped>
