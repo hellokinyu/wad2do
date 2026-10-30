@@ -1,8 +1,19 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { supabase } from '@/lib/supabase'
-import { getPrice } from '@/lib/activityDisplay'
+import {
+  getStatus,
+  isPast,
+  getTimeRange,
+  formatRange,
+  getCountdown,
+  getBudgetText,
+  getStageStyle,
+} from '@/lib/groupDisplay'
+import { findProfileAnimal } from '@/data/profileAnimals'
+import AnimalAvatar from '@/components/AnimalAvatar.vue'
+import GroupTicketStub from '@/components/group/GroupTicketStub.vue'
 import GroupSettingsForm from '@/components/group/GroupSettingsForm.vue'
 import GroupMembersPanel from '@/components/group/GroupMembersPanel.vue'
 import GroupInviteCode from '@/components/group/GroupInviteCode.vue'
@@ -48,6 +59,10 @@ async function loadGroup() {
     group.value = data
 
     isMember.value = data?.is_member === true
+    if (isMember.value) {
+      loadMemberFaces()
+      await loadPlanStatus()
+    }
   } catch (error) {
     console.log(error)
     errorMessage.value = "Couldn't load this group. Please try again."
@@ -58,9 +73,85 @@ async function loadGroup() {
 
 onMounted(loadGroup)
 
-function getMemberCount() {
-  return group.value.group_members[0].count
+// wad2do_group_details doesn't say whether a plan exists, so check the itineraries table
+// (the Groups list gets this from its query). Without it a planned group would show as
+// "Time picked" here and the hero's colour wouldn't match its card on the Groups page.
+async function loadPlanStatus() {
+  try {
+    const { data, error } = await supabase
+      .from('itineraries')
+      .select('group_id')
+      .eq('group_id', groupId)
+      .limit(1)
+    if (error) throw error
+    group.value.itineraries = data ?? []
+  } catch (error) {
+    console.log(error)
+  }
 }
+
+// Picking a time (Availability) and making the plan (Itinerary) happen inside the tabs,
+// so recheck the stage when the tab changes; the hero's colour and ticks then keep up
+async function refreshStage() {
+  if (!group.value || !isMember.value) return
+  try {
+    const { data, error } = await supabase.rpc('wad2do_group_details', { p_group_id: groupId })
+    if (error) throw error
+    if (data) {
+      group.value.chosen_start = data.chosen_start
+      group.value.chosen_end = data.chosen_end
+    }
+  } catch (error) {
+    console.log(error)
+  }
+  await loadPlanStatus()
+}
+
+watch(() => route.name, refreshStage)
+
+function getMemberCount() {
+  return group.value.group_members?.[0]?.count ?? 0
+}
+
+// ----- The hero at the top: the group's ticket, as on the Groups page -----
+
+const memberFaces = ref([]) // [{ id, animal, initial }]; the hero shows the count until these load
+
+// { get: true } because it only reads, and get_group_member_names is a "stable" function
+async function loadMemberFaces() {
+  try {
+    const { data, error } = await supabase.rpc(
+      'get_group_member_names',
+      { p_group_id: groupId },
+      { get: true },
+    )
+    if (error) throw error
+    memberFaces.value = data.map((member) => ({
+      id: member.id,
+      animal: findProfileAnimal(member.avatar_animal)?.id || '',
+      initial: (member.display_name || 'M').charAt(0).toUpperCase(),
+    }))
+  } catch (error) {
+    console.log(error)
+  }
+}
+
+// The tabs follow the planning steps in order, so they double as the group's progress
+const steps = [
+  { route: 'group-activities', testid: 'tab-activities', label: 'Activities', icon: 'compass' },
+  {
+    route: 'group-availability',
+    testid: 'tab-availability',
+    label: 'Availability',
+    icon: 'calendar',
+  },
+  { route: 'group-itinerary', testid: 'tab-itinerary', label: 'Itinerary', icon: 'map' },
+]
+
+// How many steps are finished: picking a time finishes voting too
+const doneSteps = computed(
+  () => ({ Voting: 0, 'Time picked': 2, Planned: 3 })[getStatus(group.value)],
+)
 
 // e.g. '2026-10-30' -> 'Fri 30 Oct'
 function formatDay(date, withYear = false) {
@@ -78,12 +169,6 @@ function getDateText() {
   if (!start || !end) return 'Dates not set'
   if (start === end) return formatDay(start, true)
   return formatDay(start) + ' – ' + formatDay(end, true)
-}
-
-// Same S$ format as the activity prices, e.g. 'S$50.00 per person'
-function getBudgetText() {
-  const budget = getPrice(group.value.budget_per_person)
-  return budget === null ? 'No budget set' : 'S$' + budget.toFixed(2) + ' per person'
 }
 
 // For someone who opened an invite link but isn't in the group yet
@@ -182,30 +267,49 @@ function onSettingsSaved() {
       </button>
     </div>
 
-    <!-- Member view: header, tabs and the current tab -->
+    <!-- Member view: the group's ticket (hero), its panels and the current tab -->
     <div v-else>
-      <header class="group-header" data-testid="group-header">
-        <div class="min-width-0">
-          <h1 class="group-name fw-bold">{{ group.name }}</h1>
-          <ul class="meta-chips">
-            <li>
+      <!-- The same ticket as on the Groups page, opened up: stage-coloured stub, details,
+           and the three tabs as steps along the bottom -->
+      <header
+        class="hero"
+        :class="{ past: isPast(group) }"
+        :style="getStageStyle(group)"
+        data-testid="group-header"
+      >
+        <!-- Everything about when sits in the stub: the day, and how long until it -->
+        <GroupTicketStub class="hero-stub" :group="group" size="hero" :note="getCountdown(group)" />
+
+        <div class="hero-body">
+          <h1 class="hero-name">{{ group.name }}</h1>
+          <ul class="hero-facts">
+            <!-- The stub shows the day, so this is just the time once one is picked
+                 (or the dates the group is choosing from) -->
+            <li v-if="getTimeRange(group)">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+              {{ getTimeRange(group) }}
+            </li>
+            <li v-else>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <rect x="3" y="4" width="18" height="18" rx="2" />
                 <path d="M16 2v4M8 2v4M3 10h18" />
               </svg>
-              {{ getDateText() }}
+              {{ formatRange(group) }}
             </li>
             <li>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <rect x="2" y="6" width="20" height="14" rx="2" />
                 <path d="M16 13h.01M2 10h20" />
               </svg>
-              Budget {{ getBudgetText() }}
+              {{ getBudgetText(group) }}
             </li>
           </ul>
         </div>
 
-        <!-- Each button opens a panel below the header; it fills in while its panel is open -->
+        <!-- Each button opens a panel below the hero; it fills in while its panel is open -->
         <div class="header-actions">
           <button
             type="button"
@@ -215,12 +319,21 @@ function onSettingsSaved() {
             data-testid="members-button"
             @click="showMembers = !showMembers"
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
+            <span v-if="memberFaces.length" class="faces" aria-hidden="true">
+              <template v-for="face in memberFaces.slice(0, 4)" :key="face.id">
+                <AnimalAvatar v-if="face.animal" :animal="face.animal" :size="26" decorative />
+                <span v-else class="face-initial">{{ face.initial }}</span>
+              </template>
+              <span v-if="memberFaces.length > 4" class="face-initial face-more"
+                >+{{ memberFaces.length - 4 }}</span
+              >
+            </span>
+            <svg v-else viewBox="0 0 24 24" aria-hidden="true">
               <path
                 d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm14 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"
               />
             </svg>
-            Members ({{ getMemberCount() }})
+            {{ getMemberCount() }} {{ getMemberCount() === 1 ? 'member' : 'members' }}
           </button>
           <button
             type="button"
@@ -235,7 +348,7 @@ function onSettingsSaved() {
                 d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M8.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM20 8v6M23 11h-6"
               />
             </svg>
-            Invite
+            <span class="action-text">Invite</span>
           </button>
           <button
             type="button"
@@ -251,9 +364,42 @@ function onSettingsSaved() {
                 d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
               />
             </svg>
-            Settings
+            <span class="action-text">Settings</span>
           </button>
         </div>
+
+        <!-- The tabs, as the three planning steps; finished steps fill in with the stage colour -->
+        <nav class="steps" aria-label="Group sections">
+          <RouterLink
+            v-for="(step, index) in steps"
+            :key="step.route"
+            class="step"
+            :class="{ done: index < doneSteps }"
+            active-class="active"
+            :to="{ name: step.route }"
+            :data-testid="step.testid"
+          >
+            <!-- Icons adapted from Feather Icons (MIT licence). The circle fills with the
+                 stage colour once the step is done. -->
+            <span class="step-icon" aria-hidden="true">
+              <svg v-if="step.icon === 'compass'" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" />
+                <path d="m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z" />
+              </svg>
+              <svg v-else-if="step.icon === 'calendar'" viewBox="0 0 24 24">
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <path d="M16 2v4M8 2v4M3 10h18" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24">
+                <path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4zM8 2v16M16 6v16" />
+              </svg>
+            </span>
+            <span class="step-label">
+              {{ step.label }}
+              <span v-if="index < doneSteps" class="visually-hidden">(done)</span>
+            </span>
+          </RouterLink>
+        </nav>
       </header>
 
       <GroupMembersPanel v-if="showMembers" :group="group" @changed="loadGroup" />
@@ -277,49 +423,16 @@ function onSettingsSaved() {
           Get them to scan the QR code, or give them the group code to type in.
         </p>
 
-        <GroupInviteCode :group-id="groupId" :invite-code="group.invite_code" />
+        <GroupInviteCode
+          :group-id="groupId"
+          :group-name="group.name"
+          :invite-code="group.invite_code"
+        />
       </section>
 
-      <!-- Tabs, styled like the category chips on the Activities page -->
-      <nav class="group-tabs" aria-label="Group sections">
-        <RouterLink
-          class="group-tab"
-          active-class="active"
-          :to="{ name: 'group-activities' }"
-          data-testid="tab-activities"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="10" />
-            <path d="m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z" />
-          </svg>
-          Activities
-        </RouterLink>
-        <RouterLink
-          class="group-tab"
-          active-class="active"
-          :to="{ name: 'group-availability' }"
-          data-testid="tab-availability"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="3" y="4" width="18" height="18" rx="2" />
-            <path d="M16 2v4M8 2v4M3 10h18" />
-          </svg>
-          Availability
-        </RouterLink>
-        <RouterLink
-          class="group-tab"
-          active-class="active"
-          :to="{ name: 'group-itinerary' }"
-          data-testid="tab-itinerary"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4zM8 2v16M16 6v16" />
-          </svg>
-          Itinerary
-        </RouterLink>
-      </nav>
-
-      <RouterView />
+      <div class="tab-content">
+        <RouterView />
+      </div>
     </div>
   </div>
 </template>
@@ -329,10 +442,10 @@ function onSettingsSaved() {
 .back-link {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-height: 44px;
   color: var(--bs-secondary-color);
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 600;
   text-decoration: none;
 }
@@ -343,8 +456,9 @@ function onSettingsSaved() {
 
 .back-link svg,
 .meta-chips svg,
-.action-button svg,
-.group-tab svg {
+.action-button > svg,
+.hero-facts svg,
+.step-icon svg {
   flex-shrink: 0;
   width: 16px;
   height: 16px;
@@ -355,22 +469,211 @@ function onSettingsSaved() {
   stroke-linejoin: round;
 }
 
-.group-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem 1.5rem;
+.back-link svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ----- Hero: the group's ticket, as on the Groups page but bigger -----
+   Colours come from getStageStyle (--stage, --stage-ink, --stage-mark, --tear) */
+.group-page {
+  --stub-width: 148px;
+}
+
+.hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--stub-width) minmax(0, 1fr);
+  grid-template-areas:
+    'stub body'
+    'stub actions'
+    'steps steps';
   margin-top: 0.5rem;
+  overflow: hidden;
+  border: 1px solid #eee;
+  border-radius: 22px;
+  background: white;
+  box-shadow: 0 10px 32px rgb(0 0 0 / 6%);
 }
 
-.min-width-0 {
+.hero-stub {
+  grid-area: stub;
+}
+
+/* Notch at the top where the stub tears off, and two where the step strip does */
+.hero::before,
+.steps::before,
+.steps::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  border: 1px solid #eee;
+  border-radius: 50%;
+  background: white;
+}
+
+.hero::before {
+  top: -12px;
+  left: calc(var(--stub-width) - 11px);
+}
+
+.steps::before {
+  top: -12px;
+  left: -12px;
+}
+
+.steps::after {
+  top: -12px;
+  right: -12px;
+}
+
+.hero-body {
+  grid-area: body;
   min-width: 0;
+  padding: 26px 28px 12px;
 }
 
-.group-name {
-  margin-bottom: 0.75rem;
+.hero-name {
+  margin-bottom: 12px;
+  font-size: clamp(1.5rem, 1rem + 2.5vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
   overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.hero-facts {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hero-facts li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 1rem;
+}
+
+.hero-facts svg {
+  margin-top: 4px;
+  color: #777;
+}
+
+.header-actions {
+  grid-area: actions;
+  align-self: end;
+  padding: 8px 28px 24px;
+}
+
+/* Member avatars inside the Members button */
+.faces {
+  display: inline-flex;
+  margin-right: 2px;
+}
+
+.faces > :deep(svg),
+.face-initial {
+  width: 26px;
+  height: 26px;
+  margin-left: -7px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px white;
+}
+
+.faces > :first-child {
+  margin-left: 0;
+}
+
+.face-initial {
+  display: inline-grid;
+  place-items: center;
+  background: #ececec;
+  color: #444;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.face-more {
+  background: #111;
+  color: white;
+}
+
+/* ----- The tabs, as three planning steps along the bottom of the ticket ----- */
+.steps {
+  position: relative;
+  display: grid;
+  grid-area: steps;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 2px dashed #e5e5e5;
+}
+
+/* Each step: its icon in a circle, then its name. The circle is grey until the step is
+   done, then fills with the stage colour, so the strip doubles as the group's progress. */
+.step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 14px 16px;
+  color: #555;
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+}
+
+.step + .step {
+  border-left: 1px solid #f0f0f0;
+}
+
+.step:hover {
+  background: #fafafa;
+  color: #111;
+}
+
+.step-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #f0f0f0;
+  color: #666;
+}
+
+.step.done .step-icon {
+  background: var(--stage-mark);
+  color: var(--stage-ink);
+}
+
+/* Past outings: the grey stage colour needs white icons to show */
+.hero.past .step.done .step-icon {
+  color: white;
+}
+
+.step-label {
+  font-weight: 600;
+}
+
+/* The tab you're on: ink text and an ink line under it */
+.step.active {
+  background: #fafafa;
+  box-shadow: inset 0 -3px 0 #111;
+  color: #111;
+}
+
+.step.active .step-label {
+  font-weight: 700;
+}
+
+.tab-content {
+  margin-top: 1.75rem;
 }
 
 /* Dates and budget, as small chips under the group name */
@@ -421,66 +724,110 @@ function onSettingsSaved() {
   max-width: 34rem;
 }
 
-/* Tabs */
-.group-tabs {
-  display: flex;
-  gap: 8px;
-  margin: 1.75rem 0 1.5rem;
-  padding: 4px 2px 1rem;
-  overflow-x: auto;
-  border-bottom: 1px solid #e5e5e5;
-}
-
-.group-tab {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 8px 18px;
-  border: 1px solid #e5e5e5;
-  border-radius: 999px;
-  background: white;
-  color: #111;
-  font-weight: 600;
-  text-decoration: none;
-  transition: background-color 0.2s ease;
-}
-
-.group-tab:hover {
-  background: #f3f3f3;
-}
-
-.group-tab.active {
-  border-color: #111;
-  background: #111;
-  color: white;
-}
-
 .group-page :is(a, button):focus-visible {
   outline: 2px solid #111;
   outline-offset: 2px;
   box-shadow: none;
 }
 
-/* Phones: drop the button and tab icons so each row fits on one line */
+/* Steps sit inside the ticket's clipped edge, so their focus ring goes inside */
+.group-page .step:focus-visible {
+  outline-offset: -4px;
+}
+
+/* Phones: a narrower stub; the buttons and steps run the full width under it */
 @media (max-width: 575.98px) {
-  .action-button svg,
-  .group-tab svg {
-    display: none;
+  .group-page {
+    --stub-width: 88px;
+  }
+
+  .hero {
+    grid-template-areas:
+      'stub body'
+      'actions actions'
+      'steps steps';
+    border-radius: 18px;
+  }
+
+  .hero-body {
+    padding: 18px 16px 16px;
+  }
+
+  .hero-name {
+    margin-bottom: 8px;
+  }
+
+  .hero-facts li {
+    font-size: 0.875rem;
+  }
+
+  .header-actions {
+    padding: 14px 16px 16px;
+    border-top: 1px solid #f0f0f0;
+  }
+
+  /* Members (with faces) takes the room; Invite and Settings shrink to round icon buttons.
+     Their names stay readable to screen readers. */
+  .header-actions {
+    flex-wrap: nowrap;
   }
 
   .action-button {
     padding-inline: 0.85rem;
+    white-space: nowrap;
   }
 
-  .group-tab {
-    padding-inline: 14px;
+  .action-button:not(:has(.action-text)) {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .faces > :deep(svg),
+  .face-initial {
+    width: 22px;
+    height: 22px;
+    margin-left: -8px;
+  }
+
+  .action-button:has(.action-text) {
+    justify-content: center;
+    width: 44px;
+    padding: 0;
+  }
+
+  .action-button:has(.action-text) > svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .action-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* Icon above the name, so each step fits a third of a phone without crowding */
+  .step {
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 6px;
+  }
+
+  .step-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .step-label {
+    font-size: 0.875rem;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .group-tab {
+  .step {
     transition: none;
   }
 }

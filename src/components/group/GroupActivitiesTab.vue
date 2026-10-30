@@ -28,11 +28,15 @@ const votersDialog = ref(null)
 const shownOrder = ref([])
 const justMoved = ref([]) // cards that just slid to a new place, briefly highlighted
 const sliding = ref(false) // true while cards are moving, so a tap can't land on the wrong card
+const shuffling = ref(false) // true during the "shuffle the deck" reorder (see shuffleCards)
+const newLeaderId = ref('') // a card that just climbed to first place, for its light sweep
+const rollDirection = ref({}) // activity id -> 'up' or 'down', which way its rank number rolls
 const listRef = ref(null)
 
 let toastTimer
 let slideTimer
 let highlightTimer
+let leaderTimer
 let votersTrigger // the button that opened the popup, to give focus back when it closes
 let channel // the Supabase Realtime subscription
 
@@ -176,29 +180,136 @@ const shownActivities = computed(() => {
 })
 
 const orderChanged = computed(() => shownActivities.value.some((a) => a.move !== 0))
+// The list (and its count and buttons in the intro) only once there is something to show
+const showList = computed(
+  () => !loading.value && !errorMessage.value && shownActivities.value.length > 0,
+)
 const memberCount = computed(() => Object.keys(memberNames.value).length)
 const allVoted = computed(() => shownActivities.value.every((a) => a.myVote !== 0))
 
-// Re-sort the cards. TransitionGroup slides each card to its new place,
-// and the cards that moved get a short highlight so they're easy to follow.
-function applyRanking() {
-  justMoved.value = shownActivities.value.filter((a) => a.move !== 0).map((a) => a.id)
+// The reorder's length and curve. Exponential ease-out: cards set off quickly and
+// decelerate smoothly into place, with no bounce or overshoot.
+const SHUFFLE_MS = 900
+const EASE_OUT_EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)'
+
+// Re-sort the cards when the user taps "Update rankings". The list never moves by itself,
+// so this one tap gets its own moment: see shuffleCards. Cards that moved also get a
+// short highlight, and a card that climbs to first place gets a light sweep.
+async function applyRanking() {
+  const moves = Object.fromEntries(shownActivities.value.map((a) => [a.id, a.move]))
+  const newLeader = shownActivities.value.find((a) => a.move > 0 && a.rank - a.move === 1)
+  justMoved.value = Object.keys(moves).filter((id) => moves[id] !== 0)
+  rollDirection.value = Object.fromEntries(
+    Object.entries(moves).map(([id, move]) => [id, move < 0 ? 'down' : 'up']),
+  )
+
+  // Where every card is before the re-sort, so each can fly from there to its new place
+  const before = getCardPlaces()
+  shuffling.value = true
   takeSnapshot()
   announcement.value = 'Rankings updated.'
   // The button disappears once tapped, so move keyboard focus to the list
   listRef.value?.focus({ preventScroll: true })
+  await nextTick()
 
-  // Ignore taps on the list until the slide (0.8s) has finished
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    shuffleCards(before, moves)
+  }
+
+  // Ignore taps on the list until the cards have landed
   sliding.value = true
   clearTimeout(slideTimer)
   slideTimer = setTimeout(() => {
     sliding.value = false
-  }, 900)
+    shuffling.value = false
+  }, SHUFFLE_MS + 100)
 
   clearTimeout(highlightTimer)
   highlightTimer = setTimeout(() => {
     justMoved.value = []
   }, 1800)
+
+  clearTimeout(leaderTimer)
+  newLeaderId.value = newLeader ? newLeader.id : ''
+  leaderTimer = setTimeout(() => {
+    newLeaderId.value = ''
+  }, 2000)
+}
+
+// A removed card fades out exactly where it was, pinned over its old grid slot, while the
+// cards after it slide along to close the gap
+function holdLeavingCard(el) {
+  const { offsetLeft, offsetTop, offsetWidth, offsetHeight } = el
+  Object.assign(el.style, {
+    position: 'absolute',
+    left: offsetLeft + 'px',
+    top: offsetTop + 'px',
+    width: offsetWidth + 'px',
+    height: offsetHeight + 'px',
+  })
+}
+
+// Where each card is on screen, by activity id
+function getCardPlaces() {
+  const places = {}
+  for (const item of listRef.value?.querySelectorAll('.list-item') ?? []) {
+    const { left, top } = item.getBoundingClientRect()
+    places[item.dataset.id] = { left, top }
+  }
+  return places
+}
+
+// The reorder: every card glides straight from its old place to its new one, across and
+// down the grid (FLIP: measure, re-sort, then animate from the old spot). Two layers move:
+// - the card's slot slides, setting off quickly and easing out (exponential), so it settles;
+// - the card itself rises toward you if it's climbing (a little larger, deeper shadow,
+//   passing over the others) or sinks back if it's falling (a little smaller and fainter,
+//   passing under), then returns to rest.
+function shuffleCards(before, moves) {
+  for (const item of listRef.value?.querySelectorAll('.list-item') ?? []) {
+    const id = item.dataset.id
+    if (before[id] === undefined) continue
+    const now = item.getBoundingClientRect()
+    const dx = before[id].left - now.left
+    const dy = before[id].top - now.top
+    const move = moves[id] || 0
+    const climbing = move > 0
+    const falling = move < 0
+    // Cards travelling further start a beat later, so the movement reads as a sequence
+    const delay = Math.min(Math.abs(move), 4) * 30
+
+    item.style.zIndex = climbing ? 3 : falling ? 1 : 2
+    const slide = item.animate(
+      [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }],
+      {
+        duration: SHUFFLE_MS,
+        delay,
+        easing: EASE_OUT_EXPO,
+        fill: 'backwards',
+      },
+    )
+    slide.onfinish = slide.oncancel = () => {
+      item.style.zIndex = ''
+    }
+
+    if (!climbing && !falling) continue
+    const rest = { transform: 'none', opacity: 1, boxShadow: '0 4px 16px rgb(0 0 0 / 4%)' }
+    const away = climbing
+      ? { transform: 'scale(1.025)', opacity: 1, boxShadow: '0 28px 56px rgb(0 0 0 / 16%)' }
+      : { transform: 'scale(0.975)', opacity: 0.72, boxShadow: '0 2px 8px rgb(0 0 0 / 3%)' }
+    item.firstElementChild?.animate([rest, { ...away, offset: 0.3 }, rest], {
+      duration: SHUFFLE_MS + delay,
+      easing: 'cubic-bezier(0.65, 0, 0.35, 1)',
+    })
+  }
+}
+
+// Width of one part of the tally bar: a share of the whole group, so the empty part
+// shows who still hasn't voted
+function getTallyWidth(activity, count) {
+  const voted = activity.keenVoters.length + activity.notKeenVoters.length
+  const total = Math.max(memberCount.value, voted, 1)
+  return (count / total) * 100 + '%'
 }
 
 function getPriceText(price) {
@@ -447,25 +558,60 @@ onUnmounted(() => {
   clearTimeout(toastTimer)
   clearTimeout(highlightTimer)
   clearTimeout(slideTimer)
+  clearTimeout(leaderTimer)
 })
 </script>
 
 <template>
   <div class="activities-tab" data-testid="group-activities-tab">
-    <h2 class="visually-hidden">Activities</h2>
+    <!-- Same intro as the Availability and Itinerary tabs: heading, then one line about it.
+         "How it works" sits at the end of that line, and adding more sits beside the heading,
+         so the whole header stays two lines, even on a phone. -->
+    <div class="tab-intro">
+      <div class="intro-text">
+        <h2 class="h5 fw-bold mb-1">
+          Shared with the group
+          <span v-if="showList" class="list-count">{{ shownActivities.length }}</span>
+        </h2>
+        <p class="text-secondary mb-0">
+          Vote on the ideas everyone has shared.
+          <button
+            v-if="showList"
+            type="button"
+            class="btn btn-link help-toggle hit-area"
+            :aria-expanded="showHelp"
+            aria-controls="voting-help"
+            data-testid="voting-help-toggle"
+            @click="showHelp = !showHelp"
+          >
+            How it works
+          </button>
+        </p>
+      </div>
+      <!-- A round + on a phone; the full label from tablet width up -->
+      <RouterLink
+        v-if="showList"
+        to="/activities"
+        class="btn btn-outline-dark rounded-pill add-button"
+        aria-label="Add from Activities"
+        title="Add from Activities"
+        data-testid="add-from-activities"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+        <span class="add-label">Add from Activities</span>
+      </RouterLink>
+    </div>
     <p class="visually-hidden" role="status">{{ announcement }}</p>
 
     <!-- Placeholder cards while loading, shaped like the real ones -->
-    <div v-if="loading" data-testid="group-activities-loading">
+    <div v-if="loading" class="activity-list" data-testid="group-activities-loading">
       <span class="visually-hidden">Loading activities...</span>
       <div v-for="n in 3" :key="n" class="vote-card skeleton placeholder-glow" aria-hidden="true">
-        <div class="card-main">
-          <span class="placeholder thumb"></span>
-          <div>
-            <span class="placeholder col-7 mb-2"></span>
-            <span class="placeholder col-4 d-block mb-3"></span>
-            <span class="placeholder col-9 d-block"></span>
-          </div>
+        <span class="placeholder photo"></span>
+        <div class="card-body">
+          <span class="placeholder col-7"></span>
+          <span class="placeholder col-4"></span>
+          <span class="placeholder col-9"></span>
           <div class="vote-buttons">
             <span class="placeholder vote-placeholder"></span>
             <span class="placeholder vote-placeholder"></span>
@@ -509,27 +655,6 @@ onUnmounted(() => {
     </div>
 
     <template v-else>
-      <!-- One compact row, so the first card's vote buttons fit on a phone's first screen -->
-      <div class="toolbar">
-        <button
-          type="button"
-          class="btn btn-link help-toggle"
-          :aria-expanded="showHelp"
-          aria-controls="voting-help"
-          data-testid="voting-help-toggle"
-          @click="showHelp = !showHelp"
-        >
-          How it works
-        </button>
-        <RouterLink
-          to="/activities"
-          class="btn btn-outline-dark rounded-pill px-3 add-button"
-          data-testid="add-from-activities"
-        >
-          + Add<span class="d-none d-sm-inline">&nbsp;from Activities</span>
-        </RouterLink>
-      </div>
-
       <div v-if="showHelp" id="voting-help" class="help-panel" data-testid="voting-help">
         <ul class="small mb-0">
           <li>Thumbs up if you're keen, thumbs down if you're not. Tap again to take it back.</li>
@@ -550,84 +675,180 @@ onUnmounted(() => {
           tag="div"
           name="rank"
           class="activity-list"
-          :class="{ sliding }"
+          :class="{ sliding, shuffling }"
           aria-label="Group activities"
+          @before-leave="holdLeavingCard"
         >
-          <div v-for="activity in shownActivities" :key="activity.id" class="list-item">
+          <div
+            v-for="activity in shownActivities"
+            :key="activity.id"
+            class="list-item"
+            :data-id="activity.id"
+          >
             <article
               class="vote-card"
-              :class="{ 'just-moved': justMoved.includes(activity.id) }"
+              :class="{
+                'just-moved': justMoved.includes(activity.id),
+                'new-leader': newLeaderId === activity.id,
+              }"
               :aria-labelledby="'name-' + activity.id"
               data-testid="shared-activity"
             >
-              <div class="card-main">
-                <RouterLink
-                  :to="{ name: 'activity-detail', params: { id: activity.id } }"
-                  class="thumb"
-                  tabindex="-1"
-                  aria-hidden="true"
+              <!-- Photo, or a plain strip naming the category when there isn't one -->
+              <RouterLink
+                :to="{ name: 'activity-detail', params: { id: activity.id } }"
+                class="photo"
+                :class="{ 'no-photo': !activity.imageUrl || brokenImages[activity.id] }"
+                tabindex="-1"
+                aria-hidden="true"
+              >
+                <img
+                  v-if="activity.imageUrl && !brokenImages[activity.id]"
+                  :src="activity.imageUrl"
+                  alt=""
+                  loading="lazy"
+                  @error="brokenImages[activity.id] = true"
+                />
+                <span v-else class="photo-fallback">{{ activity.category || 'Activity' }}</span>
+
+                <!-- The group's current favourite, once it has more keen than not keen -->
+                <span v-if="activity.rank === 1 && activity.score > 0" class="top-pick"
+                  >Top pick</span
                 >
-                  <img
-                    v-if="activity.imageUrl && !brokenImages[activity.id]"
-                    :src="activity.imageUrl"
-                    alt=""
-                    loading="lazy"
-                    @error="brokenImages[activity.id] = true"
-                  />
-                  <span v-else class="thumb-fallback">{{ activity.name.charAt(0) }}</span>
-                  <span class="rank-badge" data-testid="activity-rank">
-                    {{ activity.rank }}
+
+                <!-- A single sweep of light across the photo when a card climbs to first place -->
+                <span v-if="newLeaderId === activity.id" class="sheen"></span>
+              </RouterLink>
+
+              <div class="card-body">
+                <!-- The card's place on the leaderboard, beside its name like a chart.
+                     The number rolls like an odometer when the rankings update. -->
+                <span class="rank" aria-hidden="true">
+                  <Transition :name="'roll-' + (rollDirection[activity.id] || 'up')" mode="out-in">
+                    <span :key="activity.rank" class="rank-number" data-testid="activity-rank">{{
+                      activity.rank
+                    }}</span>
+                  </Transition>
+                </span>
+                <div class="name-row">
+                  <h4 :id="'name-' + activity.id" class="activity-name">
+                    <RouterLink
+                      :to="{ name: 'activity-detail', params: { id: activity.id } }"
+                      data-testid="shared-activity-name"
+                    >
+                      {{ activity.name }}
+                    </RouterLink>
+                  </h4>
+                  <span v-if="activity.isNew" class="chip chip-new">Just shared</span>
+                  <span
+                    v-if="activity.move !== 0"
+                    class="chip"
+                    :class="activity.move < 0 ? 'chip-down' : 'chip-up'"
+                    :title="getMoveLabel(activity)"
+                    data-testid="rank-move"
+                  >
+                    <!-- Arrow icons adapted from Feather Icons (MIT licence) -->
+                    <svg v-if="activity.move < 0" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 5v14M19 12l-7 7-7-7" />
+                    </svg>
+                    <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 19V5M5 12l7-7 7 7" />
+                    </svg>
+                    <span aria-hidden="true">{{ Math.abs(activity.move) }}</span>
+                    <span class="visually-hidden">{{ getMoveLabel(activity) }}</span>
                   </span>
-                </RouterLink>
+                </div>
 
-                <div class="card-info">
-                  <div class="name-row">
-                    <h4 :id="'name-' + activity.id" class="activity-name">
-                      <RouterLink
-                        :to="{ name: 'activity-detail', params: { id: activity.id } }"
-                        data-testid="shared-activity-name"
-                      >
-                        {{ activity.name }}
-                      </RouterLink>
-                    </h4>
-                    <span v-if="activity.isNew" class="chip chip-new">Just shared</span>
-                    <span
-                      v-if="activity.move !== 0"
-                      class="chip"
-                      :class="activity.move < 0 ? 'chip-down' : 'chip-up'"
-                      :title="getMoveLabel(activity)"
-                      data-testid="rank-move"
-                    >
-                      <!-- Arrow icons adapted from Feather Icons (MIT licence) -->
-                      <svg v-if="activity.move < 0" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 5v14M19 12l-7 7-7-7" />
-                      </svg>
-                      <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 19V5M5 12l7-7 7 7" />
-                      </svg>
-                      <span aria-hidden="true">{{ Math.abs(activity.move) }}</span>
-                      <span class="visually-hidden">{{ getMoveLabel(activity) }}</span>
-                    </span>
-                  </div>
+                <p class="meta">
+                  <span v-if="activity.category">{{ activity.category }} · </span>
+                  {{ getPriceText(activity.price) }}
+                </p>
+                <p class="meta">
+                  {{ getSharedByText(activity) }}
+                  <button
+                    v-if="activity.sharedBy === userId"
+                    :id="'remove-' + activity.id"
+                    type="button"
+                    class="btn btn-link text-link-danger hit-area"
+                    data-testid="remove-activity"
+                    @click="confirmRemoveId = activity.id"
+                  >
+                    Remove
+                  </button>
+                </p>
 
-                  <p class="meta">
-                    <span v-if="activity.category">{{ activity.category }} · </span>
-                    {{ getPriceText(activity.price) }}
-                  </p>
-                  <p class="meta">
-                    {{ getSharedByText(activity) }}
+                <!-- How the group's votes split: keen, not keen, and still to vote -->
+                <span class="tally" aria-hidden="true">
+                  <span
+                    class="tally-keen"
+                    :style="{ width: getTallyWidth(activity, activity.keenVoters.length) }"
+                  ></span>
+                  <span
+                    class="tally-not-keen"
+                    :style="{ width: getTallyWidth(activity, activity.notKeenVoters.length) }"
+                  ></span>
+                </span>
+
+                <!-- Your vote on the left, who has voted on the right -->
+                <div class="card-footer">
+                  <!-- Vote buttons: the user's current vote is filled in -->
+                  <div
+                    class="vote-buttons"
+                    role="group"
+                    :aria-label="'Your vote on ' + activity.name"
+                  >
+                    <!-- Thumb icons adapted from Feather Icons (MIT licence), https://feathericons.com -->
                     <button
-                      v-if="activity.sharedBy === userId"
-                      :id="'remove-' + activity.id"
                       type="button"
-                      class="btn btn-link text-link-danger hit-area"
-                      data-testid="remove-activity"
-                      @click="confirmRemoveId = activity.id"
+                      class="vote-button keen"
+                      :class="{ active: activity.myVote === 1 }"
+                      :aria-pressed="activity.myVote === 1"
+                      :aria-busy="isSaving(activity.id)"
+                      :aria-label="
+                        'Keen on ' + activity.name + ', ' + activity.keenVoters.length + ' so far'
+                      "
+                      :title="activity.myVote === 1 ? 'Tap again to take back your vote' : 'Keen'"
+                      data-testid="upvote-button"
+                      @click="vote(activity, 1)"
                     >
-                      Remove
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"
+                        />
+                      </svg>
+                      <span class="vote-count" data-testid="keen-count">{{
+                        activity.keenVoters.length
+                      }}</span>
                     </button>
-                  </p>
-
+                    <button
+                      type="button"
+                      class="vote-button not-keen"
+                      :class="{ active: activity.myVote === -1 }"
+                      :aria-pressed="activity.myVote === -1"
+                      :aria-busy="isSaving(activity.id)"
+                      :aria-label="
+                        'Not keen on ' +
+                        activity.name +
+                        ', ' +
+                        activity.notKeenVoters.length +
+                        ' so far'
+                      "
+                      :title="
+                        activity.myVote === -1 ? 'Tap again to take back your vote' : 'Not keen'
+                      "
+                      data-testid="downvote-button"
+                      @click="vote(activity, -1)"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"
+                        />
+                      </svg>
+                      <span class="vote-count" data-testid="not-keen-count">{{
+                        activity.notKeenVoters.length
+                      }}</span>
+                    </button>
+                  </div>
                   <!-- Opens the popup showing who gave a thumbs up or down -->
                   <!-- Users icon adapted from Feather Icons (MIT licence) -->
                   <button
@@ -644,71 +865,6 @@ onUnmounted(() => {
                       />
                     </svg>
                     {{ getVotedText(activity) }}
-                  </button>
-                </div>
-
-                <!-- Vote buttons: the user's current vote is filled in -->
-                <div
-                  class="vote-buttons"
-                  role="group"
-                  :aria-label="'Your vote on ' + activity.name"
-                >
-                  <!-- Thumb icons adapted from Feather Icons (MIT licence), https://feathericons.com -->
-                  <button
-                    type="button"
-                    class="vote-button keen"
-                    :class="{ active: activity.myVote === 1 }"
-                    :aria-pressed="activity.myVote === 1"
-                    :aria-busy="isSaving(activity.id)"
-                    :aria-label="
-                      'Thumbs up for ' +
-                      activity.name +
-                      ', ' +
-                      activity.keenVoters.length +
-                      ' so far'
-                    "
-                    :title="
-                      activity.myVote === 1 ? 'Tap again to take back your vote' : 'Thumbs up'
-                    "
-                    data-testid="upvote-button"
-                    @click="vote(activity, 1)"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path
-                        d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"
-                      />
-                    </svg>
-                    <span class="vote-count" data-testid="keen-count">{{
-                      activity.keenVoters.length
-                    }}</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="vote-button not-keen"
-                    :class="{ active: activity.myVote === -1 }"
-                    :aria-pressed="activity.myVote === -1"
-                    :aria-busy="isSaving(activity.id)"
-                    :aria-label="
-                      'Thumbs down for ' +
-                      activity.name +
-                      ', ' +
-                      activity.notKeenVoters.length +
-                      ' so far'
-                    "
-                    :title="
-                      activity.myVote === -1 ? 'Tap again to take back your vote' : 'Thumbs down'
-                    "
-                    data-testid="downvote-button"
-                    @click="vote(activity, -1)"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path
-                        d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"
-                      />
-                    </svg>
-                    <span class="vote-count" data-testid="not-keen-count">{{
-                      activity.notKeenVoters.length
-                    }}</span>
                   </button>
                 </div>
               </div>
@@ -893,12 +1049,32 @@ onUnmounted(() => {
   content: '';
 }
 
-/* Toolbar: help, and adding more */
-.toolbar {
+/* Heading and its line on the left, like the other tabs; the add button on the right,
+   level with the heading */
+.tab-intro {
   display: flex;
-  align-items: center;
-  gap: 0.5rem 1rem;
-  margin-bottom: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.intro-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* How many activities are shared, like the section counts on the Groups page */
+.list-count {
+  margin-left: 0.35rem;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: #f0f0f0;
+  color: #555;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  vertical-align: 3px;
 }
 
 /* Text buttons in near-black, like the links on the Activities page */
@@ -909,24 +1085,36 @@ onUnmounted(() => {
   --bs-btn-active-color: #111;
 }
 
+/* "How it works" reads as a link at the end of the line; hit-area enlarges its tap target */
 .help-toggle {
-  min-height: 44px;
-  margin-left: auto;
-  padding: 0 0.25rem;
+  padding: 0;
+  border: 0;
+  font-size: inherit;
   font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.help-toggle:hover {
   text-decoration: underline;
+  text-underline-offset: 3px;
+  vertical-align: baseline;
+  white-space: nowrap;
 }
 
 .add-button {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-height: 44px;
+  padding-inline: 1rem;
   white-space: nowrap;
+}
+
+.add-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 
 .help-panel {
@@ -940,75 +1128,144 @@ onUnmounted(() => {
   margin-top: 0.25rem;
 }
 
-.list-item {
-  padding-bottom: 0.75rem;
+/* Two columns of cards, read left to right then down (one column on smaller screens).
+   Positioned so a removed card can be pinned in place while it fades. */
+.activity-list {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem 1rem;
 }
 
-/* Cards match ActivityCard: soft border, rounded corners, light shadow */
+/* Positioned so a card can pass over (or under) the others during the shuffle;
+   flex so cards in the same row stretch to the same height */
+.list-item {
+  position: relative;
+  display: flex;
+}
+
+/* Photo on top, details and votes underneath.
+   Same family as ActivityCard: soft border, rounded corners, light shadow. */
 .vote-card {
-  padding: 1rem;
+  display: grid;
+  flex: 1;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+  overflow: hidden;
   background: var(--bs-body-bg);
   border: 1px solid var(--bs-border-color-translucent);
-  border-radius: 18px;
+  border-radius: 20px;
   box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
   transition: box-shadow 0.2s ease;
 }
 
 .vote-card:hover {
-  box-shadow: 0 8px 24px rgb(0 0 0 / 8%);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 8%);
 }
 
-.skeleton {
-  margin-bottom: 0.75rem;
-}
-
-.card-main {
-  display: grid;
-  grid-template-columns: 96px minmax(0, 1fr) auto;
-  gap: 1rem;
-  align-items: center;
-}
-
-/* Photo, with its place on the shortlist in the corner */
-.thumb {
+/* A wide, short photo, so it sets the scene without making the card tall */
+.photo {
   position: relative;
   display: block;
-  width: 96px;
-  height: 96px;
+  aspect-ratio: 5 / 2;
   overflow: hidden;
-  border-radius: 14px;
   background: var(--bs-secondary-bg);
 }
 
-.thumb img {
+.photo img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.thumb-fallback {
-  display: grid;
-  place-items: center;
-  height: 100%;
-  color: var(--bs-secondary-color);
-  font-size: 2rem;
-  font-weight: 700;
+.vote-card:hover .photo img {
+  transform: scale(1.04);
 }
 
-.rank-badge {
+/* No photo (e.g. places from Google, whose photos aren't stored): a calm strip naming the
+   category, the same as the cards on the Activities page */
+.photo-fallback {
   position: absolute;
-  top: 6px;
-  left: 6px;
+  inset: 0;
   display: grid;
   place-items: center;
-  min-width: 26px;
-  height: 26px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: rgba(var(--bs-dark-rgb), 0.8);
-  color: white;
-  font-size: 0.8rem;
+  background: #f3f3f3;
+  color: #666;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* The rank, numbered like a chart: the same size and weight as the name, in grey, so it
+   reads as part of the title line rather than a separate graphic. The box clips the
+   number so it rolls in and out like an odometer. */
+.rank {
+  grid-row: 1;
+  align-self: start;
+  height: 1.2em;
+  overflow: hidden;
+  color: #8a8a8a;
+  font-size: 1.25rem;
   font-weight: 700;
+  line-height: 1.2;
+}
+
+.rank-number {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Top pick" on the leading card: a crisp white label in the photo's top corner */
+.top-pick {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 2;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: white;
+  color: #111;
+  font-size: 0.75rem;
+  font-weight: 700;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 18%);
+}
+
+/* Rank beside the name and its two detail lines; the tally and the footer run the full
+   width underneath, pushed to the bottom so cards side by side line up */
+.card-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto 1fr auto;
+  gap: 0.3rem 0.6rem;
+  min-width: 0;
+  padding: 1.1rem 1.25rem 1.25rem 1rem;
+}
+
+.card-body > .name-row,
+.card-body > .meta {
+  grid-column: 2;
+}
+
+.card-body > .tally {
+  grid-column: 1 / -1;
+  align-self: end;
+  margin-top: 0.75rem;
+}
+
+.card-body > .card-footer {
+  grid-column: 1 / -1;
+}
+
+/* Your vote on the left, "2 of 3 voted" on the right */
+.card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 
 .name-row {
@@ -1021,10 +1278,12 @@ onUnmounted(() => {
 
 .activity-name {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  line-height: 1.3;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
   overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 .activity-name a {
@@ -1087,13 +1346,37 @@ onUnmounted(() => {
   color: var(--bs-secondary-color);
 }
 
+/* Tally bar: keen, not keen, and the grey rest is who still has to vote */
+.tally {
+  display: flex;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #ececec;
+}
+
+.tally-keen,
+.tally-not-keen {
+  height: 100%;
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tally-keen {
+  background: var(--bs-success);
+}
+
+.tally-not-keen {
+  background: #f1aeb5;
+}
+
 /* "3 of 4 voted" button that opens the popup */
 .voters-button {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 0.35rem;
   min-height: 44px;
-  margin: 0.125rem 0 -0.5rem -0.25rem;
+  margin-right: -0.25rem;
   padding: 0 0.25rem;
   font-size: 0.875rem;
   font-weight: 600;
@@ -1165,7 +1448,7 @@ onUnmounted(() => {
   border-radius: 999px;
   background: var(--bs-secondary-bg);
   color: var(--bs-secondary-color);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
@@ -1183,7 +1466,7 @@ onUnmounted(() => {
   padding: 0.2rem 0.7rem;
   border-radius: 999px;
   background: var(--bs-tertiary-bg);
-  font-size: 0.9rem;
+  font-size: 0.875rem;
 }
 
 .voters-none {
@@ -1192,12 +1475,15 @@ onUnmounted(() => {
   font-size: 0.875rem;
 }
 
-/* Thumbs up (keen) / thumbs down (not keen) buttons */
+/* Keen (thumbs up) / not keen (thumbs down) buttons, side by side under the details.
+   Icon and count only, so they stay compact pills rather than stretching across the card. */
 .vote-buttons {
   display: flex;
-  flex-direction: column;
   gap: 0.5rem;
-  min-width: 5.5rem;
+}
+
+.vote-buttons > * {
+  flex: 0 0 5.5rem;
 }
 
 .vote-button {
@@ -1274,7 +1560,7 @@ onUnmounted(() => {
   padding: 0 0.45rem;
   border-radius: 999px;
   background: rgba(var(--bs-emphasis-color-rgb), 0.06);
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
@@ -1286,10 +1572,11 @@ onUnmounted(() => {
 .remove-confirm {
   display: flex;
   flex-wrap: wrap;
+  grid-column: 1 / -1;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem 1rem;
-  margin-top: 0.75rem;
+  margin: 0 1rem 1rem;
   padding: 0.75rem;
   border-radius: 12px;
   background: var(--bs-danger-bg-subtle);
@@ -1319,36 +1606,101 @@ onUnmounted(() => {
   min-height: 44px;
 }
 
-/* Block layout (not flex) so a card being removed stays where it was while it fades */
-.activity-list {
-  position: relative;
-}
-
 .activity-list.sliding {
   pointer-events: none;
 }
 
-/* Cards glide to their new places when the order updates: slow enough to follow
-   a card that moves several places, easing out so it settles gently */
+/* Cards glide up to fill the gap when one is removed. "Update rankings" uses its own
+   shuffle (shuffleCards in the script), so this glide is switched off while it plays. */
 .rank-move {
   transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* A card that just moved glows briefly, so your eye can find where it landed */
+.activity-list.shuffling .rank-move {
+  transition: none;
+}
+
+/* The rank number rolls like an odometer: climbing cards roll up, falling cards roll down.
+   The old number leaves quickly; the new one eases out (exponential) into place. */
+.roll-up-enter-active,
+.roll-down-enter-active {
+  transition:
+    transform 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.1s,
+    opacity 0.3s ease-out 0.1s;
+}
+
+.roll-up-leave-active,
+.roll-down-leave-active {
+  transition:
+    transform 0.18s cubic-bezier(0.7, 0, 0.84, 0),
+    opacity 0.18s ease-in;
+}
+
+.roll-up-enter-from,
+.roll-down-leave-to {
+  opacity: 0;
+  transform: translateY(85%);
+}
+
+.roll-up-leave-to,
+.roll-down-enter-from {
+  opacity: 0;
+  transform: translateY(-85%);
+}
+
+/* A card that climbs to first place: once it has nearly landed, one soft band of light
+   sweeps across its photo and the "Top pick" label wipes in */
+.sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    105deg,
+    rgb(255 255 255 / 0%) 30%,
+    rgb(255 255 255 / 42%) 50%,
+    rgb(255 255 255 / 0%) 70%
+  );
+  transform: translateX(-100%);
+  pointer-events: none;
+  animation: sheen 1s cubic-bezier(0.65, 0, 0.35, 1) 0.55s both;
+}
+
+@keyframes sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.new-leader .top-pick {
+  animation: top-pick-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.75s both;
+}
+
+@keyframes top-pick-in {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0 round 999px);
+  }
+
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 999px);
+  }
+}
+
+/* A card that just moved gets a ring as it lands, so your eye can find where it went */
 .vote-card.just-moved {
-  animation: landed 1.8s ease-out;
+  animation: landed 1.2s ease-out 0.6s;
 }
 
 @keyframes landed {
-  0%,
-  35% {
+  from {
     border-color: #111;
     box-shadow:
-      0 0 0 3px rgb(17 17 17 / 18%),
+      0 0 0 3px rgb(17 17 17 / 14%),
       0 8px 24px rgb(0 0 0 / 8%);
   }
 
-  100% {
+  to {
     box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
   }
 }
@@ -1366,15 +1718,20 @@ onUnmounted(() => {
   transform: scale(0.97);
 }
 
-.rank-leave-active {
-  position: absolute;
-  width: 100%;
+/* Loading placeholders */
+.placeholder.photo {
+  border-radius: 0;
+  background-color: currentcolor;
 }
 
-/* Loading placeholders */
-.placeholder.thumb {
-  height: 96px;
-  background-color: currentcolor;
+.skeleton .card-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.skeleton .card-body .placeholder:not(.vote-placeholder) {
+  display: block;
+  height: 1rem;
 }
 
 .vote-placeholder {
@@ -1516,51 +1873,61 @@ onUnmounted(() => {
   transform: translateY(0.75rem);
 }
 
-/* Phones: smaller photo, the vote buttons get a full-width row of their own,
+/* Tablets: a narrower photo column */
+/* Below tablet width the cards stack in one column */
+@media (max-width: 767.98px) {
+  .activity-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Phones: a slightly taller photo so it still shows something at this width,
    and the floating bits span the screen */
 @media (max-width: 575.98px) {
-  .toolbar {
-    gap: 0.5rem;
+  /* One column here, so a card without a photo doesn't need to match its neighbour:
+     a slim band instead of a big empty block */
+  .photo.no-photo {
+    aspect-ratio: 5 / 1;
+  }
+
+  .add-button {
+    width: 44px;
+    padding: 0;
+  }
+
+  .add-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .vote-card {
-    padding: 0.85rem;
+    border-radius: 18px;
   }
 
-  .card-main {
-    grid-template-columns: 64px minmax(0, 1fr);
-    gap: 0.75rem;
-    align-items: start;
+  .photo {
+    aspect-ratio: 2 / 1;
   }
 
-  .thumb,
-  .placeholder.thumb {
-    width: 64px;
-    height: 64px;
+  .top-pick {
+    top: 10px;
+    left: 10px;
   }
 
-  .rank-badge {
-    top: 4px;
-    left: 4px;
-    min-width: 22px;
-    height: 22px;
-    font-size: 0.75rem;
-  }
-
-  .vote-buttons {
-    grid-column: 1 / -1;
-    flex-direction: row;
-    min-width: 0;
-  }
-
-  .vote-button,
-  .vote-placeholder {
-    flex: 1;
+  .card-body {
+    padding: 0.9rem 1rem 1rem 0.85rem;
   }
 
   .vote-button {
     gap: 0.4rem;
     padding: 0.45rem 0.6rem;
+  }
+
+  .remove-confirm {
+    margin: 0 0.75rem 0.75rem;
   }
 
   .floating {
@@ -1576,13 +1943,39 @@ onUnmounted(() => {
   }
 }
 
+/* Reduced motion: no glide (the script skips it), no rolling numbers or light sweep;
+   cards simply appear in their new places with the ring around the ones that moved */
 @media (prefers-reduced-motion: reduce) {
   .rank-move,
   .rank-enter-active,
   .rank-leave-active,
   .float-enter-active,
-  .float-leave-active {
+  .float-leave-active,
+  .roll-up-enter-active,
+  .roll-up-leave-active,
+  .roll-down-enter-active,
+  .roll-down-leave-active,
+  .photo img,
+  .tally-keen,
+  .tally-not-keen {
     transition: none;
+  }
+
+  .vote-card:hover .photo img {
+    transform: none;
+  }
+
+  .new-leader .top-pick {
+    animation: none;
+  }
+
+  /* No glide to wait for, so the ring shows straight away */
+  .vote-card.just-moved {
+    animation-delay: 0s;
+  }
+
+  .sheen {
+    display: none;
   }
 }
 </style>

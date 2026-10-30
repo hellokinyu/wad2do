@@ -272,7 +272,8 @@ test('group pages resolve activity relationships and load names without requesti
   await expect(page.getByTestId('member-item').first().getByTestId('member-avatar')).toHaveCount(0)
   await page.getByTestId('tab-availability').click()
   await expect(page.getByTestId('responded-list')).toContainText('Friend')
-  expect(calls(state, 'get_group_member_names')).toHaveLength(3)
+  // Once each for the hero's member faces, the Members panel and the Availability tab
+  expect(calls(state, 'get_group_member_names')).toHaveLength(4)
   expect(calls(state, 'profiles').every((request) => request.select === 'is_admin')).toBe(true)
 })
 
