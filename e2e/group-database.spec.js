@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { mockUser, signInMockUser } from './helpers/auth'
+import { mockRealtime } from './helpers/realtime'
 
 const groupId = '44444444-4444-4444-8444-444444444444'
 const memberId = '66666666-6666-4666-8666-666666666666'
@@ -23,6 +24,10 @@ async function mockGroups(page) {
     },
     requests: [],
     availability: [],
+    members: [
+      { id: mockUser.id, display_name: 'Demo User' },
+      { id: memberId, display_name: 'Friend' },
+    ],
     created: null,
     fail: '',
     loseCreateResponse: false,
@@ -39,6 +44,8 @@ async function mockGroups(page) {
       select: url.searchParams.get('select'),
       body: request.postDataJSON(),
     })
+    if (state.fail === endpoint)
+      return route.fulfill({ status: 500, json: { message: 'Simulated failure' } })
     if (endpoint === 'profiles') return route.fulfill({ json: { is_admin: false } })
     if (url.pathname.includes('/rpc/')) {
       const body = request.postDataJSON()
@@ -58,10 +65,7 @@ async function mockGroups(page) {
       }
       if (endpoint === 'get_group_member_names')
         return route.fulfill({
-          json: [
-            { id: mockUser.id, display_name: 'Demo User' },
-            { id: memberId, display_name: 'Friend' },
-          ],
+          json: state.members,
         })
       if (endpoint === 'create_group') {
         state.created ??= {
@@ -149,6 +153,59 @@ async function mockGroups(page) {
 
 const calls = (state, endpoint) => state.requests.filter((request) => request.endpoint === endpoint)
 const slot = (page, time) => page.getByTestId('slot-2026-10-30T' + time)
+
+test('live availability, membership and time changes refresh without erasing a pending selection', async ({ page }) => {
+  const state = await mockGroups(page)
+  const realtime = await mockRealtime(page)
+  const topic = 'group-availability-' + groupId
+  await page.addInitScript((id) => localStorage.setItem('avail-popup-seen-' + id, '1'), groupId)
+  await page.goto(`/groups/${groupId}/availability`)
+  await expect.poll(() => realtime.channels.has('realtime:' + topic)).toBe(true)
+  state.holdSave = true
+  await slot(page, '10:00').click()
+  await expect.poll(() => !!state.releaseSave).toBe(true)
+  state.availability.push({ user_id: memberId, slot_start: '2026-10-30T10:00:00+08:00' })
+  realtime.emit(topic, 'availability', 'INSERT', { group_id: groupId, user_id: memberId })
+  await expect(page.getByTestId('responded-list')).toContainText('Friend')
+  await expect(page.getByTestId('responded-list').locator('li.done')).toHaveCount(1)
+  await expect(slot(page, '10:00')).toHaveClass(/slot-free/)
+  state.releaseSave()
+  await expect(page.getByTestId('responded-list').locator('li.done')).toHaveCount(2)
+  await page.getByTestId('mode-heatmap').click()
+  await expect(slot(page, '10:00')).toHaveText('🎉')
+  await slot(page, '11:00').click()
+  Object.assign(state.group, {
+    chosen_start: '2026-10-30T13:00:00+08:00', chosen_end: '2026-10-30T14:00:00+08:00',
+  })
+  realtime.emit(topic, 'groups', 'UPDATE', { id: groupId })
+  await expect(page.getByTestId('chosen-slot')).toContainText('1:00pm')
+  await expect(slot(page, '11:00')).toHaveClass(/slot-picked/)
+  state.members = state.members.filter((member) => member.id !== memberId)
+  state.availability = state.availability.filter((row) => row.user_id !== memberId)
+  realtime.emit(topic, 'group_members', 'DELETE', { group_id: groupId, user_id: memberId })
+  await expect(page.getByTestId('responded-list').locator('li')).toHaveCount(1)
+  await page.getByTestId('back-to-groups').click()
+  await expect.poll(() => realtime.left.includes('realtime:' + topic)).toBe(true)
+})
+
+test('a failed live refresh keeps local availability and offers a retry', async ({ page }) => {
+  const state = await mockGroups(page)
+  const realtime = await mockRealtime(page)
+  const topic = 'group-availability-' + groupId
+  await page.goto(`/groups/${groupId}/availability`)
+  await expect.poll(() => realtime.channels.has('realtime:' + topic)).toBe(true)
+  state.fail = 'replace_group_availability'
+  await slot(page, '10:00').click()
+  await expect(page.getByTestId('availability-save-error')).toBeVisible()
+  state.fail = 'availability'
+  realtime.emit(topic, 'availability', 'DELETE', { group_id: groupId, user_id: memberId })
+  await expect(page.getByTestId('availability-refresh-error')).toBeVisible()
+  await expect(slot(page, '10:00')).toHaveClass(/slot-free/)
+  state.fail = ''
+  await page.getByTestId('availability-refresh-error').getByRole('button').click()
+  await expect(page.getByTestId('availability-refresh-error')).toHaveCount(0)
+  await expect(slot(page, '10:00')).toHaveClass(/slot-free/)
+})
 
 async function fillCreate(page) {
   await page.goto('/groups')

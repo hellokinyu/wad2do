@@ -1,10 +1,11 @@
 <script setup>
-import { ref, computed, nextTick, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { getVisitHoursWarnings } from '@/lib/openingHours'
 import { fetchTravelOptions } from '@/lib/travelOptions'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
+import { useAuth } from '@/composables/useAuth'
 import ItineraryTravelOptions from '@/components/group/ItineraryTravelOptions.vue'
 
 const TRAVEL_MINUTES = 30
@@ -57,6 +58,11 @@ function whyNotInPlan(activity) {
 const route = useRoute()
 const router = useRouter()
 const groupId = route.params.id // the :id in /groups/:id/itinerary
+const { user } = useAuth()
+const loadedUserId = user.value?.id
+let savedRevision
+let disposed = false
+let saveController
 
 const group = ref(null) // { chosen_start, chosen_end, budget_per_person }
 const loading = ref(true)
@@ -65,11 +71,12 @@ const errorMessage = ref('')
 async function loadGroup() {
   const { data, error } = await supabase
     .from('groups')
-    .select('chosen_start, chosen_end, budget_per_person')
+    .select('chosen_start, chosen_end, budget_per_person, plan_revision')
     .eq('id', groupId)
     .maybeSingle()
   if (error) throw error
   group.value = data
+  savedRevision = data?.plan_revision
 }
 
 // Supabase timestamp (UTC) -> '2026-10-25T10:00' in Singapore time (UTC+8)
@@ -201,19 +208,28 @@ function startEditing() {
 }
 
 function discardChanges() {
-  itinerary.value = savedCopy
   isEditing.value = false
+  dayStart.value = savedCopy.stops[0]?.start || '10:00'
+  itinerary.value = savedCopy
 }
 
 const saving = ref(false)
 const saveError = ref('')
+const saveConflict = ref(false)
 
 // Save the plan for this group (creates the row the first time, updates it after)
 async function saveChanges() {
   if (saving.value) return false
   saving.value = true
   saveError.value = ''
+  saveConflict.value = false
   try {
+    let pending
+    do {
+      pending = travelPromise
+      await pending
+    } while (pending !== travelPromise)
+    if (disposed || user.value?.id !== loadedUserId) throw new Error('Your account changed.')
     // Only save the fields from the brief. Name, photo etc. come from the activity.
     const stopsToSave = itinerary.value.stops.map((s) => ({
       activity_id: s.activity_id,
@@ -223,33 +239,39 @@ async function saveChanges() {
       reason: s.reason,
       travel_mode: s.travel_mode || null,
     }))
-    const totalCostToSave = totalCost.value
-
-    const { error } = await requestWithTimeout(async (signal) => {
-      const { data: userData, error: userError } = await supabase.auth.getUser()
-      if (userError) throw userError
-      if (!userData.user) throw new Error('Log in before saving the plan.')
-      signal.throwIfAborted()
-      return supabase.from('itineraries').upsert(
-        {
-          group_id: groupId,
-          stops: stopsToSave,
-          total_cost: totalCostToSave,
-          updated_by: userData.user.id,
-        },
-        { onConflict: 'group_id' },
-      ).abortSignal(signal)
-    })
+    saveController = new AbortController()
+    const { data, error } = await requestWithTimeout((signal) =>
+      supabase.rpc('save_group_itinerary', {
+        p_group_id: groupId,
+        p_expected_revision: savedRevision,
+        p_expected_user_id: loadedUserId,
+        p_stops: stopsToSave,
+      }).abortSignal(signal),
+      saveController,
+    )
     if (error) throw error
+    savedRevision = data
     isEditing.value = false // only leave edit mode if it worked
     return true
   } catch (error) {
     console.log(error)
-    saveError.value = "Couldn't save the plan. Please try again."
+    saveConflict.value = error?.code === '40001'
+    saveError.value = saveConflict.value
+      ? 'The plan or group time changed. Your edits are still here. Load the latest plan before saving.'
+      : "Couldn't save the plan. Please try again."
     return false
   } finally {
     saving.value = false
   }
+}
+
+async function reloadLatestPlan() {
+  if (isEditing.value && !confirm('Load the latest plan and discard your unsaved edits?')) return
+  const query = { ...route.query }
+  delete query.replan
+  await router.replace({ query })
+  isEditing.value = false
+  await loadPage()
 }
 
 function removeStop(index) {
@@ -292,6 +314,9 @@ function addStop(activity) {
 async function replan() {
   startEditing()
   loading.value = true
+  travelRequest += 1
+  travelLoading.value = false
+  travelPromise = Promise.resolve()
   saveError.value = ''
   try {
     await buildPlan()
@@ -430,8 +455,12 @@ async function buildPlan() {
 // Load an existing plan, or build and save one before showing it.
 async function loadPage() {
   loading.value = true
+  travelRequest += 1
+  travelLoading.value = false
+  travelPromise = Promise.resolve()
   errorMessage.value = ''
   saveError.value = ''
+  saveConflict.value = false
   try {
     await loadGroup()
     await loadVotes()
@@ -465,6 +494,9 @@ async function loadPage() {
 onMounted(loadPage)
 // ----- Travel between stops (OneMap, through the onemap-route Edge Function) -----
 const travelByLeg = ref({}) // 'fromId>toId' -> { loading: true } or { options } or { error }
+const travelLoading = ref(false)
+let travelRequest = 0
+let travelPromise = Promise.resolve()
 
 function legKey(from, to) {
   return from.activity_id + '>' + to.activity_id
@@ -483,9 +515,13 @@ function travelMinutesAfter(index) {
   const stops = itinerary.value.stops
   if (index >= stops.length - 1) return 0
   const options = travelByLeg.value[legKey(stops[index], stops[index + 1])]?.options
+  return travelMinutes(options, stops[index].travel_mode)
+}
+
+function travelMinutes(options, mode) {
   const available = (options || []).filter((option) => option.available)
   if (available.length === 0) return TRAVEL_MINUTES
-  const chosen = available.find((option) => option.mode === stops[index].travel_mode)
+  const chosen = available.find((option) => option.mode === mode)
   const fastest = available.reduce((best, option) =>
     option.durationMinutes < best.durationMinutes ? option : best,
   )
@@ -505,30 +541,65 @@ function placeOf(stop) {
 }
 
 // Load the travel options for every pair of stops, one pair at a time
-async function loadTravel() {
-  if (!itinerary.value) return // no plan, so nothing to travel between
-  const stops = itinerary.value?.stops || []
-  for (let i = 0; i < stops.length - 1; i++) {
-    const from = stops[i]
-    const to = stops[i + 1]
-    const key = legKey(from, to)
-    travelByLeg.value[key] = { loading: true }
+function loadTravel() {
+  const request = ++travelRequest
+  const plan = itinerary.value
+  const stops = (plan?.stops || []).map((stop) => ({ ...stop }))
+  const retime = isEditing.value
+  const legs = {}
+  let current = toMinutes(dayStart.value)
+  const currentRequest = () => !disposed && request === travelRequest && plan === itinerary.value
+  travelLoading.value = true
+  travelByLeg.value = {}
+  travelPromise = (async () => {
     try {
-      const departure = itinerary.value.date + 'T' + from.end // leave when this stop ends
-      const options = await requestWithTimeout(() =>
-        fetchTravelOptions(placeOf(from), placeOf(to), departure),
-      )
-      travelByLeg.value[key] = { options }
-    } catch (error) {
-      travelByLeg.value[key] = { error: error.message }
+      for (let i = 0; i < stops.length; i++) {
+        const from = stops[i]
+        if (retime) {
+          const duration = toMinutes(from.end) - toMinutes(from.start)
+          from.start = toTime(current)
+          from.end = toTime(current + duration)
+        }
+        if (i === stops.length - 1) break
+        const to = stops[i + 1]
+        const key = legKey(from, to)
+        try {
+          const options = await requestWithTimeout(() =>
+            fetchTravelOptions(placeOf(from), placeOf(to), plan.date + 'T' + from.end),
+          )
+          if (!currentRequest()) return
+          legs[key] = { options }
+        } catch (error) {
+          if (!currentRequest()) return
+          legs[key] = { error: error.message }
+        }
+        current = toMinutes(from.end) + travelMinutes(legs[key].options, from.travel_mode)
+      }
+      if (!currentRequest()) return
+      travelByLeg.value = legs
+      if (retime) stops.forEach((stop, index) => {
+        plan.stops[index].start = stop.start
+        plan.stops[index].end = stop.end
+      })
+    } finally {
+      if (currentRequest()) travelLoading.value = false
     }
-  }
-  recalculateTimes() // now that we know the real travel times, move the stops to match
+  })()
+  return travelPromise
 }
 
 // Reload travel when the stops or their order change (new plan, move, remove, swap)
-watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
-  if (!loading.value) loadTravel()
+watch(
+  () => JSON.stringify([dayStart.value, itinerary.value?.date,
+    itinerary.value?.stops.map((stop) => [stop.activity_id, stop.travel_mode])]),
+  () => { if (!loading.value) loadTravel() },
+  { flush: 'sync' },
+)
+
+onUnmounted(() => {
+  disposed = true
+  travelRequest += 1
+  saveController?.abort()
 })
 </script>
 
@@ -548,9 +619,9 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
       <button
         class="btn btn-outline-danger rounded-pill px-4"
         data-testid="itinerary-retry"
-        @click="loadPage"
+        @click="saveConflict ? reloadLatestPlan() : loadPage()"
       >
-        Try again
+        {{ saveConflict ? 'Load latest plan' : 'Try again' }}
       </button>
     </div>
 
@@ -568,7 +639,7 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
     </div>
 
     <!-- There is a plan -->
-    <div v-else data-testid="itinerary-plan">
+    <fieldset v-else class="border-0 p-0 m-0 w-100" :disabled="saving" data-testid="itinerary-plan">
       <p v-if="weatherLoading" class="text-secondary small">Checking the weather...</p>
       <div v-else-if="weather" class="info-banner" data-testid="itinerary-weather">
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -625,7 +696,7 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
         <template v-else>
           <button
             class="btn btn-dark rounded-pill px-4"
-            :disabled="saving"
+            :disabled="saving || travelLoading"
             data-testid="itinerary-save"
             @click="saveChanges"
           >
@@ -659,7 +730,12 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
           />
         </div>
       </div>
+      <p v-if="isEditing && travelLoading" role="status" class="text-secondary small">
+        Checking travel times before saving…
+      </p>
       <p v-if="saveError" class="text-danger" data-testid="itinerary-save-error">{{ saveError }}</p>
+      <button v-if="saveConflict" type="button" class="btn btn-outline-dark rounded-pill mb-3"
+        data-testid="itinerary-load-latest" @click="reloadLatestPlan">Load latest plan</button>
 
       <ol class="list-unstyled mb-0" data-testid="itinerary-timeline">
         <template v-for="(stop, index) in displayStops" :key="stop.original.activity_id">
@@ -788,7 +864,7 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
           </li>
         </ul>
       </div>
-    </div>
+    </fieldset>
   </div>
 </template>
 

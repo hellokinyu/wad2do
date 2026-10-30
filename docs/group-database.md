@@ -6,6 +6,61 @@ the connected WAD2Do project on 28 Oct 2026 confirmed PostgreSQL 17.11, the expe
 columns and keys, and overly broad existing policies. No user records were fetched.
 Database changes must be announced before they are applied.
 
+## Planning consistency repair — 30 Oct 2026 (applied)
+
+With explicit approval, the frontend was published on `fix/group-planning-consistency`
+and `group_planning_consistency` was applied to shared WAD2Do Supabase. Teammates must
+use this branch (or its eventual merge), restart their local app and refresh older tabs.
+Live read-only checks confirmed the revision column, both triggers, checked-save grants,
+closed direct itinerary writes and the five expected Realtime tables. Anonymous execution,
+missing-identity saves and browser revision forgery are denied; row-level security remains
+enabled. All seven inspected tables kept identical existing-data fingerprints, including
+all five saved itineraries. No live user records were created, edited or deleted for tests.
+
+The only added security advisory is the expected
+[signed-in SECURITY DEFINER function notice](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable)
+for `save_group_itinerary`. Signed-in execution is intentional; the function checks identity,
+membership and revision internally, and anonymous/trigger-function execution is denied.
+Existing advisories were unchanged. Validation passed: 283 Chromium tests, 40 local tests
+(including isolated PostgreSQL checks), lint and production build. Successful live browser
+saves and actual multi-client Realtime events remain untested.
+
+After sharing the updated frontend, run [group_planning.sql](sql/group_planning.sql)
+**last**, after the existing group scripts. It adds `groups.plan_revision`, checked
+`save_group_itinerary` calls, atomic chosen-time invalidation, and Realtime publication
+for availability, group members and groups. Existing plans are preserved during setup.
+Older frontend tabs must refresh: direct itinerary inserts, updates and deletes are
+revoked so an older client cannot bypass the revision check. Do not apply this permission
+change before the updated frontend has been shared. The new frontend requires this SQL.
+
+Every itinerary write (including admin edits/deletions), budget/date change, or chosen-time
+change advances the revision. A save locks the group and rejects a stale revision with
+`40001`; its draft stays visible until the member explicitly loads the latest plan.
+The database derives the author and total cost. Changing the chosen start or end removes
+the old plan in the same transaction. Reconfirming the same time preserves it. A failed
+new generation leaves no obsolete plan attached to the new time; generation with an
+unchanged chosen time still preserves the previous plan on failure.
+
+Save waits for the latest travel calculation, and late responses cannot retime a discarded
+or superseded draft. Reading a saved plan loads route information without changing its
+saved stop times. Shared availability refreshes after database events and reconnects;
+it preserves personal selections, pending saves, mode, selected range and pagination.
+Refresh failures have their own retry message instead of replacing the editable grid.
+
+The planning test uses an isolated PostgreSQL engine and never connects to shared Supabase:
+
+```sh
+WAD2DO_PGLITE_MODULE=file:///path/to/@electric-sql/pglite/dist/index.js pnpm exec node --test tests/groupPlanning.database.test.js
+```
+
+It checks stale saves, member/anonymous permissions, input validation, publication setup,
+repeated installation, admin-write invalidation, and rollback if old-plan deletion fails.
+The older SQL verification scripts below test the pre-planning setup, which allowed direct
+member itinerary writes; run those before this final permission change. Browser regressions
+cover conflicting editors, delayed travel, Discard, new chosen times, and real client
+WebSocket handling with intercepted events. Live multi-connection/Realtime writes remain
+outside these local checks.
+
 ## Rollout status — 28 Oct 2026
 
 The `batch_1_group_transactions` migration installed the six new functions in WAD2Do
