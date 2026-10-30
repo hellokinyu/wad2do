@@ -556,7 +556,53 @@ test('Discard ignores a late travel response and restores the saved start time',
   release()
   await (await response).finished()
   await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('21:30–22:30')
+  await page.getByTestId('itinerary-edit').click()
+  await expect(page.getByTestId('itinerary-save')).toBeEnabled()
   expect(state.writes).toHaveLength(1)
+})
+
+test('Discard after completed travel allows editing and saving again', async ({ page }) => {
+  const state = await mockItinerary(page, { hours: week({ Fri: { open24h: true } }) })
+  state.votes.push({
+    ...state.votes[0], activity_id: '77777777-7777-4777-8777-777777777777',
+    activities: { ...state.votes[0].activities, name: 'Second activity' },
+  })
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await page.getByTestId('itinerary-edit').click()
+  await page.getByTestId('itinerary-start-time').fill('19:00')
+  await page.getByTestId('itinerary-start-time').blur()
+  await expect(page.getByTestId('itinerary-save')).toBeEnabled()
+  await expect(page.getByTestId('itinerary-stop').first()).toContainText('19:00–20:00')
+  await page.getByTestId('itinerary-discard').click()
+  await page.getByTestId('itinerary-edit').click()
+  await expect(page.getByTestId('itinerary-start-time')).toHaveValue('20:00')
+  await expect(page.getByTestId('itinerary-save')).toBeEnabled()
+  await page.getByTestId('itinerary-save').click()
+  await expect(page.getByTestId('itinerary-edit')).toBeVisible()
+  expect(state.saved.stops[0]).toMatchObject({ start: '20:00', end: '21:00' })
+})
+
+test('a reorder sends only the final journey to the routing service', async ({ page }) => {
+  const state = await mockItinerary(page, { hours: week({ Fri: { open24h: true } }) })
+  state.votes.push({
+    ...state.votes[0], activity_id: '77777777-7777-4777-8777-777777777777',
+    activities: { ...state.votes[0].activities, name: 'Second activity' },
+  })
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await page.getByTestId('itinerary-edit').click()
+  const journeys = []
+  await page.route('**/functions/v1/onemap-route', (route) => {
+    journeys.push(route.request().postDataJSON())
+    return route.fulfill({
+      json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 30 }] },
+    })
+  })
+  await page.getByTestId('itinerary-move-down').first().click()
+  await expect(page.getByTestId('itinerary-stop').first()).toContainText('Second activity')
+  await expect(page.getByTestId('itinerary-save')).toBeEnabled()
+  expect(journeys.map(({ start, end }) => [start.name, end.name])).toEqual([
+    ['Second activity', 'Night activity'],
+  ])
 })
 
 test('a stale editor keeps its draft and must explicitly load the latest plan', async ({ page, context }) => {
