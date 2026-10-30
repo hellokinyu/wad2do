@@ -17,6 +17,6 @@ export async function fetchTravelOptions(start, end, departure) {
     const details = await error.context?.json?.().catch(() => null)
     throw new Error(details?.error || 'Travel times are unavailable right now')
   }
-  cache.set(key, data.options)
+  if (data.options.some((option) => option.available)) cache.set(key, data.options)
   return data.options
 }

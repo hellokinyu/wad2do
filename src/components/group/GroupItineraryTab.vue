@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { getVisitHoursWarnings } from '@/lib/openingHours'
@@ -178,6 +178,7 @@ function toTime(totalMinutes) {
 
 // ----- Edit mode -----
 const isEditing = ref(false)
+const replanButton = ref(null)
 let savedCopy = null // the plan as it was before editing, for Discard
 const dayStart = ref('10:00') // when the first stop begins
 
@@ -288,11 +289,19 @@ function addStop(activity) {
 
 // Throw away the current plan and build a new one from the chosen time.
 // It starts edit mode first, so Discard can still bring back the saved plan.
-function replan() {
+async function replan() {
   startEditing()
-  buildPlan()
-  if (!itinerary.value) return
-  dayStart.value = itinerary.value.stops[0]?.start || dayStart.value
+  loading.value = true
+  saveError.value = ''
+  try {
+    await buildPlan()
+  } catch {
+    saveError.value = "Couldn't rebuild the plan. Please try again."
+  } finally {
+    loading.value = false
+    await nextTick()
+    replanButton.value?.focus()
+  }
 }
 
 // Load this group's saved plan, or null if nobody has saved one yet
@@ -357,7 +366,7 @@ async function loadVotes() {
 }
 
 // Fill the chosen time with the most-voted activities that fit the time, opening hours and budget
-function buildPlan() {
+async function buildPlan() {
   if (!group.value?.chosen_start) {
     itinerary.value = null // no time picked yet -> empty state
     return
@@ -368,20 +377,38 @@ function buildPlan() {
 
   const sorted = [...votedActivities.value].sort((a, b) => b.votes - a.votes)
   const stops = []
+  const legs = {}
   let current = toMinutes(start.slice(11))
   let spent = 0
 
   for (const activity of sorted) {
-    const finish = current + activity.duration_min
-    if (finish > endMinutes) continue // runs past the chosen end time
-    if (getVisitHoursWarnings(activity.opening_hours, start.slice(0, 10), current, finish).length)
+    if (current + activity.duration_min > endMinutes || spent + activity.cost > budget.value)
       continue
-    if (spent + activity.cost > budget.value) continue // over budget
+    const previous = stops.at(-1)
+    let arrival = current
+    let options
+    if (previous) {
+      options = await requestWithTimeout(() =>
+        fetchTravelOptions(
+          placeOf(previous),
+          placeOf(activity),
+          start.slice(0, 10) + 'T' + previous.end,
+        ),
+      )
+      const available = options.filter((option) => option.available)
+      if (!available.length) throw new Error('Travel times are unavailable right now.')
+      arrival += Math.min(...available.map((option) => option.durationMinutes))
+    }
+    const finish = arrival + activity.duration_min
+    if (finish > endMinutes) continue // runs past the chosen end time
+    if (getVisitHoursWarnings(activity.opening_hours, start.slice(0, 10), arrival, finish).length)
+      continue
+    if (previous) legs[legKey(previous, activity)] = { options }
     stops.push({
       activity_id: activity.activity_id,
       name: activity.name,
       image_url: activity.image_url,
-      start: toTime(current),
+      start: toTime(arrival),
       end: toTime(finish),
       cost: activity.cost,
       reason: activity.votes + ' votes in the group',
@@ -392,9 +419,10 @@ function buildPlan() {
       lng: activity.lng,
     })
     spent += activity.cost
-    current = finish + TRAVEL_MINUTES
+    current = finish
   }
 
+  travelByLeg.value = legs
   itinerary.value = { date: start.slice(0, 10), total_cost: spent, stops }
   dayStart.value = stops[0]?.start || dayStart.value
 }
@@ -411,11 +439,11 @@ async function loadPage() {
     const rebuild = route.query.replan === '1'
     if (saved && !rebuild) {
       useSavedPlan(saved) // the group already has a plan: show it
+      await loadTravel()
     } else {
-      buildPlan()
+      await buildPlan()
     }
     if (itinerary.value) {
-      await loadTravel()
       if ((!saved || rebuild) && !(await saveChanges())) {
         throw new Error('Generated plan could not be saved.')
       }
@@ -611,6 +639,7 @@ watch(() => itinerary.value?.stops.map((s) => s.activity_id).join(','), () => {
             Discard
           </button>
           <button
+            ref="replanButton"
             class="btn btn-outline-dark rounded-pill px-3"
             data-testid="itinerary-replan"
             @click="replan"

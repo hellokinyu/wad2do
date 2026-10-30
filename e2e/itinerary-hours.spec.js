@@ -80,7 +80,9 @@ async function mockItinerary(
     return route.fulfill({ json: [] })
   })
   await page.route('**/functions/v1/onemap-route', (route) =>
-    route.fulfill({ json: { options: [] } }),
+    route.fulfill({
+      json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 30 }] },
+    }),
   )
   await page.route('https://api-open.data.gov.sg/**', (route) =>
     route.fulfill({
@@ -228,6 +230,123 @@ test('generation waits for travel estimates and saves the times shown to members
   expect(state.saved.stops[1]).toMatchObject({ start: '21:15', end: '22:15' })
 })
 
+test('Plan excludes a stop when real travel would exceed the chosen end time', async ({ page }) => {
+  const state = await mockItinerary(page, {
+    hours: week({ Fri: { open24h: true } }),
+    start: '2026-10-30T02:00:00Z',
+    end: '2026-10-30T04:30:00Z',
+  })
+  state.votes.push({
+    ...state.votes[0],
+    activity_id: '77777777-7777-4777-8777-777777777777',
+    activities: { ...state.votes[0].activities, name: 'Second activity' },
+  })
+  await page.route('**/functions/v1/onemap-route', (route) =>
+    route.fulfill({
+      json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 90 }] },
+    }),
+  )
+
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-stop')).toHaveCount(1)
+  await expect(page.getByTestId('itinerary-stop')).toContainText('10:00–11:00')
+  await expect(page.getByTestId('itinerary-not-in-plan')).toContainText('Second activity')
+  expect(state.saved.stops).toHaveLength(1)
+  expect(state.saved.stops[0]).toMatchObject({ activity_id: activityId, end: '11:00' })
+  await page.getByTestId('itinerary-edit').click()
+  await page.getByTestId('itinerary-replan').click()
+  await expect(page.getByTestId('itinerary-stop')).toHaveCount(1)
+  await expect(page.getByTestId('itinerary-stop')).toContainText('10:00–11:00')
+  await expect(page.getByTestId('itinerary-replan')).toBeFocused()
+  expect(state.writes).toHaveLength(1)
+})
+
+test('Plan uses actual departures and fits shorter journeys up to the exact end time', async ({ page }) => {
+  const state = await mockItinerary(page, {
+    hours: week({ Fri: { open24h: true } }),
+    start: '2026-10-30T02:00:00Z',
+    end: '2026-10-30T04:00:00Z',
+  })
+  state.votes[0].activities.duration_min = 30
+  for (const [id, name] of [
+    ['77777777-7777-4777-8777-777777777777', 'Second activity'],
+    ['88888888-8888-4888-8888-888888888888', 'Third activity'],
+  ]) {
+    state.votes.push({
+      ...state.votes[0],
+      activity_id: id,
+      activities: { ...state.votes[0].activities, name },
+    })
+  }
+  const departures = []
+  await page.route('**/functions/v1/onemap-route', (route) => {
+    departures.push(route.request().postDataJSON().departure)
+    return route.fulfill({
+      json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 15 }] },
+    })
+  })
+
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-stop')).toHaveCount(3)
+  await expect(page.getByTestId('itinerary-stop').nth(2)).toContainText('11:30–12:00')
+  expect(departures).toEqual(['2026-10-30T10:30', '2026-10-30T11:15'])
+  expect(state.saved.stops[2]).toMatchObject({ start: '11:30', end: '12:00' })
+})
+
+test('Plan checks hours after travel and tries the next candidate from the last accepted stop', async ({ page }) => {
+  const state = await mockItinerary(page, {
+    hours: week({ Fri: { open24h: true } }),
+    start: '2026-10-30T02:00:00Z',
+    end: '2026-10-30T06:00:00Z',
+  })
+  for (const [id, name, hours] of [
+    [
+      '77777777-7777-4777-8777-777777777777',
+      'Closes early',
+      week({ Fri: { open: '09:00', close: '12:30' } }),
+    ],
+    [
+      '88888888-8888-4888-8888-888888888888',
+      'Fits instead',
+      week({ Fri: { open24h: true } }),
+    ],
+  ]) {
+    state.votes.push({
+      ...state.votes[0],
+      activity_id: id,
+      activities: { ...state.votes[0].activities, name, opening_hours: hours },
+    })
+  }
+  const journeys = []
+  await page.route('**/functions/v1/onemap-route', (route) => {
+    const journey = route.request().postDataJSON()
+    journeys.push(journey)
+    return route.fulfill({
+      json: {
+        options: [{
+          mode: 'TRANSIT',
+          available: true,
+          durationMinutes: journey.end.name === 'Closes early' ? 90 : 15,
+        }],
+      },
+    })
+  })
+
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-stop')).toHaveCount(2)
+  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('Fits instead')
+  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('11:15–12:15')
+  await expect(page.getByTestId('itinerary-not-in-plan')).toContainText('Closes early')
+  expect(journeys.map(({ start, end, departure }) => [start.name, end.name, departure])).toEqual([
+    ['Night activity', 'Closes early', '2026-10-30T11:00'],
+    ['Night activity', 'Fits instead', '2026-10-30T11:00'],
+  ])
+  expect(state.saved.stops.map((stop) => stop.activity_id)).toEqual([
+    activityId,
+    '88888888-8888-4888-8888-888888888888',
+  ])
+})
+
 async function pickNewTimeAndPlan(page) {
   await page.goto(`/groups/${groupId}/availability`)
   await page.getByTestId('mode-heatmap').click()
@@ -236,6 +355,44 @@ async function pickNewTimeAndPlan(page) {
   await page.getByTestId('confirm-time').click()
   await expect(page.getByTestId('chosen-slot')).toContainText('31 Oct')
   await page.getByTestId('plan-button').click()
+}
+
+for (const failure of ['request', 'no routes']) {
+  test(`failed travel (${failure}) preserves the saved plan and can be retried`, async ({ page }) => {
+    const state = await mockItinerary(page, {
+      hours: week({ Fri: { open24h: true }, Sat: { open24h: true } }),
+    })
+    await page.goto(`/groups/${groupId}/itinerary`)
+    await expect(page.getByTestId('itinerary-stop')).toBeVisible()
+    const oldPlan = structuredClone(state.saved)
+    state.votes.push({
+      ...state.votes[0],
+      activity_id: '77777777-7777-4777-8777-777777777777',
+      activities: { ...state.votes[0].activities, name: 'Second activity' },
+    })
+    let attempts = 0
+    await page.route('**/functions/v1/onemap-route', (route) => {
+      attempts++
+      if (attempts === 1) {
+        return route.fulfill(failure === 'request'
+          ? { status: 503, json: { error: 'unavailable' } }
+          : { json: { options: [] } })
+      }
+      return route.fulfill({
+        json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 15 }] },
+      })
+    })
+
+    await pickNewTimeAndPlan(page)
+    await expect(page.getByTestId('itinerary-error')).toContainText("Couldn't load the plan")
+    expect(state.saved).toEqual(oldPlan)
+    expect(state.writes).toHaveLength(1)
+    await page.getByTestId('itinerary-retry').click()
+    await expect(page.getByTestId('itinerary-stop')).toContainText('10:00–11:00')
+    expect(attempts).toBe(2)
+    expect(state.writes).toHaveLength(2)
+    expect(state.saved.stops).toHaveLength(1)
+  })
 }
 
 test('Plan our day replaces the saved plan using the latest chosen time and votes', async ({ page }) => {
