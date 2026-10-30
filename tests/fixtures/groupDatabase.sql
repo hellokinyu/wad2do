@@ -10,7 +10,7 @@ create function auth.role() returns text language sql stable as $$
   select nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role';
 $$;
 grant usage on schema auth, public to anon, authenticated;
-create table auth.users (id uuid primary key);
+create table auth.users (id uuid primary key, raw_user_meta_data jsonb);
 create table public.activities (id uuid primary key);
 create table public."profiles" (
   "id" uuid not null,

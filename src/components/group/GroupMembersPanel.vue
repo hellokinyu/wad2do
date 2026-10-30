@@ -2,6 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
+import { findProfileAnimal } from '@/data/profileAnimals'
+import AnimalAvatar from '@/components/AnimalAvatar.vue'
 
 const props = defineProps({
   group: Object, // { id, name }
@@ -10,11 +12,11 @@ const emit = defineEmits(['changed'])
 
 const router = useRouter()
 
-const members = ref([]) // [{ id, name }]
+const members = ref([]) // [{ id, name, animal }]
 const userId = ref(null)
 const memberError = ref('')
 
-// Load the members and their display names
+// Load the members, their display names and chosen avatars
 async function loadMembers() {
   try {
     const { data: auth } = await supabase.auth.getUser()
@@ -24,7 +26,11 @@ async function loadMembers() {
       p_group_id: props.group.id,
     })
     if (error) throw error
-    members.value = rows.map((member) => ({ id: member.id, name: member.display_name || 'Member' }))
+    members.value = rows.map((member) => ({
+      id: member.id,
+      name: member.display_name || 'Member',
+      animal: findProfileAnimal(member.avatar_animal)?.id || '',
+    }))
   } catch (error) {
     console.log(error)
     memberError.value = "Couldn't load the members."
@@ -80,7 +86,14 @@ async function leaveGroup() {
     <h2 class="h6 fw-bold mb-3">Members</h2>
     <ul class="member-list mb-3">
       <li v-for="member in members" :key="member.id" class="member-row" data-testid="member-item">
-        <span class="member-initial" aria-hidden="true">{{ member.name.charAt(0) }}</span>
+        <AnimalAvatar
+          v-if="member.animal"
+          :animal="member.animal"
+          :size="32"
+          decorative
+          data-testid="member-avatar"
+        />
+        <span v-else class="member-initial" aria-hidden="true">{{ member.name.charAt(0) }}</span>
         <span class="flex-grow-1 min-width-0">
           {{ member.name }}
           <span v-if="member.id === userId" class="text-secondary">(you)</span>
@@ -139,7 +152,7 @@ async function leaveGroup() {
   border-top: 1px solid #eee;
 }
 
-/* First letter of the member's name in a circle */
+/* First letter of the member's name, for members without a chosen avatar */
 .member-initial {
   display: grid;
   flex-shrink: 0;

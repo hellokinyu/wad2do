@@ -122,7 +122,8 @@ The frontend needs these functions: deploy the SQL before using the new forms.
 
 ## What changed
 
-- `get_group_member_names(p_group_id)` returns only member IDs and display names.
+- `get_group_member_names(p_group_id)` returns only member IDs, display names and
+  chosen avatar animals (from each login's metadata), shown in the Members panel.
   A caller must belong to that group; an admin does not bypass this check.
 - `wad2do_group_details(p_group_id)` returns the full header for a member. A signed-in
   person with an invite-link UUID sees only the group name, dates and member count.
