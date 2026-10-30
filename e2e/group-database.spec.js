@@ -87,6 +87,10 @@ async function mockGroups(page) {
             state.releaseSave = resolve
           })
         }
+        if (body.p_slots.some((slot) =>
+          slot.slice(0, 10) < state.group.start_date || slot.slice(0, 10) > state.group.end_date)) {
+          return route.fulfill({ status: 400, json: { code: '22023', message: 'Slot outside group dates' } })
+        }
         state.availability = state.availability
           .filter((row) => row.user_id !== mockUser.id)
           .concat(body.p_slots.map((slot_start) => ({ user_id: mockUser.id, slot_start })))
@@ -205,6 +209,45 @@ test('a failed live refresh keeps local availability and offers a retry', async 
   await page.getByTestId('availability-refresh-error').getByRole('button').click()
   await expect(page.getByTestId('availability-refresh-error')).toHaveCount(0)
   await expect(slot(page, '10:00')).toHaveClass(/slot-free/)
+})
+
+test('a live date shrink removes hidden slots and preserves valid selections for the next save', async ({ page }) => {
+  const state = await mockGroups(page)
+  const realtime = await mockRealtime(page)
+  const topic = 'group-availability-' + groupId
+  await page.addInitScript((id) => localStorage.setItem('avail-popup-seen-' + id, '1'), groupId)
+  state.availability = [
+    { user_id: mockUser.id, slot_start: '2026-10-30T10:00:00+08:00' },
+    { user_id: mockUser.id, slot_start: '2026-10-31T10:00:00+08:00' },
+  ]
+  await page.goto(`/groups/${groupId}/availability`)
+  await expect.poll(() => realtime.channels.has('realtime:' + topic)).toBe(true)
+  await expect(page.getByTestId('slot-2026-10-31T10:00')).toHaveClass(/slot-free/)
+  state.fail = 'replace_group_availability'
+  await slot(page, '11:00').click()
+  await expect(page.getByTestId('availability-save-error')).toBeVisible()
+  await page.getByTestId('mode-heatmap').click()
+  await page.getByTestId('slot-2026-10-31T11:00').click()
+  await expect(page.getByTestId('confirm-time')).toBeEnabled()
+  state.group.end_date = '2026-10-30'
+  realtime.emit(topic, 'groups', 'UPDATE', { id: groupId })
+  await expect(page.getByTestId('slot-2026-10-31T10:00')).toHaveCount(0)
+  await expect(page.getByTestId('confirm-time')).toBeDisabled()
+  await page.getByTestId('mode-mine').click()
+  await expect(slot(page, '10:00')).toHaveClass(/slot-free/)
+  await expect(slot(page, '11:00')).toHaveClass(/slot-free/)
+  state.fail = ''
+  const saved = page.waitForResponse((response) =>
+    response.url().endsWith('/rpc/replace_group_availability') && response.request().method() === 'POST',
+  )
+  await slot(page, '12:00').click()
+  expect((await saved).status()).toBe(204)
+  await expect(page.getByTestId('availability-save-error')).toHaveCount(0)
+  const latest = calls(state, 'replace_group_availability').at(-1).body.p_slots
+  expect(latest).toEqual([
+    '2026-10-30T10:00:00+08:00', '2026-10-30T11:00:00+08:00', '2026-10-30T12:00:00+08:00',
+  ])
+  await expect(page.getByTestId('availability-dates-notice')).toContainText('group dates changed')
 })
 
 async function fillCreate(page) {

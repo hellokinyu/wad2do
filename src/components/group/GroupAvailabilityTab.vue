@@ -70,6 +70,9 @@
         {{ refreshError }}
         <button class="btn btn-sm btn-outline-dark ms-2" @click="refreshShared">Try again</button>
       </div>
+      <p v-if="datesNotice" class="alert alert-info" role="status" data-testid="availability-dates-notice">
+        {{ datesNotice }}
+      </p>
       <div class="mode-toggle mb-3" role="group" aria-label="View">
         <button
           class="mode-option"
@@ -272,6 +275,7 @@ let disposed = false
 const planning = ref(false)
 const confirming = ref(false)
 const refreshError = ref('')
+const datesNotice = ref('')
 let refreshNumber = 0
 let refreshTimer
 let channel
@@ -604,6 +608,16 @@ async function refreshShared() {
     const failed = [groupResult, memberResult, availabilityResult].find((result) => result.error)
     if (failed) throw failed.error
     group.value = groupResult.data
+    const outsideDates = (key) => key && !days.value.includes(key.slice(0, 10))
+    const removedKeys = Object.keys(mySlots.value).filter(outsideDates)
+    for (const key of removedKeys) delete mySlots.value[key]
+    const removedPick = outsideDates(pickStart.value) || outsideDates(pickEnd.value)
+    if (removedPick) {
+      pickStart.value = null
+      pickEnd.value = null
+    }
+    if (removedKeys.length || removedPick)
+      datesNotice.value = 'The group dates changed. Selections outside the new dates were removed. Your remaining selections are kept.'
     members.value = memberResult.data.map((member) => ({ id: member.id, name: member.display_name || 'Member' }))
     const memberIds = new Set(members.value.map((member) => member.id))
     allSlots.value = availabilityResult.data

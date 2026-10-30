@@ -224,6 +224,7 @@ async function saveChanges() {
   saveError.value = ''
   saveConflict.value = false
   try {
+    await nextTick()
     let pending
     do {
       pending = travelPromise
@@ -593,7 +594,6 @@ watch(
   () => JSON.stringify([dayStart.value, itinerary.value?.date,
     itinerary.value?.stops.map((stop) => [stop.activity_id, stop.travel_mode])]),
   () => { if (!loading.value) loadTravel() },
-  { flush: 'sync' },
 )
 
 onUnmounted(() => {
