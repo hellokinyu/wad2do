@@ -98,7 +98,19 @@ watch(
           data-testid="activity-save"
           @click="emit('save', activity.id)"
         >
-          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" focusable="false">
+          <span class="save-burst" aria-hidden="true">
+            <span class="save-particle">♥</span>
+            <span class="save-particle">♥</span>
+            <span class="save-particle">♥</span>
+          </span>
+          <svg
+            class="save-icon"
+            viewBox="0 0 24 24"
+            width="26"
+            height="26"
+            aria-hidden="true"
+            focusable="false"
+          >
             <path
               d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"
             />
@@ -291,12 +303,161 @@ watch(
   background: rgb(0 0 0 / 16%);
 }
 
+.save-button {
+  position: relative;
+  isolation: isolate;
+  transition: background-color 180ms ease;
+}
+
+.save-button::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  z-index: -1;
+  border: 1px solid rgb(255 255 255 / 75%);
+  border-radius: 50%;
+  background: rgb(255 105 135 / 24%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.save-icon {
+  transition:
+    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    fill 180ms ease;
+  transform-origin: center;
+}
+
 .save-button.saved {
   color: #dc3545;
 }
 
-.save-button.saved svg {
+.save-button.saved .save-icon {
   fill: currentColor;
+  stroke: white;
+  animation: heart-pop 450ms ease;
+}
+
+.save-burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.save-particle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  color: #ff8ca6;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 35%);
+}
+
+.save-particle:nth-child(1) {
+  --float-x: -23px;
+  --float-y: -21px;
+  --float-rotate: -25deg;
+}
+
+.save-particle:nth-child(2) {
+  --float-x: 0px;
+  --float-y: -28px;
+  --float-rotate: 12deg;
+  animation-delay: 70ms;
+  color: white;
+  font-size: 9px;
+}
+
+.save-particle:nth-child(3) {
+  --float-x: 23px;
+  --float-y: -17px;
+  --float-rotate: 25deg;
+  animation-delay: 140ms;
+}
+
+.save-button.saved .save-particle {
+  animation-name: love-float;
+  animation-duration: 750ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+.save-button:focus-visible:not(:disabled) .save-icon {
+  transform: scale(1.2);
+  animation: heart-pop 650ms ease;
+}
+
+.save-button:focus-visible:not(:disabled)::before {
+  animation: love-ripple 700ms ease-out;
+}
+
+.save-button:focus-visible:not(:disabled) .save-particle {
+  animation-name: love-float;
+  animation-duration: 850ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+@media (hover: hover) {
+  .save-button:hover:not(:disabled) .save-icon {
+    transform: scale(1.2);
+    animation: heart-pop 650ms ease;
+  }
+
+  .save-button:hover:not(:disabled)::before {
+    animation: love-ripple 700ms ease-out;
+  }
+
+  .save-button:hover:not(:disabled) .save-particle {
+    animation-name: love-float;
+    animation-duration: 850ms;
+    animation-timing-function: ease-out;
+    animation-fill-mode: both;
+  }
+}
+
+@keyframes heart-pop {
+  0%,
+  100% {
+    scale: 1;
+  }
+  35% {
+    scale: 1.22;
+  }
+  60% {
+    scale: 0.92;
+  }
+  80% {
+    scale: 1.08;
+  }
+}
+
+@keyframes love-ripple {
+  0% {
+    opacity: 0.8;
+    transform: scale(0.65);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+@keyframes love-float {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--float-x)), calc(-50% + var(--float-y)))
+      rotate(var(--float-rotate)) scale(0.7);
+  }
 }
 
 .photo-action:focus-visible {
@@ -310,6 +471,17 @@ watch(
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .save-button,
+  .save-button .save-icon {
+    transition: none;
+  }
+
+  .save-button .save-icon,
+  .save-button .save-particle,
+  .save-button::before {
+    animation: none !important;
+  }
+
   .activity-photo {
     transition: none;
   }
