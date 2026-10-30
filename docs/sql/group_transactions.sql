@@ -62,9 +62,12 @@ begin
 end;
 $$;
 
--- Group pages receive names, never the other members' home station or preferences.
-create or replace function public.get_group_member_names(p_group_id uuid)
-returns table (id uuid, display_name text)
+-- Group pages receive names and avatars, never the other members' home station or preferences.
+-- The avatar lives in the login's metadata, so it is read from auth.users.
+-- Dropped first because adding avatar_animal changes the returned columns.
+drop function if exists public.get_group_member_names(uuid);
+create function public.get_group_member_names(p_group_id uuid)
+returns table (id uuid, display_name text, avatar_animal text)
 language plpgsql stable security definer
 set search_path = ''
 as $$
@@ -73,9 +76,10 @@ begin
     raise exception 'Only group members can do this.' using errcode = '42501';
   end if;
   return query
-    select p.id, p.display_name::text
+    select p.id, p.display_name::text, (u.raw_user_meta_data ->> 'avatar_animal')::text
     from public.group_members m
     join public.profiles p on p.id = m.user_id
+    left join auth.users u on u.id = m.user_id
     where m.group_id = p_group_id;
 end;
 $$;

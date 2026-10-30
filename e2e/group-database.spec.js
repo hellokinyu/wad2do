@@ -26,7 +26,7 @@ async function mockGroups(page) {
     availability: [],
     members: [
       { id: mockUser.id, display_name: 'Demo User' },
-      { id: memberId, display_name: 'Friend' },
+      { id: memberId, display_name: 'Friend', avatar_animal: 'cat' },
     ],
     created: null,
     fail: '',
@@ -267,6 +267,9 @@ test('group pages resolve activity relationships and load names without requesti
   await expect(page.getByTestId('group-activities-tab')).toContainText('Shared by Friend')
   await page.getByTestId('members-button').click()
   await expect(page.getByTestId('members-panel')).toContainText('Friend')
+  // Friend chose a cat; Demo User has no avatar in this mock, so keeps the initial.
+  await expect(page.getByTestId('member-item').nth(1).getByTestId('member-avatar')).toHaveAttribute('aria-hidden', 'true')
+  await expect(page.getByTestId('member-item').first().getByTestId('member-avatar')).toHaveCount(0)
   await page.getByTestId('tab-availability').click()
   await expect(page.getByTestId('responded-list')).toContainText('Friend')
   expect(calls(state, 'get_group_member_names')).toHaveLength(3)
