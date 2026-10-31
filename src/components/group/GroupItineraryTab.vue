@@ -157,13 +157,19 @@ function getRainAlternative(stop) {
   return votedActivities.value.find((a) => a.indoor && !usedIds.includes(a.activity_id)) || null
 }
 
-// Replace an outdoor stop with the indoor alternative, keeping the same time slot
+// The end time when `activity` starts at `start`, using its own length
+function endAfter(start, activity) {
+  return toTime(toMinutes(start) + activity.duration_min)
+}
+
+// Replace an outdoor stop with the indoor alternative. It starts at the same time but
+// lasts as long as the alternative does, then the later stops move to fit.
 function swapStop(index, alternative) {
   const oldStop = itinerary.value.stops[index]
   itinerary.value.stops[index] = {
     ...alternative,
     start: oldStop.start,
-    end: oldStop.end,
+    end: endAfter(oldStop.start, alternative),
     reason: 'Indoor swap because of rain',
   }
   recalculateTimes()
@@ -190,7 +196,7 @@ const displayStops = computed(() => {
       return {
         ...alternative,
         start: stop.start,
-        end: stop.end,
+        end: endAfter(stop.start, alternative),
         reason: 'Rainy-day option',
         original: stop,
         isRainyView: true,
@@ -383,6 +389,10 @@ async function saveChanges() {
       await pending
     } while (pending !== travelPromise)
     if (disposed || user.value?.id !== loadedUserId) throw new Error('Your account changed.')
+    if (travelFailed.value) {
+      saveError.value = "Some travel times couldn't be checked. Retry them before saving."
+      return false
+    }
     // Only save the fields from the brief. Name, photo etc. come from the activity.
     const stopsToSave = itinerary.value.stops.map((s) => ({
       activity_id: s.activity_id,
@@ -493,15 +503,50 @@ async function loadSavedPlan() {
   return data
 }
 
+const ACTIVITY_FIELDS =
+  'name, image_url, price_per_person, indoor, opening_hours, duration_min, address, lat, lng'
+
+// A row from the activities table -> what a stop or "Also voted for" item needs
+function toPlanActivity(id, a) {
+  return {
+    activity_id: id,
+    name: a.name,
+    image_url: a.image_url || '',
+    cost: a.price_per_person ?? 0,
+    indoor: a.indoor,
+    opening_hours: a.opening_hours,
+    address: a.address || '',
+    lat: a.lat,
+    lng: a.lng,
+    duration_min: a.duration_min || 60,
+  }
+}
+
+// Load the activities in a saved plan by their ids, not through votes,
+// so a stop keeps its name, address and hours even when nobody votes for it any more
+async function loadPlanActivities(stops) {
+  const ids = [...new Set(stops.map((s) => s.activity_id))]
+  if (!ids.length) return []
+  const { data, error } = await supabase
+    .from('activities')
+    .select('id, ' + ACTIVITY_FIELDS)
+    .in('id', ids)
+  if (error) throw error
+  return data.map((a) => toPlanActivity(a.id, a))
+}
+
 // Turn saved stops back into full stops by adding each activity's details (name, photo...).
 // Stops the group has since voted down (more downs than ups) are left out.
-function useSavedPlan(saved) {
+function useSavedPlan(saved, activities) {
   const stops = saved.stops
     .map((s) => {
-      const activity = allVotedActivities.value.find((a) => a.activity_id === s.activity_id) || {}
+      const activity = activities.find((a) => a.activity_id === s.activity_id) || {}
       return { ...activity, ...s }
     })
-    .filter((stop) => !(stop.votes < 0))
+    .filter((stop) => {
+      const voted = allVotedActivities.value.find((a) => a.activity_id === stop.activity_id)
+      return !(voted?.votes < 0)
+    })
   const date = group.value?.chosen_start ? toSgKey(group.value.chosen_start).slice(0, 10) : ''
   itinerary.value = { date, total_cost: saved.total_cost, stops }
   dayStart.value = stops[0]?.start || dayStart.value
@@ -511,30 +556,15 @@ function useSavedPlan(saved) {
 async function loadVotes() {
   const { data, error } = await supabase
     .from('votes')
-    .select(
-      'activity_id, value, activities(name, image_url, price_per_person, indoor, opening_hours, duration_min, address, lat, lng)',
-    )
+    .select('activity_id, value, activities(' + ACTIVITY_FIELDS + ')')
     .eq('group_id', groupId)
   if (error) throw error
 
   const byActivity = {} // activity_id -> the activity, with its vote total
   for (const vote of data) {
     if (!byActivity[vote.activity_id]) {
-      const a = vote.activities
-      if (!a) continue
-      byActivity[vote.activity_id] = {
-        activity_id: vote.activity_id,
-        name: a.name,
-        image_url: a.image_url || '',
-        cost: a.price_per_person ?? 0,
-        indoor: a.indoor,
-        opening_hours: a.opening_hours,
-        address: a.address || '',
-        lat: a.lat,
-        lng: a.lng,
-        duration_min: a.duration_min || 60,
-        votes: 0,
-      }
+      if (!vote.activities) continue
+      byActivity[vote.activity_id] = { ...toPlanActivity(vote.activity_id, vote.activities), votes: 0 }
     }
     byActivity[vote.activity_id].votes += vote.value
   }
@@ -620,7 +650,7 @@ async function loadPage() {
     const saved = await loadSavedPlan()
     const rebuild = route.query.replan === '1'
     if (saved && !rebuild) {
-      useSavedPlan(saved) // the group already has a plan: show it
+      useSavedPlan(saved, await loadPlanActivities(saved.stops)) // the group already has a plan: show it
       await loadTravel()
     } else {
       await buildPlan()
@@ -680,6 +710,16 @@ function travelMinutes(options, mode) {
   )
   return (chosen || fastest).durationMinutes
 }
+
+// True when a journey between two stops has no real travel time (the request failed or
+// found no route). The times after it are only a 30-minute guess, so the plan can't be saved.
+const travelFailed = computed(() => {
+  const stops = itinerary.value?.stops || []
+  return stops.slice(1).some((stop, i) => {
+    const leg = travelByLeg.value[legKey(stops[i], stop)]
+    return leg && !leg.loading && !leg.options?.some((option) => option.available)
+  })
+})
 
 // A tab was clicked in edit mode: remember the choice and move the later stops
 function chooseTravelMode(index, mode) {
@@ -881,7 +921,7 @@ onUnmounted(() => {
         <template v-else>
           <button
             class="btn btn-dark rounded-pill px-4"
-            :disabled="saving || travelLoading"
+            :disabled="saving || travelLoading || travelFailed"
             data-testid="itinerary-save"
             @click="saveChanges"
           >
@@ -907,6 +947,14 @@ onUnmounted(() => {
       <p v-if="isEditing && travelLoading" role="status" class="text-secondary small">
         Checking travel times before saving…
       </p>
+      <div v-else-if="travelFailed" role="alert" class="d-flex flex-wrap align-items-center gap-2 mb-3"
+        data-testid="itinerary-travel-failed">
+        <span class="text-danger small">
+          Some travel times couldn't be checked{{ isEditing ? ", so the plan can't be saved yet" : '' }}.
+        </span>
+        <button type="button" class="btn btn-sm btn-outline-dark rounded-pill px-3"
+          data-testid="itinerary-travel-retry" @click="loadTravel">Retry</button>
+      </div>
       <p v-if="saveError" class="text-danger" data-testid="itinerary-save-error">{{ saveError }}</p>
       <button v-if="saveConflict" type="button" class="btn btn-outline-dark rounded-pill mb-3"
         data-testid="itinerary-load-latest" @click="reloadLatestPlan">Load latest plan</button>

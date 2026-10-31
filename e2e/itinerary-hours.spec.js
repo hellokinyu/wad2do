@@ -49,6 +49,9 @@ async function mockItinerary(
   state.group = group
   await page.route('**/rest/v1/**', (route) => {
     const request = route.request()
+    // Every activity ever voted for stays in the catalog, even after its votes are removed
+    state.catalog ??= {}
+    for (const vote of state.votes) state.catalog[vote.activity_id] = vote.activities
     const table = new URL(request.url()).pathname.split('/').pop()
     if (table === 'profiles') return route.fulfill({ json: { is_admin: false } })
     if (table === 'groups') {
@@ -90,6 +93,12 @@ async function mockItinerary(
       state.saved = plan
       group.plan_revision++
       return route.fulfill({ json: group.plan_revision })
+    }
+    if (table === 'activities') {
+      const ids = new URL(request.url()).searchParams.get('id')?.match(/[\w-]{36}/g) || []
+      return route.fulfill({
+        json: ids.filter((id) => state.catalog[id]).map((id) => ({ id, ...state.catalog[id] })),
+      })
     }
     if (table === 'itineraries') {
       if (request.method() !== 'GET')
@@ -757,4 +766,89 @@ test('confirming a new time invalidates the old plan before opening the Itinerar
   await page.getByTestId('tab-itinerary').click()
   await expect(page.getByTestId('itinerary-summary')).toContainText('2026-10-31')
   await expect(page.getByTestId('itinerary-stop')).toContainText('15:00–16:00')
+})
+
+test('a saved stop keeps its details after every vote for it is removed', async ({ page }) => {
+  const state = await mockItinerary(page, { hours: week({ Fri: { open: '20:00', close: '02:00' } }) })
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-stop')).toContainText('Night activity')
+  state.votes = []
+  await page.reload()
+  await expect(page.getByTestId('itinerary-stop')).toContainText('Night activity')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
+  await expect(page.getByTestId('itinerary-stop-warning')).toHaveCount(0)
+})
+
+for (const failure of ['request', 'no routes']) {
+  test(`failed travel (${failure}) while editing blocks Save until Retry succeeds`, async ({ page }) => {
+    const state = await mockItinerary(page, { hours: week({ Fri: { open24h: true } }) })
+    state.votes.push({
+      ...state.votes[0], activity_id: '77777777-7777-4777-8777-777777777777',
+      activities: { ...state.votes[0].activities, name: 'Second activity' },
+    })
+    await page.goto(`/groups/${groupId}/itinerary`)
+    await expect(page.getByTestId('itinerary-stop')).toHaveCount(2)
+    await page.getByTestId('itinerary-edit').click()
+    let fail = true
+    await page.route('**/functions/v1/onemap-route', (route) => {
+      if (fail) {
+        return route.fulfill(failure === 'request'
+          ? { status: 503, json: { error: 'unavailable' } }
+          : { json: { options: [] } })
+      }
+      return route.fulfill({
+        json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 45 }] },
+      })
+    })
+    await page.getByTestId('itinerary-move-down').first().click()
+    await expect(page.getByTestId('itinerary-travel-failed')).toBeVisible()
+    await expect(page.getByTestId('itinerary-save')).toBeDisabled()
+    await expect(page.getByTestId('itinerary-stop').first()).toContainText('Second activity')
+    expect(state.writes).toHaveLength(1)
+    fail = false
+    await page.getByTestId('itinerary-travel-retry').click()
+    await expect(page.getByTestId('itinerary-travel-failed')).toHaveCount(0)
+    await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('21:45–22:45')
+    await page.getByTestId('itinerary-save').click()
+    await expect(page.getByTestId('itinerary-edit')).toBeVisible()
+    expect(state.saved.stops[1]).toMatchObject({ start: '21:45', end: '22:45' })
+  })
+}
+
+test('an indoor swap uses the replacement duration and moves the later stops', async ({ page }) => {
+  const state = await mockItinerary(page, {
+    hours: week({ Fri: { open24h: true } }),
+    rainy: true,
+    start: '2026-10-30T02:00:00Z',
+    end: '2026-10-30T10:00:00Z', // free 10:00–18:00
+  })
+  state.votes.push({
+    ...state.votes[0], activity_id: '77777777-7777-4777-8777-777777777777',
+    activities: { ...state.votes[0].activities, name: 'Second activity' },
+  })
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-stop')).toHaveCount(2)
+  // Voted for after the plan was made, so it's only a rainy-day option
+  state.votes.push({
+    activity_id: '66666666-6666-4666-8666-666666666666',
+    value: 1,
+    activities: {
+      name: 'Long indoor venue', indoor: true, price_per_person: 10, duration_min: 180,
+      opening_hours: week({ Fri: { open: '10:00', close: '12:30' } }),
+    },
+  })
+  await page.reload()
+  await page.getByTestId('itinerary-edit').click()
+  await page.getByTestId('itinerary-rainy-toggle').first().check()
+  await expect(page.getByTestId('itinerary-stop').first()).toContainText('10:00–13:00')
+  await page.getByTestId('itinerary-swap').click()
+  const stops = page.getByTestId('itinerary-stop')
+  await expect(stops.first()).toContainText('Long indoor venue')
+  await expect(stops.first()).toContainText('10:00–13:00')
+  await expect(stops.first().getByTestId('itinerary-stop-warning')).toHaveText('Closes at 12:30')
+  await expect(stops.nth(1)).toContainText('13:30–14:30')
+  await page.getByTestId('itinerary-save').click()
+  await expect(page.getByTestId('itinerary-edit')).toBeVisible()
+  expect(state.saved.stops[0]).toMatchObject({ start: '10:00', end: '13:00' })
+  expect(state.saved.stops[1]).toMatchObject({ start: '13:30', end: '14:30' })
 })
