@@ -20,20 +20,27 @@
 
     <div v-else>
       <!-- CELEBRATION POPUP: shown once per group when everyone has responded and a common time exists -->
-      <div v-if="showPopup" class="popup-backdrop" data-testid="celebration-popup" @click.self="closePopup">
-        <div class="popup-card">
-          <div class="popup-emoji">🎉</div>
-          <h3 class="h5">Everyone has responded!</h3>
-          <p class="mb-3">
-            Found {{ fullWindows.length }} time window{{ fullWindows.length === 1 ? '' : 's' }}
-            where all {{ members.length }} of you are free.
-          </p>
-          <button class="btn btn-dark rounded-pill px-4" data-testid="popup-view" @click="viewHeatmap">
-            See the heatmap
-          </button>
-          <button class="btn btn-link text-secondary" @click="closePopup">Close</button>
-        </div>
-      </div>
+      <BaseDialog
+        :open="showPopup"
+        class="celebration-dialog"
+        title="Everyone has responded!"
+        data-testid="celebration-popup"
+        @close="closePopup"
+      >
+        <div class="popup-emoji" aria-hidden="true">🎉</div>
+        <p class="mb-0">
+          Found {{ fullWindows.length }} time window{{ fullWindows.length === 1 ? '' : 's' }}
+          where all {{ members.length }} of you are free.
+        </p>
+        <template #footer>
+          <div class="d-flex flex-wrap justify-content-center gap-2 w-100">
+            <button class="btn btn-dark rounded-pill px-4" data-testid="popup-view" @click="viewHeatmap">
+              See the heatmap
+            </button>
+            <button class="btn btn-link text-secondary" @click="closePopup">Close</button>
+          </div>
+        </template>
+      </BaseDialog>
 
       <!-- CHOSEN SLOT: shown above the grid once the group has confirmed a time -->
       <!-- Icons in this tab are adapted from Feather Icons (MIT licence), https://feathericons.com -->
@@ -113,7 +120,7 @@
       </div>
 
       <!-- The grid and everything about it sit together in one card -->
-      <div class="avail-card">
+      <div class="avail-card surface-card">
       <!-- PAGE NAV: 3 days per page on phones, 7 on laptops -->
       <div v-if="pageCount > 1" class="d-flex align-items-center justify-content-center gap-3 mb-3" data-testid="day-pager">
         <button
@@ -258,6 +265,7 @@ import { useRoute, useRouter } from 'vue-router'
 // Shared Supabase client (handbook: src/lib/supabase.js). If it is a default export, use: import supabase from ...
 import { supabase } from '../../lib/supabase'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
+import BaseDialog from '@/components/BaseDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -884,7 +892,7 @@ onMounted(async () => {
   height: 1.5rem;
   margin: 1px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   background-color: var(--surface);
   display: flex; /* centres the number / emoji */
   align-items: center;
@@ -898,7 +906,7 @@ onMounted(async () => {
 /* Hover: the slot lifts up a little */
 .slot:hover {
   transform: scale(1.05);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-sm);
   position: relative;
   z-index: 1;
 }
@@ -947,12 +955,6 @@ onMounted(async () => {
   stroke-linejoin: round;
 }
 
-.availability-tab :is(a, button):focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-  box-shadow: none;
-}
-
 /* Chosen time and "everyone is free" messages */
 .status-banner {
   display: flex;
@@ -961,7 +963,7 @@ onMounted(async () => {
   margin-bottom: 1rem;
   padding: 14px 16px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--surface-2);
 }
 
@@ -985,7 +987,7 @@ onMounted(async () => {
   min-height: 40px;
   padding: 6px 14px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--ink);
   font-size: 0.875rem;
@@ -1003,7 +1005,7 @@ onMounted(async () => {
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-2);
 }
 
@@ -1011,7 +1013,7 @@ onMounted(async () => {
   min-height: 40px;
   padding: 6px 16px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--ink);
   font-size: 0.9rem;
@@ -1031,10 +1033,6 @@ onMounted(async () => {
 /* The grid, legend and slot picker share one card, like the activity cards */
 .avail-card {
   padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: var(--surface);
-  box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
 }
 
 
@@ -1054,7 +1052,7 @@ onMounted(async () => {
   gap: 6px;
   padding: 6px 12px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface);
   font-size: 0.875rem;
 }
@@ -1080,7 +1078,7 @@ onMounted(async () => {
 .swatch {
   width: 1.4rem;
   height: 0.9rem;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   border: 1px solid var(--line);
 }
 
@@ -1089,24 +1087,12 @@ onMounted(async () => {
   animation: bounce-in 0.5s ease;
 }
 
-/* Celebration popup */
-.popup-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-  animation: fade-in 0.2s ease;
-}
-.popup-card {
-  background: var(--surface);
-  border-radius: 20px;
-  padding: 1.5rem 2rem;
+/* Celebration popup: BaseDialog does the layout; this sets its size and bounce */
+.celebration-dialog {
+  --dialog-width: 22rem;
   text-align: center;
-  max-width: 22rem;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+.celebration-dialog[open] {
   animation: bounce-in 0.5s ease;
 }
 .popup-emoji {
@@ -1130,8 +1116,7 @@ onMounted(async () => {
   .slot-all,
   .grid-scroll,
   .celebrate,
-  .popup-backdrop,
-  .popup-card,
+  .celebration-dialog[open],
   .popup-emoji,
   .window-chip,
   .mode-option {

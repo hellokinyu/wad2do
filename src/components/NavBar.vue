@@ -239,12 +239,14 @@ onUnmounted(() => {
     flex: 1;
     min-width: 0;
   }
+  /* Icons sit together at the right edge, mirroring the logo's margin on the left.
+     The gap shrinks on the narrowest phones so an admin's four icons still fit at 320px. */
   .navbar-nav {
     width: 100%;
     flex-direction: row;
     align-items: center;
-    justify-content: space-evenly;
-    gap: 4px;
+    justify-content: flex-end;
+    gap: clamp(4px, 1.6vw, 8px);
   }
   .navbar-nav > .nav-item {
     flex-shrink: 0;

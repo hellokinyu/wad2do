@@ -248,10 +248,6 @@ onUnmounted(pause)
 :root[data-bs-theme='dark'] .brand-logo {
   filter: invert(1) brightness(0.95);
 }
-.carousel-dots button:focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 5px;
-}
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
@@ -288,7 +284,7 @@ h1 {
   position: absolute;
   inset: 5px -5px 0;
   background: var(--surface-3);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   transform: rotate(-1deg);
   z-index: -1;
 }
@@ -313,7 +309,7 @@ h1 {
   min-width: 0;
   min-height: 0;
   position: relative;
-  border-radius: 20px;
+  border-radius: var(--radius-xl);
   overflow: hidden;
   margin: 0;
   background: var(--surface-3);
@@ -339,7 +335,7 @@ h1 {
   /* A white label on the photo in both modes, so its text stays dark */
   background: #fffffff2;
   color: #111219;
-  border-radius: 30px;
+  border-radius: var(--radius-pill);
   padding: 6px 9px;
   font-size: clamp(10px, 0.8vw, 14px);
   font-weight: 600;

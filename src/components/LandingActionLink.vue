@@ -33,7 +33,7 @@ const isHovered = ref(false)
   min-height: 60px;
   padding: 16px 32px;
   border: 1px solid var(--ink);
-  border-radius: 100px;
+  border-radius: var(--radius-pill);
   color: var(--ink);
   font-size: 17px;
   font-weight: 600;
@@ -47,7 +47,7 @@ const isHovered = ref(false)
   border-color: var(--accent);
   color: var(--on-accent);
   background: var(--accent);
-  box-shadow: 0 6px 16px #00000018;
+  box-shadow: var(--shadow-raised);
 }
 
 .pill.is-active {
@@ -67,11 +67,6 @@ const isHovered = ref(false)
 
 .pill.is-active .action-arrow {
   transform: translateX(4px);
-}
-
-.pill:focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 5px;
 }
 
 .action-spark {

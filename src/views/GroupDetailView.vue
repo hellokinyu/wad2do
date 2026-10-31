@@ -491,9 +491,9 @@ function onSettingsSaved() {
   margin-top: 0.5rem;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: var(--radius-xl);
   background: var(--surface);
-  box-shadow: 0 10px 32px rgb(0 0 0 / 6%);
+  box-shadow: var(--shadow-raised);
 }
 
 .hero-stub {
@@ -692,7 +692,7 @@ function onSettingsSaved() {
   gap: 6px;
   padding: 6px 12px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--bs-emphasis-color);
   font-size: 0.875rem;
@@ -716,18 +716,12 @@ function onSettingsSaved() {
 .group-panel {
   padding: 20px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--surface-2);
 }
 
 .join-panel {
   max-width: 34rem;
-}
-
-.group-page :is(a, button):focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-  box-shadow: none;
 }
 
 /* Steps sit inside the ticket's clipped edge, so their focus ring goes inside */
@@ -746,7 +740,7 @@ function onSettingsSaved() {
       'stub body'
       'actions actions'
       'steps steps';
-    border-radius: 18px;
+    border-radius: var(--radius-lg);
   }
 
   .hero-body {

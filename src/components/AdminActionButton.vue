@@ -117,7 +117,7 @@ const tickShape = 'M5 18 10 13 16 19 27 7 32 12 16 30Z'
   height: 48px;
   padding: 6px;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--surface);
   cursor: pointer;
   touch-action: manipulation;
@@ -129,10 +129,6 @@ const tickShape = 'M5 18 10 13 16 19 27 7 32 12 16 30Z'
 }
 .admin-action:is(:hover, :focus-visible):not(:disabled) {
   background: var(--surface-2);
-}
-.admin-action:focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
 }
 .admin-action:disabled {
   opacity: 0.45;

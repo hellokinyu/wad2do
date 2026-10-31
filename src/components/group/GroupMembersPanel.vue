@@ -126,7 +126,7 @@ async function leaveGroup() {
 .group-panel {
   padding: 20px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--surface-2);
 }
 
@@ -136,7 +136,7 @@ async function leaveGroup() {
   overflow: hidden;
   list-style: none;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--surface);
 }
 

@@ -17,7 +17,7 @@
   --ink-hover: #2a2d3a;
   --on-ink: #ffffff; /* text on top of --ink */
   --muted: #5f6273; /* secondary text */
-  --subtle: #8a8d9c; /* hints, placeholders */
+  --subtle: #686b7d; /* hints, placeholders: still 4.5:1 on cards, page and chips */
   --line: #dfe1e9; /* hairlines and card borders */
   --line-strong: #b9bdcb; /* input and dashed borders */
 
@@ -39,6 +39,24 @@
   --nope-subtle: #ffe3e7;
 
   --overlay: rgb(17 18 25 / 45%); /* behind dialogs */
+
+  /* Corners: pick one of these instead of typing pixel values */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px; /* cards */
+  --radius-xl: 22px; /* page heroes */
+  --radius-pill: 999px; /* buttons, chips, tags */
+
+  /* Shadows, from small labels up to dialogs */
+  --shadow-sm: 0 2px 8px rgb(0 0 0 / 16%); /* labels on photos, small popovers */
+  --shadow-card: 0 4px 16px rgb(0 0 0 / 4%); /* resting cards */
+  --shadow-raised: 0 10px 28px rgb(0 0 0 / 8%); /* hovered or lifted cards */
+  --shadow-float: 0 8px 24px rgb(0 0 0 / 18%); /* floating buttons and toasts */
+  --shadow-dialog: 0 16px 48px rgb(0 0 0 / 18%);
+
+  /* Keyboard focus is ink: amber is too faint against the light page */
+  --focus-ring: 2px solid var(--ink);
 
   /* Fonts */
   --font-display: 'Bricolage Grotesque', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -66,7 +84,7 @@
   --bs-link-color-rgb: 17, 18, 25;
   --bs-link-hover-color: var(--ink-hover);
   --bs-link-hover-color-rgb: 42, 45, 58;
-  --bs-focus-ring-color: rgb(255 190 69 / 45%);
+  --bs-focus-ring-color: rgba(var(--bs-emphasis-color-rgb), 0.25);
 }
 
 [data-bs-theme='dark'] {
@@ -79,7 +97,7 @@
   --ink-hover: #d8d9e0;
   --on-ink: #111219;
   --muted: #a3a6b4;
-  --subtle: #7d8091;
+  --subtle: #8d91a3;
   --line: #2e3140;
   --line-strong: #4a4e60;
 
@@ -92,6 +110,12 @@
   --nope-subtle: #3a1a22;
 
   --overlay: rgb(0 0 0 / 60%);
+
+  /* Faint shadows vanish on a dark page, so these are stronger */
+  --shadow-card: 0 4px 16px rgb(0 0 0 / 30%);
+  --shadow-raised: 0 10px 28px rgb(0 0 0 / 45%);
+  --shadow-float: 0 8px 24px rgb(0 0 0 / 50%);
+  --shadow-dialog: 0 16px 48px rgb(0 0 0 / 55%);
 
   --bs-body-bg-rgb: 17, 18, 25;
   --bs-body-color-rgb: 242, 242, 245;
@@ -131,6 +155,11 @@ h6,
   letter-spacing: -0.02em;
 }
 
+/* Buttons: semibold everywhere; add rounded-pill for the pill shape */
+.btn {
+  --bs-btn-font-weight: 600;
+}
+
 /* Primary actions are amber */
 .btn-dark {
   --bs-btn-color: var(--on-accent);
@@ -145,7 +174,6 @@ h6,
   --bs-btn-disabled-color: var(--on-accent);
   --bs-btn-disabled-bg: var(--accent);
   --bs-btn-disabled-border-color: var(--accent);
-  --bs-btn-focus-shadow-rgb: 255, 190, 69;
   font-weight: 700;
 }
 
@@ -161,7 +189,46 @@ h6,
   --bs-btn-active-border-color: var(--ink);
   --bs-btn-disabled-color: var(--muted);
   --bs-btn-disabled-border-color: var(--line);
-  --bs-btn-focus-shadow-rgb: 255, 190, 69;
+}
+
+/* One focus ring for everything you can tab to. :where() keeps it easy to override in a page. */
+:where(a, button, summary, [tabindex]:not([tabindex='-1'])):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.btn:focus-visible,
+.btn-check:focus-visible + .btn,
+.nav-link:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* Cards: add class="surface-card" instead of re-writing the border, corners, background and shadow */
+.surface-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+/* Bootstrap's own cards, dialogs and menus sit on the card colour, not the page colour */
+.card {
+  --bs-card-bg: var(--surface);
+  --bs-card-border-color: var(--line);
+}
+
+.modal {
+  --bs-modal-bg: var(--surface);
+}
+
+.dropdown-menu {
+  --bs-dropdown-bg: var(--surface);
+}
+
+.list-group {
+  --bs-list-group-bg: var(--surface);
 }
 
 /* Inputs */
@@ -177,8 +244,8 @@ h6,
 .form-control:focus,
 .form-select:focus,
 .form-check-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 0.25rem rgb(255 190 69 / 35%);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 0.2rem var(--bs-focus-ring-color);
 }
 
 .form-check-input {

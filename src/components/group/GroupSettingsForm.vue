@@ -208,7 +208,7 @@ async function deleteGroup() {
 .group-panel {
   padding: 20px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--surface-2);
 }
 
@@ -219,7 +219,7 @@ async function deleteGroup() {
 
 .form-control {
   min-height: 44px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
 }
 
 .btn {

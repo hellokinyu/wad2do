@@ -639,7 +639,7 @@ async function joinGroup() {
     <!-- List of groups -->
     <div v-if="loading" class="ticket-grid" role="status">
       <span class="visually-hidden">Loading your groups…</span>
-      <div v-for="n in 3" :key="n" class="ticket ticket-skeleton" aria-hidden="true">
+      <div v-for="n in 3" :key="n" class="ticket surface-card ticket-skeleton" aria-hidden="true">
         <div class="skeleton-stub"></div>
         <div class="ticket-body">
           <span class="skeleton-line w-75"></span>
@@ -720,7 +720,7 @@ async function joinGroup() {
           <li v-for="group in section.list" :key="group.id">
             <RouterLink
               :to="getGroupLink(group)"
-              class="ticket"
+              class="ticket surface-card"
               :class="{ past: isPast(group) }"
               :style="getStageStyle(group, today)"
               :aria-labelledby="'group-' + group.id + '-name'"
@@ -822,12 +822,6 @@ async function joinGroup() {
   color: var(--on-ink);
 }
 
-.groups-page :is(a, button):focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 3px;
-  box-shadow: none;
-}
-
 /* Line icons. Not the animal avatars: they're SVGs too, and this stroke would outline every
    shape in them, so they'd look different from everywhere else in the app. */
 svg:not(.animal-avatar) {
@@ -871,7 +865,7 @@ svg:not(.animal-avatar) {
   min-height: 48px;
   padding: 10px 24px;
   border: 1px solid var(--ink);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--ink);
   font-size: 1rem;
@@ -899,7 +893,7 @@ svg:not(.animal-avatar) {
 .group-action:hover {
   background: var(--ink);
   color: var(--on-ink);
-  box-shadow: 0 6px 16px rgb(0 0 0 / 14%);
+  box-shadow: var(--shadow-raised);
   transform: translateY(-2px);
 }
 
@@ -922,9 +916,9 @@ svg:not(.animal-avatar) {
   margin-bottom: 2rem;
   padding: 24px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
-  box-shadow: 0 10px 32px rgb(0 0 0 / 7%);
+  box-shadow: var(--shadow-raised);
 }
 
 .join-panel {
@@ -978,7 +972,7 @@ svg:not(.animal-avatar) {
 .panel .input-group-text {
   min-height: 48px;
   border-color: var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   caret-color: var(--ink);
 }
 
@@ -1000,7 +994,7 @@ svg:not(.animal-avatar) {
 
 .panel .form-control:focus {
   border-color: var(--ink);
-  box-shadow: 0 0 0 3px rgb(17 17 17 / 12%);
+  box-shadow: 0 0 0 3px var(--bs-focus-ring-color);
 }
 
 .panel .btn {
@@ -1156,7 +1150,7 @@ svg:not(.animal-avatar) {
   min-height: 44px;
   padding: 8px 16px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--ink);
   font-size: 0.9rem;
@@ -1182,14 +1176,14 @@ svg:not(.animal-avatar) {
   margin: 0;
   padding: 20px;
   border: 1px dashed var(--line-strong);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--panel);
   color: var(--bs-secondary-color);
 }
 
 .section-count {
   padding: 1px 9px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-2);
   color: var(--muted);
   font-size: 0.8rem;
@@ -1212,12 +1206,8 @@ svg:not(.animal-avatar) {
   height: 100%;
   min-height: 168px;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: var(--surface);
   color: var(--ink);
   text-decoration: none;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
   transition:
     transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -1247,7 +1237,7 @@ svg:not(.animal-avatar) {
 
 a.ticket:hover {
   color: var(--ink);
-  box-shadow: 0 14px 32px rgb(0 0 0 / 10%);
+  box-shadow: var(--shadow-raised);
   transform: translateY(-3px);
 }
 
@@ -1304,7 +1294,7 @@ a.ticket:hover .ticket-arrow {
   flex-shrink: 0;
   margin-top: 2px;
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--ink);
   color: var(--on-ink);
   font-size: 0.75rem;
@@ -1380,7 +1370,7 @@ a.ticket:hover .ticket-arrow {
 
 .stage-track span {
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-3);
 }
 
@@ -1434,7 +1424,7 @@ a.ticket:hover .ticket-arrow {
 .skeleton-line {
   display: block;
   height: 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-2) 50%, var(--surface-2) 100%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
@@ -1457,7 +1447,7 @@ a.ticket:hover .ticket-arrow {
 .empty-groups {
   padding: 48px 24px;
   border: 1px dashed var(--line-strong);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--panel);
   text-align: center;
 }
