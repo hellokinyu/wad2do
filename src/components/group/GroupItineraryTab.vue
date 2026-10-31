@@ -165,6 +165,7 @@ function endAfter(start, activity) {
 // Replace an outdoor stop with the indoor alternative. It starts at the same time but
 // lasts as long as the alternative does, then the later stops move to fit.
 function swapStop(index, alternative) {
+  const before = [...itinerary.value.stops]
   const oldStop = itinerary.value.stops[index]
   itinerary.value.stops[index] = {
     ...alternative,
@@ -172,6 +173,7 @@ function swapStop(index, alternative) {
     end: endAfter(oldStop.start, alternative),
     reason: 'Indoor swap because of rain',
   }
+  forgetChangedModes(before)
   recalculateTimes()
 }
 
@@ -437,8 +439,21 @@ async function reloadLatestPlan() {
   await loadPage()
 }
 
+// A stop's travel_mode is for the journey to the stop after it. When that next stop
+// changes, forget the choice so the new journey uses its own fastest mode.
+function forgetChangedModes(before) {
+  const nextOf = {}
+  before.forEach((stop, i) => (nextOf[stop.activity_id] = before[i + 1]?.activity_id))
+  const stops = itinerary.value.stops
+  stops.forEach((stop, i) => {
+    if (nextOf[stop.activity_id] !== stops[i + 1]?.activity_id) delete stop.travel_mode
+  })
+}
+
 function removeStop(index) {
+  const before = [...itinerary.value.stops]
   itinerary.value.stops.splice(index, 1) // remove 1 item at this position
+  forgetChangedModes(before)
   recalculateTimes()
 }
 
@@ -447,14 +462,17 @@ function moveStop(index, direction) {
   const stops = itinerary.value.stops
   const other = index + direction
   if (other < 0 || other >= stops.length) return // already at the top or bottom
+  const before = [...stops]
   const temp = stops[index]
   stops[index] = stops[other]
   stops[other] = temp
+  forgetChangedModes(before)
   recalculateTimes()
 }
 
 // Add a voted activity to the end of the plan, even if it goes over budget
 function addStop(activity) {
+  const before = [...itinerary.value.stops]
   itinerary.value.stops.push({
     activity_id: activity.activity_id,
     name: activity.name,
@@ -469,13 +487,17 @@ function addStop(activity) {
     lat: activity.lat,
     lng: activity.lng,
   })
+  forgetChangedModes(before)
   recalculateTimes()
 }
 
 // Throw away the current plan and build a new one from the chosen time.
-// It starts edit mode first, so Discard can still bring back the saved plan.
+// Re-plan is pressed in edit mode, and savedCopy still holds the plan from before
+// editing, so Discard brings back the saved plan rather than the edits.
 async function replan() {
-  startEditing()
+  if (!isEditing.value) startEditing()
+  timeError.value = ''
+  timeNote.value = ''
   loading.value = true
   travelRequest += 1
   travelLoading.value = false
