@@ -7,6 +7,7 @@ import { fetchTravelOptions } from '@/lib/travelOptions'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
 import { useAuth } from '@/composables/useAuth'
 import ItineraryTravelOptions from '@/components/group/ItineraryTravelOptions.vue'
+import ItineraryLoadingCar from '@/components/group/ItineraryLoadingCar.vue'
 
 const TRAVEL_MINUTES = 30
 const itinerary = ref(null)
@@ -610,10 +611,7 @@ onUnmounted(() => {
       <h2 class="h5 fw-bold mb-1">Itinerary</h2>
       <p class="text-secondary mb-0">Your day, planned from the group's votes and free time.</p>
     </div>
-    <p v-if="loading" class="text-center text-secondary py-5">
-      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-      Loading plan...
-    </p>
+    <ItineraryLoadingCar v-if="loading" />
     <div v-else-if="errorMessage" class="alert alert-danger" role="alert" data-testid="itinerary-error">
       <p>{{ errorMessage }}</p>
       <button
