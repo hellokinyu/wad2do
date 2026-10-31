@@ -25,6 +25,11 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  // Why Best match ranked this card, from matchReasons(). Empty when it isn't ranked.
+  reasons: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 // Events that ActivitiesView can listen for.
@@ -38,11 +43,22 @@ function share(event) {
 
 // The card and detail page use the same display rules.
 const priceLabel = computed(() => formatPrice(props.activity.price_per_person))
-const duration = computed(() => formatDuration(props.activity.duration_min))
-const setting = computed(() => getSetting(props.activity.indoor))
-const showSetting = computed(
-  () => props.activity.category?.trim().toLowerCase() !== setting.value.toLowerCase(),
+// Cards leave out missing details instead of printing "unavailable"; the detail page still says so
+const duration = computed(() => {
+  const text = formatDuration(props.activity.duration_min)
+  return text === 'Duration unavailable' ? '' : text
+})
+const hasSetting = computed(
+  () => props.activity.indoor !== null && props.activity.indoor !== undefined,
 )
+const setting = computed(() => getSetting(props.activity.indoor))
+// "Outdoor · Outdoor" says nothing, so skip the setting when the category already is one
+const showSetting = computed(
+  () =>
+    hasSetting.value &&
+    props.activity.category?.trim().toLowerCase() !== setting.value.toLowerCase(),
+)
+const area = computed(() => props.activity.area?.trim() || '')
 const imageFailed = ref(false)
 watch(
   () => props.activity.image_url,
@@ -55,9 +71,11 @@ watch(
 <template>
   <article class="activity-card surface-card card h-100" data-testid="activity-card">
     <div class="photo-container">
+      <!-- Same page as the name link, so Tab skips it and goes straight to the name -->
       <RouterLink
         :to="`/activities/${activity.id}`"
         :aria-label="`View ${activity.name}`"
+        tabindex="-1"
         data-testid="activity-photo-link"
       >
         <img
@@ -70,7 +88,11 @@ watch(
         />
 
         <div v-else class="photo-placeholder">
-          {{ activity.category || 'Activity' }}
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <circle cx="9" cy="10" r="1.6" />
+            <path d="m21 15-4.5-4.5L8 19" />
+          </svg>
         </div>
       </RouterLink>
 
@@ -79,7 +101,10 @@ watch(
           {{ activity.category || 'Activity' }}
         </span>
 
-        <span v-if="activity.source === 'community'" class="badge rounded-pill text-bg-dark">
+        <span
+          v-if="activity.source === 'community'"
+          class="badge rounded-pill text-bg-dark community-badge"
+        >
           Community
         </span>
       </div>
@@ -152,6 +177,12 @@ watch(
       <p class="fw-semibold mb-2">
         {{ priceLabel }}<span v-if="priceLabel.startsWith('S$')"> / person</span>
       </p>
+      <p v-if="reasons.length" class="match-reasons" data-testid="activity-match-reasons">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M12 3.5 13.9 9l5.6 1.9-5.6 1.9L12 18.5l-1.9-5.7-5.6-1.9L10.1 9Z" />
+        </svg>
+        <span><strong>For you:</strong> {{ reasons.join(' · ') }}</span>
+      </p>
       <p
         v-if="activity.description?.trim()"
         class="activity-description text-secondary small mb-2"
@@ -161,20 +192,23 @@ watch(
       </p>
 
       <div class="activity-metadata mt-auto pt-2">
-        <p class="text-secondary small mb-1">
-          {{ activity.area || 'Area unavailable' }}
-        </p>
+        <p v-if="area" class="text-secondary small mb-1">{{ area }}</p>
 
-        <p class="text-secondary small mb-0">
-          <span v-if="showSetting">
-            <span
-              v-if="activity.indoor !== null && activity.indoor !== undefined"
-              aria-hidden="true"
-              >{{ activity.indoor ? '⌂' : '☀' }}</span
-            >
-            {{ setting }} ·
+        <p v-if="showSetting || duration" class="meta-line text-secondary small mb-0">
+          <span v-if="showSetting" class="meta-setting">
+            <svg v-if="activity.indoor" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 11 12 4l8 7M6 9.5V20h12V9.5" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="4" />
+              <path
+                d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"
+              />
+            </svg>
+            {{ setting }}
           </span>
-          {{ duration }}
+          <span v-if="showSetting && duration" aria-hidden="true">·</span>
+          <span v-if="duration">{{ duration }}</span>
         </p>
       </div>
     </div>
@@ -211,10 +245,23 @@ watch(
   font-weight: 500;
 }
 
+/* text-bg-dark disappears on a dark placeholder in Supper Club; the hairline keeps its edge */
+.community-badge {
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 40%);
+}
+
 .activity-photo,
 .photo-placeholder {
   width: 100%;
   height: 200px;
+}
+
+/* A shorter photo on phones, so the name and price of the first card show on the first screen */
+@media (max-width: 575.98px) {
+  .activity-photo,
+  .photo-placeholder {
+    height: 168px;
+  }
 }
 
 .activity-photo {
@@ -228,7 +275,16 @@ watch(
   align-items: center;
   justify-content: center;
   background: var(--surface-2);
-  color: var(--muted);
+}
+
+.photo-placeholder svg {
+  width: 40px;
+  height: 40px;
+  fill: none;
+  stroke: var(--subtle);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .activity-card:hover .activity-photo {
@@ -241,6 +297,53 @@ watch(
   line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  text-wrap: pretty;
+}
+
+.match-reasons {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.match-reasons strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.match-reasons svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  fill: var(--ink);
+}
+
+.meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 6px;
+}
+
+.meta-setting {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.meta-setting svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .activity-name {
@@ -267,6 +370,13 @@ watch(
   text-decoration: underline;
 }
 
+/* The two-line title height only lines prices up across a row; one card per row doesn't need it */
+@media (max-width: 767.98px) {
+  .activity-name {
+    height: auto;
+  }
+}
+
 .photo-actions {
   position: absolute;
   top: 12px;
@@ -284,8 +394,9 @@ watch(
   padding: 9px;
   border: none;
   border-radius: 50%;
-  background: transparent;
+  background: var(--photo-scrim);
   color: white;
+  transition: background-color 180ms ease;
 }
 
 .photo-action svg {
@@ -299,30 +410,18 @@ watch(
 
 .photo-action:hover,
 .photo-action:focus-visible {
-  background: rgb(0 0 0 / 16%);
+  background: var(--photo-scrim-strong);
 }
 
 .save-button {
   position: relative;
   isolation: isolate;
-  transition: background-color 180ms ease;
 }
 
-.save-button::before {
-  content: '';
-  position: absolute;
-  inset: 5px;
-  z-index: -1;
-  border: 1px solid rgb(255 255 255 / 75%);
-  border-radius: 50%;
-  background: rgb(255 190 69 / 30%);
-  opacity: 0;
-  pointer-events: none;
-}
-
+/* Hover only grows the heart; the pop and the floating hearts are kept for actually saving it */
 .save-icon {
   transition:
-    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
     fill 180ms ease;
   transform-origin: center;
 }
@@ -384,36 +483,12 @@ watch(
 }
 
 .save-button:focus-visible:not(:disabled) .save-icon {
-  transform: scale(1.2);
-  animation: heart-pop 650ms ease;
-}
-
-.save-button:focus-visible:not(:disabled)::before {
-  animation: love-ripple 700ms ease-out;
-}
-
-.save-button:focus-visible:not(:disabled) .save-particle {
-  animation-name: love-float;
-  animation-duration: 850ms;
-  animation-timing-function: ease-out;
-  animation-fill-mode: both;
+  transform: scale(1.12);
 }
 
 @media (hover: hover) {
   .save-button:hover:not(:disabled) .save-icon {
-    transform: scale(1.2);
-    animation: heart-pop 650ms ease;
-  }
-
-  .save-button:hover:not(:disabled)::before {
-    animation: love-ripple 700ms ease-out;
-  }
-
-  .save-button:hover:not(:disabled) .save-particle {
-    animation-name: love-float;
-    animation-duration: 850ms;
-    animation-timing-function: ease-out;
-    animation-fill-mode: both;
+    transform: scale(1.12);
   }
 }
 
@@ -430,17 +505,6 @@ watch(
   }
   80% {
     scale: 1.08;
-  }
-}
-
-@keyframes love-ripple {
-  0% {
-    opacity: 0.8;
-    transform: scale(0.65);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.6);
   }
 }
 
@@ -476,9 +540,12 @@ watch(
   }
 
   .save-button .save-icon,
-  .save-button .save-particle,
-  .save-button::before {
+  .save-button .save-particle {
     animation: none !important;
+  }
+
+  .photo-action {
+    transition: none;
   }
 
   .activity-photo {

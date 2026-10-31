@@ -13,6 +13,8 @@ const dialog = ref(null)
 const groups = ref([])
 const selectedIds = ref([])
 const results = ref({})
+// Groups that already had this activity when the dialog opened, so they can't be picked again
+const alreadyIds = ref([])
 const loading = ref(false)
 const sharing = ref(false)
 const errorMessage = ref('')
@@ -25,7 +27,16 @@ let controller
 let accountId
 
 function completed(id) {
-  return results.value[id] === 'shared' || results.value[id] === 'already'
+  return (
+    alreadyIds.value.includes(id) ||
+    results.value[id] === 'shared' ||
+    results.value[id] === 'already'
+  )
+}
+
+function groupStatus(id) {
+  if (results.value[id]) return results.value[id]
+  return alreadyIds.value.includes(id) ? 'already' : ''
 }
 
 function invalidate() {
@@ -59,6 +70,8 @@ async function loadGroups() {
   groups.value = []
   selectedIds.value = []
   results.value = {}
+  alreadyIds.value = []
+  const activityId = props.activity?.id
 
   try {
     const loaded = await requestWithTimeout(
@@ -72,7 +85,7 @@ async function loadGroups() {
           .abortSignal(signal)
         if (error) throw error
         const ids = (memberships ?? []).map((row) => row.group_id)
-        if (!ids.length) return []
+        if (!ids.length) return { groups: [], already: [] }
         const { data, error: groupError } = await supabase
           .from('groups')
           .select('id, name')
@@ -80,12 +93,23 @@ async function loadGroups() {
           .order('name')
           .abortSignal(signal)
         if (groupError) throw groupError
-        return data ?? []
+        // Best effort: if this check fails, sharing still reports "Already shared" afterwards
+        const { data: shares, error: shareError } = await supabase
+          .from('group_activities')
+          .select('group_id')
+          .eq('activity_id', activityId)
+          .in('group_id', ids)
+          .abortSignal(signal)
+        const already = shareError ? [] : (shares ?? []).map((row) => row.group_id)
+        return { groups: data ?? [], already }
       },
       controller,
       15000,
     )
-    if (request === requestNumber) groups.value = loaded
+    if (request === requestNumber) {
+      groups.value = loaded.groups
+      alreadyIds.value = loaded.already
+    }
   } catch (error) {
     if (request === requestNumber) {
       needsLogin.value = error.name === 'AuthSessionMissingError' || error.status === 401
@@ -155,7 +179,9 @@ async function shareActivity() {
         .map((group) => group.name)
       if (names.length) messages.push(label + names.join(', ') + '.')
     }
-    emit('shared', messages.join(' '))
+    // The groups this activity is now in, so the page can link straight to voting
+    const sharedTo = targets.map(({ id, name }) => ({ id, name }))
+    emit('shared', messages.join(' '), sharedTo)
     sharing.value = false
     close()
   } catch (error) {
@@ -252,14 +278,15 @@ onUnmounted(invalidate)
         <span class="group-copy">
           <span class="group-name">{{ group.name }}</span>
           <span
-            v-if="results[group.id]"
+            v-if="groupStatus(group.id)"
             class="small"
-            :class="results[group.id] === 'failed' ? 'text-danger' : 'text-success'"
+            :class="groupStatus(group.id) === 'failed' ? 'text-danger' : 'text-secondary'"
             role="status"
+            :data-testid="`share-status-${group.id}`"
           >
             {{
               { shared: 'Shared', already: 'Already shared', failed: 'Failed — try again' }[
-                results[group.id]
+                groupStatus(group.id)
               ]
             }}
           </span>
@@ -281,7 +308,12 @@ onUnmounted(invalidate)
             : `Share to ${pendingGroups.length} group${pendingGroups.length === 1 ? '' : 's'}`
         }}
       </button>
-      <RouterLink v-if="!sharing" to="/groups" class="mt-2" @click="close"
+      <!-- The Groups page opens its create form and shares this activity to the new group -->
+      <RouterLink
+        v-if="!sharing && activity"
+        :to="{ path: '/groups', query: { share: activity.id } }"
+        class="mt-2"
+        @click="close"
         >Create a new group</RouterLink
       >
     </template>

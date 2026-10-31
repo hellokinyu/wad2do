@@ -42,6 +42,8 @@ Dark mode is on when `<html>` has `data-bs-theme="dark"`. [src/lib/colorMode.js]
 | `--nope`                             | `#ff6b7f`             | `#ff6b7f`             | Not keen fill or bar                          |
 | `--nope-ink` / `--nope-subtle`       | `#b42335` / `#ffe3e7` | `#ff8a99` / `#3a1a22` | Not keen text and soft background             |
 | `--overlay`                          | 45% `#111219`         | 60% black             | Behind dialogs                                |
+| `--photo-scrim`                      | 50% `#111219`         | same                  | Dark disc behind white icons on photos        |
+| `--photo-scrim-strong`               | 66% `#111219`         | same                  | That disc on hover                            |
 
 ### Rules
 
@@ -49,7 +51,7 @@ Dark mode is on when `<html>` has `data-bs-theme="dark"`. [src/lib/colorMode.js]
 2. **Amber is for actions only.** It marks the one thing to tap: a primary button, the saved heart, the active nav icon. Don't use it for decoration.
 3. **Amber is never text on a light background.** It's too pale to read. Fill a button or badge with `--accent` and put `--on-accent` text on it, or use `--accent-ink` for amber text.
 4. **Selected states use ink.** A selected chip, tab or toggle is `background: var(--ink); color: var(--on-ink)`. This flips correctly in dark mode.
-5. **White on photos stays white.** Buttons and labels drawn on top of photos (the heart and share icons, photo captions) keep literal `white`, because photos look the same in both modes.
+5. **White on photos stays white.** Buttons and labels drawn on top of photos (the heart and share icons, photo captions) keep literal `white`, because photos look the same in both modes. Icon buttons sit on a `--photo-scrim` disc so they stay readable on bright photos and on the grey no-photo placeholder.
 6. **Colours that mean something stay as they are**, in both modes:
    - Group stage colours (Voting amber, Time picked blue, Planned green, past grey) in `src/lib/groupDisplay.js`
    - The availability heatmap greens in `GroupAvailabilityTab.vue`
@@ -96,6 +98,8 @@ They're stronger in dark mode, where faint shadows disappear.
 Every link, button and tabbable element gets the same keyboard focus ring from `styles.css`: a 2px ink outline. Don't write your own `:focus-visible` rule unless the control needs a different shape (for example the dashed outline on the MRT map). If you do, use `outline: var(--focus-ring)`.
 
 The ring is ink, not amber, because amber is too faint against the light page for keyboard users to see.
+
+Bootstrap's close button (`.btn-close`, the × in every pop-up) gets the same ink ring from `styles.css` instead of Bootstrap's blue glow, and only for the keyboard.
 
 ## Cards
 
@@ -146,6 +150,14 @@ Every pop-up uses [BaseDialog.vue](src/components/BaseDialog.vue). It handles Es
 - Use `:closable="!saving"` to stop it closing mid-request, and `flush` for edge-to-edge content like a photo.
 - Use `:open` with `@close` instead of `v-model:open` when closing needs to run your own code.
 - Focus the button that opens it before opening (`event.currentTarget.focus()`), because Safari doesn't focus buttons on click.
+
+## Messages after an action
+
+Short confirmations ("Saved to your Profile.") float at the bottom of the screen as an ink panel: `background: var(--ink)`, `color: var(--on-ink)`, `--shadow-float`, `--radius-md`. Errors use Bootstrap's danger colours instead. See `.save-feedback` in [ActivitiesView.vue](src/views/ActivitiesView.vue).
+
+- A routine message fades after 4 seconds.
+- A message with a next step (for example "Go vote in Saturday Squad" after sharing) stays until it's closed, because a link that vanishes can't be tapped.
+- Its close button sends keyboard focus somewhere sensible (the results), since the button disappears with the message.
 
 ## Bootstrap
 

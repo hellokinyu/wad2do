@@ -178,6 +178,8 @@ async function mockBackend(page, options = {}) {
       return route.fulfill({ headers, json: [{ id: groupId, name: 'Saturday Squad' }] })
     }
     if (table === 'group_activities') {
+      // The share menu's check for groups that already have this activity
+      if (request.method() === 'GET') return route.fulfill({ headers, json: [] })
       if (state.shareFailures > 0) {
         state.shareFailures -= 1
         return failRequest(route)
@@ -198,7 +200,7 @@ test('card opens its details and Back restores the current search', async ({ pag
 
   await page.getByTestId('activity-search').fill('Pottery')
   await expect(page.getByTestId('activity-card')).toHaveCount(1)
-  await expect(page.getByTestId('activity-card')).toContainText('S$35.00 / person')
+  await expect(page.getByTestId('activity-card')).toContainText('S$35 / person')
   await expect(page.getByTestId('activity-description')).toHaveText(pottery.description)
   await expect(page.getByTestId('activity-card')).not.toContainText(pottery.price_note)
   await expect(page.getByTestId('activity-card')).toContainText('2 h')
@@ -207,7 +209,7 @@ test('card opens its details and Back restores the current search', async ({ pag
   await page.getByRole('link', { name: 'Pottery Workshop', exact: true }).click()
 
   await expect(page.getByTestId('activity-detail-name')).toHaveText('Pottery Workshop')
-  await expect(page.getByTestId('detail-price')).toHaveText('S$35.00')
+  await expect(page.getByTestId('detail-price')).toHaveText('S$35')
   await expect(page.getByTestId('detail-price-note')).toHaveText(pottery.price_note)
   await expect(page.getByTestId('detail-duration')).toHaveText('2 h')
   await expect(page.getByTestId('detail-description')).toContainText('Shape a clay bowl')

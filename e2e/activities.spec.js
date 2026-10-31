@@ -78,10 +78,33 @@ async function selectFilter(page, name, value) {
   await page.getByTestId('filter-confirm').click()
 }
 
+// Clears the filter panel's own filters (area, price, indoor/outdoor), not the search, category or sort
 async function clearFilters(page) {
   const dialog = page.getByRole('dialog', { name: 'Filter activities' })
   if (!(await dialog.isVisible())) await page.getByTestId('filters-toggle').click()
   await page.getByTestId('clear-filters').click()
+  await page.getByTestId('filter-confirm').click()
+}
+
+// Category is picked from the chip row ('' for All)
+function categoryChip(page, name) {
+  return name
+    ? page.getByRole('group', { name: 'Categories' }).getByRole('button', { name, exact: true })
+    : page.getByTestId('category-chip-all')
+}
+
+async function pickCategory(page, name) {
+  await categoryChip(page, name).click()
+}
+
+// Phones keep the sort menu inside the filter panel; wider screens show it next to the chips
+async function selectSort(page, value) {
+  if (await page.getByTestId('sort-filter').isVisible()) {
+    await page.getByTestId('sort-filter').selectOption(value)
+    return
+  }
+  await page.getByTestId('filters-toggle').click()
+  await page.getByTestId('mobile-sort-filter').selectOption(value)
   await page.getByTestId('filter-confirm').click()
 }
 
@@ -109,47 +132,59 @@ test('demo searches, combines filters and clears them', async ({ page }) => {
 
   const cards = page.getByTestId('activity-card')
   await expect(cards).toHaveCount(4)
-  await expect(page.getByTestId('activities-sort-summary')).toHaveText('Showing catalogue order')
+  await expect(page.getByTestId('activities-sort-summary')).toContainText('Not ranked for you yet.')
+  await expect(page.getByTestId('add-interests-link')).toHaveAttribute('href', '/profile')
   await expect(page.getByTestId('activities-sort-description')).toHaveCount(0)
   await expect(page.getByTestId('activity-save')).toHaveCount(4)
   await expect(page.getByTestId('activity-share')).toHaveCount(4)
   await expect(cards.getByRole('link')).toHaveCount(8)
+  // The photo link goes to the same page as the name, so Tab skips it
+  await expect(page.getByTestId('activity-photo-link').first()).toHaveAttribute('tabindex', '-1')
+  // Category belongs to the chips only
+  await expect(page.getByTestId('category-filter')).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Outdoor', exact: true }).click()
+  await pickCategory(page, 'Outdoor')
   await expect(cards).toHaveCount(2)
-  await expect(page.getByTestId('category-filter')).toHaveValue('Outdoor')
-  await expect(page.getByRole('button', { name: 'Outdoor', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  )
+  await expect(categoryChip(page, 'Outdoor')).toHaveAttribute('aria-pressed', 'true')
+  await expect(categoryChip(page, '')).toHaveAttribute('aria-pressed', 'false')
 
-  await selectFilter(page, 'category-filter', 'Workshops')
+  await pickCategory(page, 'Workshops')
   await expect(cards).toHaveCount(1)
-  await expect(page.getByRole('button', { name: 'Workshops', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  )
-  await page.getByTestId('category-chip-all').click()
+  await expect(categoryChip(page, 'Workshops')).toHaveAttribute('aria-pressed', 'true')
+  await pickCategory(page, '')
   await expect(cards).toHaveCount(4)
-  await expect(page.getByTestId('category-filter')).toHaveValue('')
+  await expect(categoryChip(page, '')).toHaveText('All')
 
   await page.getByTestId('activity-search').fill('  POTTERY  ')
   await expect(cards).toHaveCount(1)
   await expect(cards).toContainText('Pottery Workshop')
 
-  await selectFilter(page, 'category-filter', 'Outdoor')
+  await pickCategory(page, 'Outdoor')
   await expect(page.getByTestId('activities-no-results')).toBeVisible()
+  await expect(page.getByTestId('activities-no-results')).toContainText(
+    'Nothing matches “POTTERY” with these filters',
+  )
+  // Each suggestion is one change that brings results back
+  await expect(page.getByTestId('empty-suggestion')).toHaveText([
+    /Clear search “POTTERY”\s*2 activities/,
+    /Show all categories\s*1 activity/,
+  ])
   await expect(cards).toHaveCount(0)
 
+  await expect(page.getByTestId('empty-clear-filters')).toHaveText('Clear search and filters')
   await page.getByTestId('empty-clear-filters').click()
   await expect(cards).toHaveCount(4)
   await expect(page.getByTestId('activity-search')).toHaveValue('')
-  await expect(page.getByTestId('category-filter')).toHaveValue('')
+  await expect(categoryChip(page, '')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('activities-count')).toBeFocused()
 
-  await selectFilter(page, 'category-filter', 'Outdoor')
+  await pickCategory(page, 'Outdoor')
   await expect(cards).toHaveCount(2)
   await selectFilter(page, 'setting-filter', 'indoor')
   await expect(page.getByTestId('activities-no-results')).toBeVisible()
+  await page.getByTestId('empty-suggestion').filter({ hasText: 'Remove Indoor' }).click()
+  await expect(cards).toHaveCount(2)
+  await expect(page.getByTestId('setting-filter')).toHaveValue('')
 
   await selectFilter(page, 'setting-filter', 'outdoor')
   await expect(cards).toHaveCount(2)
@@ -159,6 +194,8 @@ test('demo searches, combines filters and clears them', async ({ page }) => {
   await expect(page.getByTestId('activities-count')).toHaveText('Showing 1–1 of 1 activities')
 
   await clearFilters(page)
+  await expect(page.getByTestId('activity-search')).toHaveValue('marina')
+  await pickCategory(page, '')
   await page.getByTestId('activity-search').fill('cafe')
   await expect(cards).toHaveCount(1)
   await expect(cards).toContainText('Cafés in Tiong Bahru')
@@ -201,7 +238,7 @@ test('phone layout has one card per row and an accessible filter panel', async (
 
   const cards = page.getByTestId('activity-card')
   await expect(cards).toHaveCount(4)
-  await expect(page.getByTestId('category-filter')).toBeHidden()
+  await expect(page.getByTestId('area-filter')).toBeHidden()
 
   const first = await cards.nth(0).boundingBox()
   const second = await cards.nth(1).boundingBox()
@@ -210,6 +247,13 @@ test('phone layout has one card per row and an accessible filter panel', async (
   expect(second.x).toBe(first.x)
   expect(second.y).toBeGreaterThan(first.y)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375)
+  // The first card's name and price fit on the first phone screen
+  await expect(page.getByTestId('activity-name-link').first()).toBeInViewport()
+  await expect(cards.first().getByText('S$25 / person')).toBeInViewport()
+  await expect(page.getByTestId('activities-count')).toBeVisible()
+  // Submitting is rarer than browsing, so on phones it waits below the results
+  const submit = await page.getByTestId('submit-activity-button').boundingBox()
+  expect(submit.y).toBeGreaterThan((await cards.last().boundingBox()).y)
 
   await page.getByRole('button', { name: 'Outdoor', exact: true }).click()
   await expect(cards).toHaveCount(2)
@@ -222,8 +266,13 @@ test('phone layout has one card per row and an accessible filter panel', async (
   await expect(cards).toHaveCount(2)
   await selectFilter(page, 'area-filter', 'Marina Bay')
   await selectFilter(page, 'price-filter', 'free')
-  await page.getByTestId('sort-filter').selectOption('price-asc')
+  await selectSort(page, 'price-asc')
   await expect(cards).toHaveCount(1)
+  // The sort menu lives in the filter panel on phones, so the page says which sort is on
+  await expect(page.getByTestId('activities-sort-summary')).toHaveText(
+    'Sorted by Price: low to high',
+  )
+  await expect(page.getByTestId('activities-sort-summary')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375)
   await clearFilters(page)
   await expect(cards).toHaveCount(4)
@@ -245,17 +294,29 @@ test('area and price filters combine and clear with the existing filters', async
   await selectFilter(page, 'price-filter', '20-50')
   await page.getByTestId('sort-filter').selectOption('price-desc')
   await expect(names).toHaveText(['Pottery Workshop', 'Cafés in Tiong Bahru'])
-  await selectFilter(page, 'category-filter', 'Workshops')
+  await pickCategory(page, 'Workshops')
   await selectFilter(page, 'setting-filter', 'indoor')
   await page.getByTestId('activity-search').fill('pottery')
   await expect(names).toHaveText(['Pottery Workshop'])
-  await selectFilter(page, 'price-filter', 'free')
+  await page.getByTestId('filters-toggle').click()
+  await page.getByTestId('price-filter').selectOption('free')
+  // No match: the Show button stops being the amber action and the panel offers a way back
+  await expect(page.getByTestId('filter-confirm')).toHaveText('Show 0 activities')
+  await expect(page.getByTestId('filter-confirm')).toHaveClass(/btn-outline-dark/)
+  await expect(page.getByTestId('filter-suggestion')).toHaveText([/Remove Free\s*1 activity/])
+  await page.getByTestId('filter-confirm').click()
   await expect(page.getByTestId('activities-no-results')).toBeVisible()
   await page.getByTestId('empty-clear-filters').click()
-  await expect(names).toHaveText(activities.map((activity) => activity.name))
+  // Clearing brings everything back but keeps the chosen sort
+  await expect(names).toHaveText([
+    'Pottery Workshop',
+    'Cafés in Tiong Bahru',
+    'Sunset Kayaking',
+    'Picnic at Marina Barrage',
+  ])
   await expect(page.getByTestId('area-filter')).toHaveValue('')
   await expect(page.getByTestId('price-filter')).toHaveValue('')
-  await expect(page.getByTestId('sort-filter')).toHaveValue('best-match')
+  await expect(page.getByTestId('sort-filter')).toHaveValue('price-desc')
 })
 
 test('price bands handle boundaries and sorting keeps missing prices last', async ({ page }) => {
@@ -294,6 +355,7 @@ test('price bands handle boundaries and sorting keeps missing prices last', asyn
     await expect(names).toHaveText(indices.map((i) => 'Price ' + i))
   }
   await clearFilters(page)
+  await selectSort(page, 'best-match')
   await expect(names).toHaveText(records.map((activity) => activity.name))
 })
 
@@ -316,6 +378,20 @@ test('area, price and sorting survive an activity detail round trip', async ({ p
     'Pottery Workshop',
     'Cafés in Tiong Bahru',
   ])
+})
+
+test('search, category and filters survive a reload', async ({ page }) => {
+  await mockActivities(page)
+  await page.goto('/activities')
+  await selectFilter(page, 'area-filter', 'Tiong Bahru')
+  await pickCategory(page, 'Workshops')
+  await page.getByTestId('activity-search').fill('pottery')
+  await expect(page.getByTestId('activity-card')).toHaveCount(1)
+  await page.reload()
+  await expect(page.getByTestId('activity-card')).toHaveCount(1)
+  await expect(page.getByTestId('activity-search')).toHaveValue('pottery')
+  await expect(page.getByTestId('area-filter')).toHaveValue('Tiong Bahru')
+  await expect(categoryChip(page, 'Workshops')).toHaveAttribute('aria-pressed', 'true')
 })
 
 test('search includes activities in later database batches', async ({ page }) => {
@@ -366,7 +442,7 @@ for (const width of [375, 1440]) {
       await selectFilter(page, 'area-filter', 'Tiong Bahru')
       await selectFilter(page, 'price-filter', '20-50')
       await page.getByTestId('activity-search').fill('Workshop')
-      await page.getByTestId('sort-filter').selectOption('price-asc')
+      await selectSort(page, 'price-asc')
       await page.getByRole('button', { name: 'Page 2', exact: true }).click()
       const link = page.getByTestId('activity-name-link').nth(3)
       const name = await link.textContent()
@@ -519,6 +595,7 @@ test('pagination survives a detail visit and resets for search, filters and sort
   await expect(page.getByTestId('activities-count')).toHaveText('Showing 1–19 of 19 activities')
 
   await clearFilters(page)
+  await selectSort(page, 'best-match')
   await pagination.getByRole('button', { name: 'Page 3', exact: true }).click()
   await page.getByTestId('activity-search').fill('Workshop 0')
   await expect(names).toHaveText(['Workshop 0'])
@@ -556,29 +633,37 @@ test('Best match reads only the signed-in profile and still respects filters and
     activities[0].name,
     activities[3].name,
   ])
-  await selectFilter(page, 'category-filter', 'Outdoor')
+  // Each ranked card says which preferences it matched
+  const reasons = page.getByTestId('activity-card').getByTestId('activity-match-reasons')
+  await expect(reasons.first()).toHaveText('For you: Outdoors · Under S$20')
+  await expect(reasons).toHaveText([
+    'For you: Outdoors · Under S$20',
+    'For you: Outdoors · In your area',
+  ])
+  await pickCategory(page, 'Outdoor')
   await expect(names).toHaveText([activities[2].name, activities[1].name])
   await page.getByTestId('sort-filter').selectOption('price-asc')
   await expect(page.getByTestId('activities-sort-summary')).toHaveText(
     'Sorted by Price: low to high',
   )
   await expect(page.getByTestId('activities-sort-description')).toHaveCount(0)
+  await expect(reasons).toHaveCount(0)
   await page.getByTestId('sort-filter').selectOption('price-desc')
   await expect(names).toHaveText([activities[1].name, activities[2].name])
   await expect(page.getByTestId('activities-sort-summary')).toHaveText(
     'Sorted by Price: high to low',
   )
-  await clearFilters(page)
-  await expect(page.getByTestId('sort-filter')).toHaveValue('best-match')
+  await pickCategory(page, '')
+  await page.getByTestId('sort-filter').selectOption('best-match')
   await expect(names.first()).toHaveText(activities[2].name)
   await expect(page.getByTestId('activities-sort-summary')).toContainText('Sorted by Best match')
-  await page.getByTestId('sort-filter').selectOption('catalogue')
-  await expect(names).toHaveText(activities.map((activity) => activity.name))
-  await expect(page.getByTestId('activities-sort-summary')).toHaveText('Showing catalogue order')
+  await page.getByTestId('sort-filter').selectOption('name')
+  await expect(names).toHaveText([0, 2, 3, 1].map((index) => activities[index].name))
+  await expect(page.getByTestId('activities-sort-summary')).toHaveText('Sorted by Name: A to Z')
   await expect(page.getByTestId('activities-sort-description')).toHaveCount(0)
 })
 
-test('price and catalogue sorts display results while preferences are still loading', async ({
+test('price and name sorts display results while preferences are still loading', async ({
   page,
 }) => {
   await mockActivities(page)
@@ -604,7 +689,7 @@ test('price and catalogue sorts display results while preferences are still load
   for (const [sort, indices, summary] of [
     ['price-asc', [2, 1, 0, 3], 'Sorted by Price: low to high'],
     ['price-desc', [3, 0, 1, 2], 'Sorted by Price: high to low'],
-    ['catalogue', [0, 1, 2, 3], 'Showing catalogue order'],
+    ['name', [0, 2, 3, 1], 'Sorted by Name: A to Z'],
   ]) {
     await page.getByTestId('sort-filter').selectOption(sort)
     await expect(page.getByTestId('activities-loading')).toHaveCount(0)
@@ -628,7 +713,7 @@ test('price and catalogue sorts display results while preferences are still load
   await expect(page.getByTestId('activities-sort-summary')).toContainText('Sorted by Best match')
 })
 
-test('empty saved preferences show catalogue order without claiming personalisation', async ({
+test('empty saved preferences say the list is not ranked and point to Profile', async ({
   page,
 }) => {
   await mockActivities(page)
@@ -637,8 +722,10 @@ test('empty saved preferences show catalogue order without claiming personalisat
   )
   await page.goto('/activities')
   await expect(page.getByTestId('sort-filter')).toHaveValue('best-match')
-  await expect(page.getByTestId('activities-sort-summary')).toHaveText('Showing catalogue order')
+  await expect(page.getByTestId('activities-sort-summary')).toContainText('Not ranked for you yet.')
+  await expect(page.getByTestId('add-interests-link')).toBeVisible()
   await expect(page.getByTestId('activities-sort-description')).toHaveCount(0)
+  await expect(page.getByTestId('activity-match-reasons')).toHaveCount(0)
   const summary = await page.getByTestId('activities-sort-summary').boundingBox()
   expect(summary.height).toBeGreaterThan(16)
 })
@@ -657,15 +744,19 @@ test('profile failure keeps the catalogue usable and can be retried', async ({ p
   })
   await page.goto('/activities')
   const names = page.getByTestId('activity-name-link')
-  await expect(page.getByTestId('preferences-error')).toContainText('catalogue order')
-  await expect(page.getByTestId('activities-sort-summary')).toHaveText('Showing catalogue order')
+  await expect(page.getByTestId('preferences-error')).toContainText(
+    "Couldn't load your preferences, so these aren't ranked for you yet.",
+  )
+  await expect(page.getByTestId('activities-sort-summary')).toHaveText('Not ranked for you yet.')
+  // Adding interests wouldn't help while they can't be read, so only Try again is offered
+  await expect(page.getByTestId('add-interests-link')).toHaveCount(0)
   await expect(names).toHaveText(activities.map((activity) => activity.name))
   await page.getByTestId('activity-search').fill('pottery')
   await expect(names).toHaveText([activities[3].name])
   await page.getByTestId('preferences-retry').click()
   await expect(page.getByTestId('preferences-error')).toHaveCount(0)
   await expect(page.getByTestId('activities-sort-summary')).toContainText('Sorted by Best match')
-  await clearFilters(page)
+  await page.getByTestId('activity-search').fill('')
   await expect(names).toHaveText([
     activities[1].name,
     activities[2].name,
@@ -811,6 +902,10 @@ for (const width of [375, 1440]) {
     await page.getByRole('button', { name: 'Remove Tiong Bahru filter', exact: true }).click()
     await expect(page.getByTestId('area-filter')).toHaveValue('')
     await expect(page.getByTestId('price-filter')).toHaveValue('20-50')
+    // Focus stays in the chip row, on the chip that moved into the removed one's place
+    await expect(
+      page.getByRole('button', { name: 'Remove S$20 to under S$50 filter', exact: true }),
+    ).toBeFocused()
     await page.getByTestId('clear-all-filters').click()
     await expect(page.getByTestId('active-filter')).toHaveCount(0)
     await trigger.click()
@@ -890,7 +985,7 @@ for (const [width, height] of [
     await expect(page.getByTestId('filters-toggle')).toBeInViewport()
     await page.getByTestId('activity-search').fill('Workshop')
     await page.getByTestId('filters-toggle').click()
-    await page.getByTestId('category-filter').selectOption('Workshops')
+    await page.getByTestId('area-filter').selectOption('Tiong Bahru')
     await page.getByTestId('filter-confirm').click()
     await expect(page.getByTestId('filters-toggle')).toBeFocused()
     await page

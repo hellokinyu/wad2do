@@ -40,6 +40,11 @@
 
   --overlay: rgb(17 18 25 / 45%); /* behind dialogs */
 
+  /* Dark disc behind white icons on photos, so they stay 3:1 on bright photos and blank placeholders.
+     Photos look the same in both modes, so this doesn't change in dark mode. */
+  --photo-scrim: rgb(17 18 25 / 50%);
+  --photo-scrim-strong: rgb(17 18 25 / 66%); /* hover */
+
   /* Corners: pick one of these instead of typing pixel values */
   --radius-xs: 6px;
   --radius-sm: 10px;
@@ -203,6 +208,21 @@ h6,
   outline: var(--focus-ring);
   outline-offset: 2px;
   box-shadow: none;
+}
+
+/* Bootstrap's close button has a blue glow on every focus, even a tap. Use the ink ring, keyboard only */
+.btn-close {
+  --bs-btn-close-focus-shadow: none;
+}
+
+.btn-close:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Dark mode draws the × through an invert filter, which also inverts the ring, so start from the opposite */
+[data-bs-theme='dark'] .btn-close:focus-visible {
+  outline-color: var(--on-ink);
 }
 
 /* Cards: add class="surface-card" instead of re-writing the border, corners, background and shadow */

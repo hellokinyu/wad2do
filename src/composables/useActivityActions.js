@@ -80,7 +80,7 @@ export function useActivityActions(activity) {
 
       if (!disposed && activity.value?.id === id) {
         saved.value = isSaved
-        announce(isSaved ? 'Activity saved.' : 'Removed from saved activities.')
+        announce(isSaved ? 'Saved to your Profile.' : 'Removed from saved activities.')
       }
     } catch {
       if (!disposed && activity.value?.id === id) {

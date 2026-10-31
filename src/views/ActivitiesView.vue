@@ -1,12 +1,11 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import ActivityCard from '@/components/ActivityCard.vue'
 import ActivityShareDialog from '@/components/ActivityShareDialog.vue'
 import BaseDialog from '@/components/BaseDialog.vue'
 import { getPrice } from '@/lib/activityDisplay'
-import { rankActivities } from '@/lib/activityRanking'
+import { rankActivities, matchReasons } from '@/lib/activityRanking'
 import { useAuth } from '@/composables/useAuth'
 import { setActivitySaved } from '@/lib/activityFavourites'
 import { beginActivitiesRender } from '@/lib/activityScroll'
@@ -21,17 +20,34 @@ const favouritesLoading = ref(true)
 const favouritesError = ref('')
 const saveError = ref('')
 const saveMessage = ref('')
+// Groups from the last share, so the message can link straight to voting
+const sharedGroups = ref([])
 let favouritesRequest = 0
 let saveMessageTimer
 const shareTarget = ref(null)
 
-function announce(text) {
+// Routine messages fade after a few seconds. A share message stays until it's closed,
+// because it has links to follow.
+function announce(text, groups = []) {
   saveError.value = ''
   saveMessage.value = text
+  sharedGroups.value = groups
   clearTimeout(saveMessageTimer)
-  saveMessageTimer = setTimeout(() => {
-    saveMessage.value = ''
-  }, 3000)
+  if (!groups.length) saveMessageTimer = setTimeout(dismissMessage, 4000)
+}
+
+function dismissMessage() {
+  clearTimeout(saveMessageTimer)
+  saveError.value = ''
+  saveMessage.value = ''
+  sharedGroups.value = []
+}
+
+// The close button disappears with the message, so put keyboard focus on the results instead
+function closeMessage() {
+  dismissMessage()
+  const target = resultsSummary.value ?? document.getElementById('activity-search')
+  target?.focus({ preventScroll: true })
 }
 
 function openShare(activityId) {
@@ -45,9 +61,7 @@ async function loadFavourites() {
   savingIds.value = new Set()
   favouritesLoading.value = true
   favouritesError.value = ''
-  saveError.value = ''
-  saveMessage.value = ''
-  clearTimeout(saveMessageTimer)
+  dismissMessage()
 
   try {
     if (!userId) return
@@ -77,9 +91,7 @@ async function toggleSaved(activityId) {
   const request = favouritesRequest
   const shouldSave = !savedIds.value.has(activityId)
   savingIds.value.add(activityId)
-  saveError.value = ''
-  saveMessage.value = ''
-  clearTimeout(saveMessageTimer)
+  dismissMessage()
 
   try {
     const { data, error } = await supabase.auth.getUser()
@@ -90,7 +102,7 @@ async function toggleSaved(activityId) {
 
     if (isSaved) savedIds.value.add(activityId)
     else savedIds.value.delete(activityId)
-    announce(isSaved ? 'Activity saved.' : 'Removed from saved activities.')
+    announce(isSaved ? 'Saved to your Profile.' : 'Removed from saved activities.')
   } catch {
     if (request === favouritesRequest) {
       saveError.value = "Couldn't update your saved activities. Please try again."
@@ -109,7 +121,7 @@ onUnmounted(() => {
 const activities = ref([])
 const loading = ref(true)
 const errorMessage = ref('')
-// Remember the current filters and page when opening a detail page and coming back.
+// Remember the current filters and page, so coming back from a detail page or a reload keeps them.
 function readFilters() {
   try {
     return JSON.parse(sessionStorage.getItem('wad2do.activityFilters') || '{}') || {}
@@ -126,7 +138,7 @@ const selectedArea = ref(String(previousFilters.area ?? ''))
 const selectedPrice = ref(String(previousFilters.price ?? ''))
 const sortOptions = [
   { value: 'best-match', label: 'Best match' },
-  { value: 'catalogue', label: 'Catalogue order' },
+  { value: 'name', label: 'Name: A to Z' },
   { value: 'price-asc', label: 'Price: low to high' },
   { value: 'price-desc', label: 'Price: high to low' },
 ]
@@ -140,9 +152,49 @@ const requestedPage = ref(
 )
 const resultsSummary = ref(null)
 const filtersPanel = ref(null)
+const filterConfirm = ref(null)
 const showFilters = ref(false)
-const stickyControls = ref(null)
+const searchRow = ref(null)
+const browseRow = ref(null)
+const appliedFilters = ref(null)
 const filtersTrigger = ref(null)
+
+// Phones get a different page order (Submit moves below the results), so track the breakpoint.
+const phoneQuery = window.matchMedia('(max-width: 767.98px)')
+const isPhone = ref(phoneQuery.matches)
+function updatePhone(event) {
+  isPhone.value = event.matches
+}
+phoneQuery.addEventListener('change', updatePhone)
+onUnmounted(() => phoneQuery.removeEventListener('change', updatePhone))
+
+// The search row is the same colour as the page, so it only shows its bottom edge once it's
+// stuck under the navbar and cards are scrolling beneath it.
+const searchStuck = ref(false)
+let stuckFrame = 0
+
+function checkStuck() {
+  stuckFrame = 0
+  const row = searchRow.value
+  if (!row) return
+  const top = parseFloat(getComputedStyle(row).top) || 0
+  searchStuck.value = window.scrollY > 0 && row.getBoundingClientRect().top <= top + 0.5
+}
+
+function queueStuckCheck() {
+  if (!stuckFrame) stuckFrame = requestAnimationFrame(checkStuck)
+}
+
+onMounted(() => {
+  window.addEventListener('scroll', queueStuckCheck, { passive: true })
+  window.addEventListener('resize', queueStuckCheck)
+  checkStuck()
+})
+onUnmounted(() => {
+  window.removeEventListener('scroll', queueStuckCheck)
+  window.removeEventListener('resize', queueStuckCheck)
+  cancelAnimationFrame(stuckFrame)
+})
 
 // Category chip strip: one scrolling row. chipsBefore/chipsAfter say whether there are more chips
 // off either edge, which turns on that side's fade and arrow.
@@ -196,25 +248,6 @@ watch([keyword, selectedCategory, selectedSetting, selectedArea, selectedPrice, 
   requestedPage.value = 1
 })
 
-onBeforeRouteLeave(() => {
-  try {
-    sessionStorage.setItem(
-      'wad2do.activityFilters',
-      JSON.stringify({
-        keyword: keyword.value,
-        category: selectedCategory.value,
-        setting: selectedSetting.value,
-        area: selectedArea.value,
-        price: selectedPrice.value,
-        sort: sortBy.value,
-        page: currentPage.value,
-      }),
-    )
-  } catch {
-    // Browsing still works when browser storage is unavailable.
-  }
-})
-
 const categories = computed(() => {
   const values = activities.value.map((activity) => activity.category).filter(Boolean)
   return [...new Set(values)].sort()
@@ -226,7 +259,7 @@ watch(categories, async () => {
   updateChipEdges()
 })
 
-// Picking a category here or in the filter panel brings its chip into view
+// Picking a category brings its chip into view
 watch(selectedCategory, async () => {
   await nextTick()
   chipStrip.value
@@ -247,6 +280,7 @@ const priceRanges = [
   { value: '50-100', label: 'S$50 to under S$100', min: 50, max: 100 },
   { value: '100-plus', label: 'S$100 and above', min: 100, max: Infinity },
 ]
+const settingLabels = { indoor: 'Indoor', outdoor: 'Outdoor' }
 
 const hasRankingPreferences = computed(() =>
   Boolean(
@@ -255,54 +289,69 @@ const hasRankingPreferences = computed(() =>
     profile.value?.home_area?.trim(),
   ),
 )
+// Best match is only a real ranking when there are saved preferences to rank by
+const ranked = computed(() => sortBy.value === 'best-match' && hasRankingPreferences.value)
 
 const sortSummary = computed(() => {
   if (sortBy.value === 'best-match' && !hasRankingPreferences.value) {
-    return 'Showing catalogue order'
+    return 'Not ranked for you yet.'
   }
-  return {
-    'best-match': 'Sorted by Best match',
-    catalogue: 'Showing catalogue order',
-    'price-asc': 'Sorted by Price: low to high',
-    'price-desc': 'Sorted by Price: high to low',
-  }[sortBy.value]
+  const option = sortOptions.find((option) => option.value === sortBy.value)
+  return 'Sorted by ' + option.label
 })
 
 // Search logic
 function searchText(value) {
   return String(value ?? '')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
 }
 
+const currentFilters = computed(() => ({
+  keyword: keyword.value,
+  category: selectedCategory.value,
+  area: selectedArea.value,
+  price: selectedPrice.value,
+  setting: selectedSetting.value,
+}))
+
+function matchesFilters(activity, filters) {
+  const search = searchText(filters.keyword.trim())
+  const text = searchText(
+    [activity.name, activity.category, activity.area, activity.description].join(' '),
+  )
+  const range = priceRanges.find((option) => option.value === filters.price)
+  const price = getPrice(activity.price_per_person)
+
+  const matchesSearch = !search || text.includes(search)
+  const matchesCategory = !filters.category || activity.category === filters.category
+  const matchesArea = !filters.area || activity.area?.trim() === filters.area
+  const matchesPrice =
+    !range ||
+    (price !== null &&
+      (range.value === 'free' ? price === 0 : price >= range.min && price < range.max))
+  const matchesSetting =
+    !filters.setting ||
+    (filters.setting === 'indoor' && activity.indoor === true) ||
+    (filters.setting === 'outdoor' && activity.indoor === false)
+
+  return matchesSearch && matchesCategory && matchesSetting && matchesArea && matchesPrice
+}
+
 const filteredActivities = computed(() => {
-  const search = searchText(keyword.value.trim())
-
-  const range = priceRanges.find((option) => option.value === selectedPrice.value)
-  const matches = activities.value.filter((activity) => {
-    const text = searchText(
-      [activity.name, activity.category, activity.area, activity.description].join(' '),
-    )
-
-    const matchesSearch = !search || text.includes(search)
-    const matchesCategory = !selectedCategory.value || activity.category === selectedCategory.value
-    const matchesArea = !selectedArea.value || activity.area?.trim() === selectedArea.value
-    const price = getPrice(activity.price_per_person)
-    const matchesPrice =
-      !range ||
-      (price !== null &&
-        (range.value === 'free' ? price === 0 : price >= range.min && price < range.max))
-    const matchesSetting =
-      !selectedSetting.value ||
-      (selectedSetting.value === 'indoor' && activity.indoor === true) ||
-      (selectedSetting.value === 'outdoor' && activity.indoor === false)
-
-    return matchesSearch && matchesCategory && matchesSetting && matchesArea && matchesPrice
-  })
+  const matches = activities.value.filter((activity) =>
+    matchesFilters(activity, currentFilters.value),
+  )
 
   if (sortBy.value === 'best-match' && profile.value) {
     return rankActivities(matches, profile.value)
+  }
+
+  if (sortBy.value === 'name') {
+    matches.sort((a, b) =>
+      String(a.name ?? '').localeCompare(String(b.name ?? ''), 'en-SG', { sensitivity: 'base' }),
+    )
   }
 
   if (sortBy.value === 'price-asc' || sortBy.value === 'price-desc') {
@@ -319,6 +368,62 @@ const filteredActivities = computed(() => {
   return matches
 })
 
+function activityCount(count) {
+  return `${count} ${count === 1 ? 'activity' : 'activities'}`
+}
+
+// With no matches, offer the single changes that would bring results back, most results first.
+const narrowings = computed(() => {
+  const price = priceRanges.find((range) => range.value === selectedPrice.value)
+  return [
+    keyword.value.trim() && {
+      key: 'keyword',
+      label: `Clear search “${keyword.value.trim()}”`,
+      clear: () => (keyword.value = ''),
+    },
+    selectedCategory.value && {
+      key: 'category',
+      label: 'Show all categories',
+      clear: () => (selectedCategory.value = ''),
+    },
+    selectedArea.value && {
+      key: 'area',
+      label: `Remove ${selectedArea.value}`,
+      clear: () => (selectedArea.value = ''),
+    },
+    price && {
+      key: 'price',
+      label: `Remove ${price.label}`,
+      clear: () => (selectedPrice.value = ''),
+    },
+    selectedSetting.value && {
+      key: 'setting',
+      label: `Remove ${settingLabels[selectedSetting.value]}`,
+      clear: () => (selectedSetting.value = ''),
+    },
+  ].filter(Boolean)
+})
+
+const suggestions = computed(() => {
+  if (filteredActivities.value.length || !activities.value.length) return []
+  return narrowings.value
+    .map((item) => {
+      const filters = { ...currentFilters.value, [item.key]: '' }
+      const count = activities.value.filter((activity) => matchesFilters(activity, filters)).length
+      return { ...item, count }
+    })
+    .filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3)
+})
+
+async function applySuggestion(item) {
+  item.clear()
+  await nextTick()
+  if (showFilters.value) filterConfirm.value?.focus({ preventScroll: true })
+  else resultsSummary.value?.focus({ preventScroll: true })
+}
+
 const pageCount = computed(() => Math.max(1, Math.ceil(filteredActivities.value.length / pageSize)))
 const currentPage = computed(() => Math.min(requestedPage.value, pageCount.value))
 const pageStart = computed(() => (currentPage.value - 1) * pageSize)
@@ -330,65 +435,108 @@ const visiblePages = computed(() => {
   return Array.from({ length: Math.min(5, pageCount.value) }, (_, index) => start + index)
 })
 
+// How far down the sticky search row (and on roomy screens the chip row) reaches
+function stickyBottom() {
+  return [searchRow.value, browseRow.value].reduce((bottom, element) => {
+    if (!element) return bottom
+    const style = getComputedStyle(element)
+    if (style.position !== 'sticky') return bottom
+    return Math.max(bottom, (parseFloat(style.top) || 0) + element.offsetHeight)
+  }, 0)
+}
+
 async function changePage(page) {
   requestedPage.value = page
   await nextTick()
-  resultsSummary.value?.focus({ preventScroll: true })
-  if (resultsSummary.value && stickyControls.value) {
-    const controls = stickyControls.value
-    const navbarHeight = parseFloat(getComputedStyle(controls).top) || 0
-    resultsSummary.value.style.scrollMarginTop = `${navbarHeight + controls.getBoundingClientRect().height + 16}px`
-  }
-  resultsSummary.value?.scrollIntoView({ block: 'start' })
+  const summary = resultsSummary.value
+  if (!summary) return
+  summary.focus({ preventScroll: true })
+  summary.style.scrollMarginTop = `${stickyBottom() + 16}px`
+  summary.scrollIntoView({ block: 'start' })
 }
 
+// Save on every change rather than on leaving, so a reload keeps the filters too
+watch(
+  [keyword, selectedCategory, selectedSetting, selectedArea, selectedPrice, sortBy, currentPage],
+  () => {
+    // While loading there are no results yet, so currentPage reads 1; keep the saved page until then
+    if (loading.value) return
+    try {
+      sessionStorage.setItem(
+        'wad2do.activityFilters',
+        JSON.stringify({
+          keyword: keyword.value,
+          category: selectedCategory.value,
+          setting: selectedSetting.value,
+          area: selectedArea.value,
+          price: selectedPrice.value,
+          sort: sortBy.value,
+          page: currentPage.value,
+        }),
+      )
+    } catch {
+      // Browsing still works when browser storage is unavailable.
+    }
+  },
+)
+
+// The filter panel owns area, price and indoor/outdoor. Category has its chips, sort its own menu.
 const hasFilters = computed(() =>
-  Boolean(
-    keyword.value.trim() ||
-    selectedCategory.value ||
-    selectedSetting.value ||
-    selectedArea.value ||
-    selectedPrice.value ||
-    sortBy.value !== 'best-match',
-  ),
+  Boolean(selectedArea.value || selectedPrice.value || selectedSetting.value),
 )
 
 function clearFilters() {
-  keyword.value = ''
-  selectedCategory.value = ''
-  selectedSetting.value = ''
   selectedArea.value = ''
   selectedPrice.value = ''
-  sortBy.value = 'best-match'
+  selectedSetting.value = ''
   if (showFilters.value) filtersPanel.value?.focusClose()
   else filtersTrigger.value?.focus({ preventScroll: true })
 }
 
+// The empty state's reset: everything that narrows the list, but not the sort
+async function clearSearchAndFilters() {
+  keyword.value = ''
+  selectedCategory.value = ''
+  selectedArea.value = ''
+  selectedPrice.value = ''
+  selectedSetting.value = ''
+  await nextTick()
+  resultsSummary.value?.focus({ preventScroll: true })
+}
+
+const clearEverythingLabel = computed(() => {
+  const filtered = selectedCategory.value || hasFilters.value
+  if (keyword.value.trim()) return filtered ? 'Clear search and filters' : 'Clear search'
+  return 'Clear filters'
+})
+
+const noResultsHeading = computed(() => {
+  const search = keyword.value.trim()
+  if (!search) return 'No activities match these filters'
+  const filtered = selectedCategory.value || hasFilters.value
+  return filtered ? `Nothing matches “${search}” with these filters` : `Nothing matches “${search}”`
+})
+
 const activeFilters = computed(() =>
   [
-    { key: 'category', label: selectedCategory.value, value: selectedCategory },
     { key: 'area', label: selectedArea.value, value: selectedArea },
     {
       key: 'price',
       label: priceRanges.find((range) => range.value === selectedPrice.value)?.label,
       value: selectedPrice,
     },
-    {
-      key: 'setting',
-      label:
-        selectedSetting.value === 'indoor'
-          ? 'Indoor'
-          : selectedSetting.value === 'outdoor'
-            ? 'Outdoor'
-            : '',
-      value: selectedSetting,
-    },
+    { key: 'setting', label: settingLabels[selectedSetting.value], value: selectedSetting },
   ].filter((filter) => filter.label),
 )
 
-function removeFilter(filter) {
+// Keep keyboard focus in the chip row: move to the chip that slid into this place, or the one
+// before it, and back to the Filters button once none are left
+async function removeFilter(filter, index) {
   filter.value.value = ''
-  filtersTrigger.value?.focus({ preventScroll: true })
+  await nextTick()
+  const chips = appliedFilters.value?.querySelectorAll('.applied-filter') ?? []
+  const next = chips[Math.min(index, chips.length - 1)]
+  ;(next ?? filtersTrigger.value)?.focus({ preventScroll: true })
 }
 
 async function loadProfile() {
@@ -410,7 +558,7 @@ async function loadProfile() {
     profile.value = data
   } catch {
     if (user.value?.id === userId) {
-      profileError.value = "Couldn't load your preferences. Best match is using catalogue order."
+      profileError.value = "Couldn't load your preferences, so these aren't ranked for you yet."
     }
   } finally {
     if (user.value?.id === userId) profileLoading.value = false
@@ -447,7 +595,7 @@ async function loadActivities() {
 
     activities.value = records
   } catch {
-    errorMessage.value = "Couldn't load activities. Please try again."
+    errorMessage.value = "Couldn't load activities. Check your connection."
   } finally {
     loading.value = false
   }
@@ -461,10 +609,12 @@ onMounted(loadActivities)
   <div class="container activities-page py-4 py-md-5" data-testid="activities-page">
     <header class="page-header">
       <div>
-        <h1 class="page-title">What are we doing today?</h1>
-        <p class="text-secondary mb-0">Discover activities around Singapore.</p>
+        <h1 class="page-title">What are we doing this weekend?</h1>
+        <p class="page-lede text-secondary mb-0">Discover activities around Singapore.</p>
       </div>
+      <!-- On phones this moves below the results, so search comes first -->
       <RouterLink
+        v-if="!isPhone"
         to="/activities/submit"
         class="btn btn-outline-dark rounded-pill submit-link"
         data-testid="submit-activity-button"
@@ -476,66 +626,67 @@ onMounted(loadActivities)
       </RouterLink>
     </header>
 
-    <section
-      ref="stickyControls"
-      class="activity-controls mb-3"
-      aria-label="Activity search and filters"
+    <!-- Only this row stays under the navbar on phones; the chips scroll away with the page -->
+    <div
+      ref="searchRow"
+      class="search-row"
+      :class="{ 'is-stuck': searchStuck }"
+      role="search"
+      aria-label="Search activities"
       data-testid="activity-controls"
     >
-      <div class="search-bar">
-        <div class="search-field">
-          <label for="activity-search" class="visually-hidden">Search activities</label>
-          <svg viewBox="0 0 24 24" class="search-icon" aria-hidden="true" focusable="false">
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-3.5-3.5" />
-          </svg>
-          <input
-            id="activity-search"
-            v-model="keyword"
-            type="search"
-            class="form-control"
-            placeholder="Search activities, categories or areas"
-            data-testid="activity-search"
-          />
-        </div>
-        <button
-          type="button"
-          ref="filtersTrigger"
-          class="filters-toggle"
-          :class="{ 'has-active-filters': activeFilters.length > 0 }"
-          :aria-label="
-            activeFilters.length ? `Filters (${activeFilters.length} active)` : 'Filters'
-          "
-          title="Filter activities"
-          aria-haspopup="dialog"
-          aria-controls="activity-filters"
-          data-testid="filters-toggle"
-          @click="openFilters"
-        >
-          <svg
-            class="filters-icon"
-            viewBox="0 0 28 28"
-            width="24"
-            height="24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <path d="M4 6h20M4 14h20M4 22h20" />
-            <circle class="filter-knob filter-knob-top" cx="9" cy="6" r="3" />
-            <circle class="filter-knob filter-knob-middle" cx="20" cy="14" r="3" />
-            <circle class="filter-knob filter-knob-bottom" cx="11" cy="22" r="3" />
-          </svg>
-          <span class="filters-label" aria-hidden="true">Filters</span>
-          <span v-if="activeFilters.length" class="filters-count" aria-hidden="true">{{
-            activeFilters.length
-          }}</span>
-        </button>
+      <div class="search-field">
+        <label for="activity-search" class="visually-hidden">Search activities</label>
+        <svg viewBox="0 0 24 24" class="search-icon" aria-hidden="true" focusable="false">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+        </svg>
+        <input
+          id="activity-search"
+          v-model="keyword"
+          type="search"
+          class="form-control"
+          placeholder="Search name, category or area"
+          data-testid="activity-search"
+        />
       </div>
+      <button
+        type="button"
+        ref="filtersTrigger"
+        class="filters-toggle"
+        :class="{ 'has-active-filters': activeFilters.length > 0 }"
+        :aria-label="activeFilters.length ? `Filters (${activeFilters.length} active)` : 'Filters'"
+        title="Filter activities"
+        aria-haspopup="dialog"
+        aria-controls="activity-filters"
+        data-testid="filters-toggle"
+        @click="openFilters"
+      >
+        <svg
+          class="filters-icon"
+          viewBox="0 0 28 28"
+          width="24"
+          height="24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M4 6h20M4 14h20M4 22h20" />
+          <circle class="filter-knob filter-knob-top" cx="9" cy="6" r="3" />
+          <circle class="filter-knob filter-knob-middle" cx="20" cy="14" r="3" />
+          <circle class="filter-knob filter-knob-bottom" cx="11" cy="22" r="3" />
+        </svg>
+        <span class="filters-label" aria-hidden="true">Filters</span>
+        <span v-if="activeFilters.length" class="filters-count" aria-hidden="true">{{
+          activeFilters.length
+        }}</span>
+      </button>
+    </div>
 
+    <section ref="browseRow" class="browse-row" aria-label="Categories, sort and applied filters">
       <div class="browse-controls">
         <!-- The fades and arrows only appear on a side that has more chips to scroll to -->
         <div class="chip-strip" :class="{ 'has-before': chipsBefore, 'has-after': chipsAfter }">
@@ -543,7 +694,7 @@ onMounted(loadActivities)
             ref="chipStrip"
             class="category-chips"
             role="group"
-            aria-label="Quick category filters"
+            aria-label="Categories"
             @scroll.passive="updateChipEdges"
           >
             <button
@@ -554,7 +705,7 @@ onMounted(loadActivities)
               data-testid="category-chip-all"
               @click="selectedCategory = ''"
             >
-              All activities
+              All
             </button>
 
             <button
@@ -604,18 +755,19 @@ onMounted(loadActivities)
 
       <div
         v-if="activeFilters.length"
+        ref="appliedFilters"
         class="applied-filters"
         role="group"
         aria-label="Applied filters"
       >
         <button
-          v-for="filter in activeFilters"
+          v-for="(filter, index) in activeFilters"
           :key="filter.key"
           type="button"
           class="applied-filter"
           :aria-label="`Remove ${filter.label} filter`"
           data-testid="active-filter"
-          @click="removeFilter(filter)"
+          @click="removeFilter(filter, index)"
         >
           {{ filter.label }}
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -642,20 +794,6 @@ onMounted(loadActivities)
       close-label="Close filters"
     >
       <div class="row g-3">
-        <div class="col-12 col-sm-6">
-          <label for="category-filter" class="form-label">Category</label>
-          <select
-            id="category-filter"
-            v-model="selectedCategory"
-            class="form-select"
-            data-testid="category-filter"
-          >
-            <option value="">All categories</option>
-            <option v-for="category in categories" :key="category" :value="category">
-              {{ category }}
-            </option>
-          </select>
-        </div>
         <div class="col-12 col-sm-6">
           <label for="area-filter" class="form-label">Area</label>
           <select
@@ -690,12 +828,12 @@ onMounted(loadActivities)
             class="form-select"
             data-testid="setting-filter"
           >
-            <option value="">All</option>
+            <option value="">Both</option>
             <option value="indoor">Indoor</option>
             <option value="outdoor">Outdoor</option>
           </select>
         </div>
-        <div class="col-12 mobile-sort-control">
+        <div class="col-12 col-sm-6 mobile-sort-control">
           <label for="mobile-sort-filter" class="form-label">Sort by</label>
           <select
             id="mobile-sort-filter"
@@ -709,10 +847,37 @@ onMounted(loadActivities)
           </select>
         </div>
       </div>
+
+      <!-- Results outside the dialog can't be announced while it's open, so say the count here -->
+      <p class="visually-hidden" role="status">
+        {{ activityCount(filteredActivities.length) }} match
+      </p>
+
       <template #footer>
+        <!-- In the footer, not the scrolling body, so it shows next to the button it explains -->
+        <div
+          v-if="activities.length && !filteredActivities.length"
+          class="filter-hint"
+          data-testid="filters-no-match"
+        >
+          <p class="mb-2">Nothing matches all of these.</p>
+          <div v-if="suggestions.length" class="suggestions">
+            <button
+              v-for="item in suggestions"
+              :key="item.key"
+              type="button"
+              class="btn btn-outline-dark btn-sm rounded-pill suggestion"
+              data-testid="filter-suggestion"
+              @click="applySuggestion(item)"
+            >
+              {{ item.label }}
+              <span class="suggestion-count">{{ activityCount(item.count) }}</span>
+            </button>
+          </div>
+        </div>
         <button
           type="button"
-          class="btn btn-outline-secondary"
+          class="btn btn-outline-dark rounded-pill"
           :disabled="!hasFilters"
           data-testid="clear-filters"
           @click="clearFilters"
@@ -720,12 +885,14 @@ onMounted(loadActivities)
           Clear filters
         </button>
         <button
+          ref="filterConfirm"
           type="button"
-          class="btn btn-dark flex-grow-1"
+          class="btn rounded-pill flex-grow-1"
+          :class="filteredActivities.length ? 'btn-dark' : 'btn-outline-dark'"
           data-testid="filter-confirm"
           @click="closeFilters"
         >
-          Show {{ filteredActivities.length }} activities
+          Show {{ activityCount(filteredActivities.length) }}
         </button>
       </template>
     </BaseDialog>
@@ -739,7 +906,7 @@ onMounted(loadActivities)
       <p>{{ favouritesError }}</p>
       <button
         type="button"
-        class="btn btn-outline-dark"
+        class="btn btn-outline-dark rounded-pill"
         :disabled="favouritesLoading"
         data-testid="favourites-retry"
         @click="loadFavourites"
@@ -750,12 +917,35 @@ onMounted(loadActivities)
 
     <div
       v-if="saveError || saveMessage"
-      class="save-feedback alert mb-0"
-      :class="saveError ? 'alert-danger' : 'alert-success'"
+      class="save-feedback"
+      :class="{ 'is-error': saveError }"
       :role="saveError ? 'alert' : 'status'"
-      data-testid="activity-save-feedback"
+      data-testid="activity-toast"
     >
-      {{ saveError || saveMessage }}
+      <p class="feedback-text" data-testid="activity-save-feedback">
+        {{ saveError || saveMessage }}
+      </p>
+      <RouterLink
+        v-for="group in saveError ? [] : sharedGroups"
+        :key="group.id"
+        :to="`/groups/${group.id}/activities`"
+        class="feedback-link"
+        data-testid="share-go-vote"
+      >
+        Go vote in {{ group.name }}
+      </RouterLink>
+      <button
+        v-if="saveError || sharedGroups.length"
+        type="button"
+        class="feedback-close"
+        aria-label="Dismiss message"
+        data-testid="activity-toast-close"
+        @click="closeMessage"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M18 6 6 18M6 6l12 12" />
+        </svg>
+      </button>
     </div>
 
     <div
@@ -767,7 +957,7 @@ onMounted(loadActivities)
       <p>{{ profileError }}</p>
       <button
         type="button"
-        class="btn btn-outline-dark"
+        class="btn btn-outline-dark rounded-pill"
         data-testid="preferences-retry"
         :disabled="profileLoading"
         @click="loadProfile"
@@ -795,7 +985,7 @@ onMounted(loadActivities)
       <p>{{ errorMessage }}</p>
       <button
         type="button"
-        class="btn btn-outline-danger"
+        class="btn btn-outline-danger rounded-pill"
         data-testid="activities-retry"
         @click="loadActivities"
       >
@@ -803,60 +993,100 @@ onMounted(loadActivities)
       </button>
     </div>
 
-    <p v-else-if="activities.length === 0" data-testid="activities-empty">
-      No activities available yet.
-    </p>
+    <div
+      v-else-if="activities.length === 0"
+      class="empty-results text-center p-4 p-md-5"
+      data-testid="activities-empty"
+    >
+      <h2 class="h5">No activities yet</h2>
+      <p class="text-secondary mb-0">
+        Know a good spot?
+        <RouterLink to="/activities/submit">Submit the first one</RouterLink>
+      </p>
+    </div>
 
     <template v-else>
-      <div class="activities-sort-info" :class="{ 'mb-3': sortBy === 'best-match' }">
+      <div class="results-line">
         <p
-          :class="
-            sortBy === 'best-match' && !hasRankingPreferences
-              ? 'text-secondary small mb-0'
-              : 'visually-hidden'
-          "
+          id="activities-results-summary"
+          ref="resultsSummary"
+          class="results-count"
+          role="status"
+          tabindex="-1"
+          data-testid="activities-count"
+        >
+          Showing {{ filteredActivities.length ? pageStart + 1 : 0 }}–{{
+            pageStart + pagedActivities.length
+          }}
+          of {{ filteredActivities.length }} activities
+        </p>
+        <p
+          v-if="ranked && filteredActivities.length"
+          class="results-note"
+          data-testid="activities-sort-description"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M12 3.5 13.9 9l5.6 1.9-5.6 1.9L12 18.5l-1.9-5.7-5.6-1.9L10.1 9Z" />
+          </svg>
+          Based on your saved interests, budget and home area.
+        </p>
+        <!-- Unranked Best match is said out loud; other sorts show on phones, where the menu is in Filters -->
+        <p
+          class="results-note"
+          :class="{
+            'visually-hidden': ranked,
+            'quiet-on-wide': sortBy !== 'best-match',
+          }"
           role="status"
           data-testid="activities-sort-summary"
         >
           {{ sortSummary }}
-        </p>
-        <p
-          v-if="sortBy === 'best-match' && hasRankingPreferences"
-          class="text-secondary small mb-0"
-          data-testid="activities-sort-description"
-        >
-          Based on your saved interests, budget and home area.
+          <RouterLink
+            v-if="sortBy === 'best-match' && !hasRankingPreferences && !profileError"
+            to="/profile"
+            data-testid="add-interests-link"
+            >Add your interests</RouterLink
+          >
         </p>
       </div>
-      <p
-        id="activities-results-summary"
-        ref="resultsSummary"
-        class="text-secondary mb-3"
-        role="status"
-        tabindex="-1"
-        data-testid="activities-count"
-      >
-        Showing {{ filteredActivities.length ? pageStart + 1 : 0 }}–{{
-          pageStart + pagedActivities.length
-        }}
-        of {{ filteredActivities.length }} activities
-      </p>
 
       <div
         v-if="filteredActivities.length === 0"
         class="empty-results text-center p-4 p-md-5"
         data-testid="activities-no-results"
       >
-        <h2 class="h5">No activities match these filters</h2>
-        <p class="text-secondary">Try another search or clear your filters.</p>
+        <h2 class="h5">{{ noResultsHeading }}</h2>
+        <template v-if="suggestions.length">
+          <p class="text-secondary">One change brings some back:</p>
+          <div class="suggestions justify-content-center mb-3">
+            <button
+              v-for="item in suggestions"
+              :key="item.key"
+              type="button"
+              class="btn btn-outline-dark btn-sm rounded-pill suggestion"
+              data-testid="empty-suggestion"
+              @click="applySuggestion(item)"
+            >
+              {{ item.label }}
+              <span class="suggestion-count">{{ activityCount(item.count) }}</span>
+            </button>
+          </div>
+        </template>
+        <p v-else class="text-secondary">Try another search, or start again.</p>
         <button
           type="button"
-          class="btn btn-dark rounded-pill"
+          class="btn btn-dark rounded-pill px-4"
           data-testid="empty-clear-filters"
-          @click="clearFilters"
+          @click="clearSearchAndFilters"
         >
-          Clear filters
+          {{ clearEverythingLabel }}
         </button>
+        <p v-if="!isPhone" class="small text-secondary mt-3 mb-0">
+          Know a spot we're missing?
+          <RouterLink to="/activities/submit" data-testid="empty-submit-activity"
+            >Submit it</RouterLink
+          >
+        </p>
       </div>
 
       <div v-else class="row g-4" data-testid="activities-grid">
@@ -870,6 +1100,7 @@ onMounted(loadActivities)
             :saved="savedIds.has(activity.id)"
             :saving="savingIds.has(activity.id)"
             :save-disabled="favouritesLoading || Boolean(favouritesError)"
+            :reasons="ranked ? matchReasons(activity, profile) : []"
             @save="toggleSaved"
             @share="openShare"
           />
@@ -921,20 +1152,26 @@ onMounted(loadActivities)
         </p>
       </nav>
     </template>
+
+    <div v-if="isPhone && !loading" class="submit-prompt">
+      <p class="text-secondary mb-2">Know a spot we're missing?</p>
+      <RouterLink
+        to="/activities/submit"
+        class="btn btn-outline-dark rounded-pill submit-link"
+        data-testid="submit-activity-button"
+      >
+        <svg viewBox="0 0 24 24" class="submit-icon" aria-hidden="true" focusable="false">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        Submit an activity
+      </RouterLink>
+    </div>
+
     <ActivityShareDialog :activity="shareTarget" @close="shareTarget = null" @shared="announce" />
   </div>
 </template>
 
 <style scoped>
-.save-feedback {
-  position: fixed;
-  bottom: 1rem;
-  right: 1rem;
-  max-width: calc(100% - 2rem);
-  overflow-wrap: anywhere;
-  z-index: 1080;
-}
-
 .page-link:disabled {
   opacity: 0.45;
 }
@@ -946,13 +1183,19 @@ onMounted(loadActivities)
 }
 
 /* ---------- Page header ---------- */
+.activities-page {
+  /* Height of the sticky search row: 14px + 48px search + 12px + 1px edge.
+     On roomy screens the chip row sticks right under it. */
+  --search-row-height: 75px;
+}
+
 .page-header {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px 24px;
-  margin-bottom: 24px;
+  margin-bottom: 10px;
 }
 
 .page-title {
@@ -966,7 +1209,9 @@ onMounted(loadActivities)
 .submit-link {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  min-height: 44px;
   padding-inline: 16px 20px;
 }
 
@@ -979,26 +1224,29 @@ onMounted(loadActivities)
   stroke-linecap: round;
 }
 
-/* ---------- Sticky search and filters ---------- */
-.activity-controls {
-  position: sticky;
-  top: var(--navbar-height, 0px);
-  z-index: 1010;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-height: min(45dvh, calc(100dvh - var(--navbar-height, 0px) - 64px));
-  overflow-y: auto;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--line);
-  /* Same colour as the page, so the bar only shows its edge while cards scroll under it */
-  background: var(--bg);
+.submit-prompt {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+  text-align: center;
 }
 
-/* Search box and Filters button are one pair: same height, same pill shape, same border */
-.search-bar {
+/* ---------- Sticky search row ---------- */
+.search-row {
+  position: sticky;
+  top: var(--navbar-height, 0px);
+  z-index: 1011;
   display: flex;
   gap: 10px;
+  padding: 14px 0 12px;
+  /* Same colour as the page; the edge only shows once it's stuck and cards scroll under it */
+  border-bottom: 1px solid transparent;
+  background: var(--bg);
+  transition: border-color 160ms ease;
+}
+
+.search-row.is-stuck {
+  border-bottom-color: var(--line);
 }
 
 .search-field {
@@ -1021,6 +1269,7 @@ onMounted(loadActivities)
   pointer-events: none;
 }
 
+/* Search box and Filters button are one pair: same height, same pill shape, same border */
 .search-field .form-control {
   min-height: 48px;
   padding-inline: 48px 18px;
@@ -1113,7 +1362,30 @@ onMounted(loadActivities)
   transition-delay: 140ms, 0ms;
 }
 
-/* ---------- Category chips and sort ---------- */
+/* ---------- Category chips, sort and applied filters ---------- */
+.browse-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+
+/* With room to spare, the chips and sort stay handy under the search row too */
+@media (min-width: 768px) and (min-height: 600px) {
+  .browse-row {
+    position: sticky;
+    top: calc(var(--navbar-height, 0px) + var(--search-row-height));
+    z-index: 1010;
+  }
+
+  .search-row.is-stuck {
+    border-bottom-color: transparent;
+  }
+}
+
 .browse-controls {
   display: flex;
   align-items: center;
@@ -1271,7 +1543,6 @@ onMounted(loadActivities)
   display: none;
 }
 
-/* ---------- Applied filters ---------- */
 .applied-filters {
   display: flex;
   flex-wrap: wrap;
@@ -1280,6 +1551,7 @@ onMounted(loadActivities)
 }
 
 .applied-filter {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1307,7 +1579,8 @@ onMounted(loadActivities)
 }
 
 .clear-all {
-  padding: 4px 6px;
+  min-height: 32px;
+  padding: 0 8px;
   border: 0;
   background: none;
   color: var(--muted);
@@ -1321,20 +1594,95 @@ onMounted(loadActivities)
   color: var(--ink);
 }
 
-/* ---------- Everything else on the page ---------- */
+/* Fingers need 44px. Chips scroll sideways, which clips anything outside them, so they grow;
+   applied filters get a taller invisible hit area and keep their compact look. */
+@media (pointer: coarse) {
+  .category-chip,
+  .clear-all {
+    min-height: 44px;
+  }
+
+  .applied-filter::after {
+    content: '';
+    position: absolute;
+    inset: -6px -2px;
+  }
+}
+
+/* ---------- Results ---------- */
+.results-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 16px;
+  margin-bottom: 16px;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.results-line p {
+  margin-bottom: 0;
+}
+
+/* Plain text flow, so the icon stays on the first line when the note wraps on a phone */
+.results-note svg {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  vertical-align: -2px;
+  fill: var(--ink);
+}
+
+.results-note a {
+  margin-left: 4px;
+  color: var(--ink);
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+
+#activities-results-summary {
+  scroll-margin-top: calc(var(--navbar-height, 0px) + 16px);
+}
+
 .empty-results {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--surface-2);
 }
 
+.empty-results a {
+  color: var(--ink);
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.suggestion {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding-inline: 16px;
+}
+
+.suggestion-count {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.suggestion:hover .suggestion-count {
+  color: inherit;
+}
+
+/* ---------- Filter panel ---------- */
 /* BaseDialog does the layout; this only sets the width */
 .filters-panel {
   --dialog-width: 620px;
-}
-
-#activities-results-summary {
-  scroll-margin-top: calc(var(--navbar-height, 0px) + 16px);
 }
 
 .form-label {
@@ -1342,28 +1690,87 @@ onMounted(loadActivities)
   font-weight: 600;
 }
 
+/* Takes a full row of the footer, above Clear filters and Show */
+.filter-hint {
+  flex: 1 1 100%;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
+/* ---------- Save and share messages ---------- */
+.save-feedback {
+  position: fixed;
+  right: 1rem;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 1080;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  max-width: min(440px, calc(100% - 2rem));
+  padding: 12px 14px 12px 18px;
+  border-radius: var(--radius-md);
+  background: var(--ink);
+  color: var(--on-ink);
+  box-shadow: var(--shadow-float);
+  overflow-wrap: anywhere;
+}
+
+/* Errors keep Bootstrap's danger colours, which already have light and dark versions */
+.save-feedback.is-error {
+  border: 1px solid var(--bs-danger-border-subtle);
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
+}
+
+.feedback-text {
+  flex: 1 1 200px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.feedback-link {
+  color: inherit;
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+
+.feedback-close {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -10px -8px -10px auto;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+}
+
+.feedback-close svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+/* Inside an ink toast, an ink ring can't be seen, so the ring takes the toast's text colour */
+.save-feedback :is(.feedback-link, .feedback-close):focus-visible {
+  outline-color: currentColor;
+}
+
 @media (max-width: 767.98px) {
-  /* Keep result announcements and pagination's focus target without taking space. */
-  .activities-sort-info,
-  #activities-results-summary {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px !important;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
-  }
-
-  .save-feedback {
-    left: 1rem;
-    text-align: center;
-  }
-
   .page-header {
-    margin-bottom: 16px;
+    margin-bottom: 4px;
+  }
+
+  .page-lede {
+    display: none;
   }
 
   /* Icon-only round Filters button; the count sits on its corner */
@@ -1397,12 +1804,33 @@ onMounted(loadActivities)
   .mobile-sort-control {
     display: block;
   }
+
+  .save-feedback {
+    left: 1rem;
+    max-width: none;
+  }
+}
+
+/* The sort menu shows the sort on wider screens, so only screen readers need it said */
+@media (min-width: 768px) {
+  .quiet-on-wide {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .category-chip,
   .filters-toggle,
-  .filter-knob {
+  .filter-knob,
+  .search-row {
     transition: none;
   }
   .filters-toggle:is(:hover, :focus-visible) .filter-knob {

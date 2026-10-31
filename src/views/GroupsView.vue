@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
 import {
@@ -19,6 +19,7 @@ import GroupInviteCode from '@/components/group/GroupInviteCode.vue'
 import GroupTicketStub from '@/components/group/GroupTicketStub.vue'
 
 const router = useRouter()
+const route = useRoute()
 
 const groups = ref([]) // array of the user's groups
 const loading = ref(true)
@@ -38,6 +39,11 @@ const createError = ref('') // for when saving fails, not for form mistakes
 const newGroup = ref(null) // the group we just made, so we can show its invite code
 const creating = ref(false)
 let newGroupId = crypto.randomUUID()
+
+// "Create a new group" in an activity's share menu sends ?share=<activity id>. That activity is
+// shared to the group as soon as it's made, so the user doesn't have to find it again.
+const pendingShare = ref(null) // { id, name }
+const shareOutcome = ref(null) // { status: 'shared' | 'failed', name }, shown with the invite code
 
 // Join group form
 const showJoinForm = ref(false)
@@ -96,6 +102,48 @@ async function loadGroups() {
 }
 
 onMounted(loadGroups)
+
+async function loadPendingShare() {
+  const activityId = typeof route.query.share === 'string' ? route.query.share : ''
+  if (!activityId) return
+  // Tidy the address bar; the note in the form shows what will be shared
+  router.replace({ query: {} })
+  try {
+    const { data, error } = await supabase
+      .from('activities')
+      .select('id, name')
+      .eq('id', activityId)
+      .maybeSingle()
+    if (error) throw error
+    if (!data) return
+    pendingShare.value = data
+    openCreateForm()
+  } catch (error) {
+    // Without the activity the page still works; the user can share it from its card later
+    console.log(error)
+  }
+}
+
+onMounted(loadPendingShare)
+
+async function sharePendingActivity(groupId) {
+  const activity = pendingShare.value
+  pendingShare.value = null
+  try {
+    const user = await getUser()
+    const { error } = await requestWithTimeout((signal) =>
+      supabase
+        .from('group_activities')
+        .insert({ group_id: groupId, activity_id: activity.id, shared_by: user.id })
+        .abortSignal(signal),
+    )
+    if (error) throw error
+    shareOutcome.value = { status: 'shared', name: activity.name }
+  } catch (error) {
+    console.log(error)
+    shareOutcome.value = { status: 'failed', name: activity.name }
+  }
+}
 
 // The members' avatars for one card. If this fails the card just shows the member count.
 // { get: true } because it only reads, and get_group_member_names is a "stable" function.
@@ -213,6 +261,7 @@ async function openCreateForm() {
     budget.value = ''
     newGroup.value = null
     newGroupId = crypto.randomUUID()
+    shareOutcome.value = null
   }
   fieldErrors.value = {}
   createError.value = ''
@@ -281,6 +330,7 @@ async function createGroup() {
 
     if (error) throw error
 
+    if (pendingShare.value) await sharePendingActivity(data.id)
     newGroup.value = data // shows the invite panel
     freshGroupId.value = data.id
     loadGroups()
@@ -419,6 +469,23 @@ async function joinGroup() {
               </div>
             </div>
 
+            <p
+              v-if="shareOutcome"
+              class="share-note"
+              :class="{ 'is-failed': shareOutcome.status === 'failed' }"
+              role="status"
+              data-testid="pending-share-result"
+            >
+              <template v-if="shareOutcome.status === 'shared'">
+                <strong>{{ shareOutcome.name }}</strong> is in this group's Activities, ready for
+                votes.
+              </template>
+              <template v-else>
+                Couldn't share <strong>{{ shareOutcome.name }}</strong
+                >. Share it again from its card on Activities.
+              </template>
+            </p>
+
             <GroupInviteCode
               :group-id="newGroup.id"
               :group-name="newGroup.name"
@@ -446,6 +513,21 @@ async function joinGroup() {
                   </p>
                 </div>
               </div>
+
+              <p v-if="pendingShare" class="share-note" data-testid="pending-share">
+                <span>
+                  <strong>{{ pendingShare.name }}</strong> will be shared to this group once it's
+                  made.
+                </span>
+                <button
+                  type="button"
+                  class="btn btn-link p-0 text-body"
+                  data-testid="pending-share-cancel"
+                  @click="pendingShare = null"
+                >
+                  Don't share it
+                </button>
+              </p>
 
               <div class="row g-3">
                 <div class="col-12">
@@ -1045,6 +1127,25 @@ svg:not(.animal-avatar) {
   margin: -10px -10px 0 0;
   padding: 0;
   background-size: 14px;
+}
+
+/* The activity a "Create a new group" link brought along, before and after the group is made */
+.share-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-bottom: 1.25rem;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+/* Errors use Bootstrap's danger colours (DESIGN.md); coral means "not keen", not "failed" */
+.share-note.is-failed {
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
 }
 
 .panel-footer {
