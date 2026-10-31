@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getVisitHoursWarnings } from '@/lib/openingHours'
 import { fetchTravelOptions } from '@/lib/travelOptions'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
+import { formatPart, getStageStyle } from '@/lib/groupDisplay'
 import { useAuth } from '@/composables/useAuth'
 import ItineraryTravelOptions from '@/components/group/ItineraryTravelOptions.vue'
 import ItineraryLoadingCar from '@/components/group/ItineraryLoadingCar.vue'
@@ -41,6 +42,44 @@ const endTime = computed(() => {
 })
 
 const isOverBudget = computed(() => totalCost.value > budget.value)
+
+// How full the budget bar is, as a percentage (a full bar when there's no budget to compare to)
+const budgetPercent = computed(() => {
+  if (budget.value <= 0) return totalCost.value > 0 ? 100 : 0
+  return Math.min(100, (totalCost.value / budget.value) * 100)
+})
+
+// '2026-10-31' -> 'Sat 31 Oct'
+const planDay = computed(() => {
+  if (!itinerary.value?.date) return '-'
+  return formatPart(itinerary.value.date, { weekday: 'short', day: 'numeric', month: 'short' })
+    .replace(',', '')
+})
+
+// The same stub colours as the group's ticket: green once planned, grey once the day is over
+const stageStyle = computed(() => getStageStyle({ ...group.value, itineraries: [true] }))
+
+// '10:00', '11:30' -> '1h 30m'
+function formatDuration(start, end) {
+  const minutes = (((toMinutes(end) - toMinutes(start)) % 1440) + 1440) % 1440
+  const hours = Math.floor(minutes / 60)
+  if (!hours) return minutes + 'm'
+  return minutes % 60 ? hours + 'h ' + (minutes % 60) + 'm' : hours + 'h'
+}
+
+// '09:00' -> '9:00 am', '12:10' -> '12:10 pm'
+function formatClock(time) {
+  const [hours, minutes] = time.split(':').map(Number)
+  const suffix = hours % 24 >= 12 ? 'pm' : 'am'
+  return (hours % 12 || 12) + ':' + String(minutes).padStart(2, '0') + ' ' + suffix
+}
+
+// '10:00', '11:30' -> '1.5 hr' (or '45 min' when under an hour)
+function formatHours(start, end) {
+  const minutes = (((toMinutes(end) - toMinutes(start)) % 1440) + 1440) % 1440
+  if (minutes < 60) return minutes + ' min'
+  return Math.round((minutes / 60) * 10) / 10 + ' hr'
+}
 // Voted activities that aren't in the plan right now
 const notInPlan = computed(() => {
   if (!itinerary.value) return []
@@ -872,25 +911,41 @@ onUnmounted(() => {
       <button v-if="saveConflict" type="button" class="btn btn-outline-dark rounded-pill mb-3"
         data-testid="itinerary-load-latest" @click="reloadLatestPlan">Load latest plan</button>
 
-      <ol class="list-unstyled mb-0" data-testid="itinerary-timeline">
+      <ol class="timeline list-unstyled mb-0" data-testid="itinerary-timeline">
         <template v-for="(stop, index) in displayStops" :key="stop.original.activity_id">
-          <li
-            class="stop-card surface-card"
-            :class="{ rainy: stop.isRainyView }"
-            data-testid="itinerary-stop"
-          >
+          <li class="timeline-row" data-testid="itinerary-stop">
+            <div class="timeline-time">
+              <span class="clock">{{ formatClock(stop.start) }}</span>
+              <span class="length">{{ formatHours(stop.start, stop.end) }}</span>
+            </div>
+            <div class="timeline-rail" aria-hidden="true"><span class="timeline-dot"></span></div>
+            <div class="stop-card surface-card" :class="{ rainy: stop.isRainyView }">
             <div class="stop-body">
-              <div class="stop-time-row"><span class="stop-time">{{ stop.start }}–{{ stop.end }}</span></div>
-              <img
+              <!-- Opens the activity's details, like the Activities tab. Not while editing,
+                   so leaving the page can't throw away unsaved changes. -->
+              <component
+                :is="isEditing ? 'div' : 'RouterLink'"
                 v-if="stop.image_url"
-                :src="stop.image_url"
-                :alt="stop.name"
-                class="stop-photo"
-                width="80"
-                height="80"
-              />
+                :to="isEditing ? undefined : { name: 'activity-detail', params: { id: stop.activity_id } }"
+                class="stop-photo-link"
+                tabindex="-1"
+                aria-hidden="true"
+              >
+                <img :src="stop.image_url" alt="" class="stop-photo" width="80" height="80" />
+              </component>
               <div class="stop-main">
-                <h3 class="stop-name">{{ index + 1 }}. {{ stop.name }}</h3>
+                <h3 class="stop-name">
+                  {{ index + 1 }}.
+                  <span v-if="isEditing">{{ stop.name }}</span>
+                  <RouterLink
+                    v-else
+                    :to="{ name: 'activity-detail', params: { id: stop.activity_id } }"
+                    data-testid="itinerary-stop-link"
+                  >
+                    {{ stop.name }}
+                  </RouterLink>
+                </h3>
+                <p class="stop-range small text-secondary mb-1">{{ stop.start }}–{{ stop.end }}</p>
                 <p class="mb-1 small fw-semibold">${{ stop.cost }} per person</p>
                 <p class="text-secondary small mb-1">{{ stop.reason }}</p>
                 <span
@@ -967,8 +1022,10 @@ onUnmounted(() => {
                 </button>
               </div>
             </div>
+            </div>
           </li>
-          <li v-if="index < displayStops.length - 1">
+          <li v-if="index < displayStops.length - 1" class="timeline-row travel-row">
+            <div class="timeline-rail" aria-hidden="true"></div>
             <ItineraryTravelOptions
               :leg="legAfter(index)"
               :mode="itinerary.stops[index].travel_mode"
@@ -1121,8 +1178,80 @@ onUnmounted(() => {
   display: none;
 }
 
+/* Timeline: start time and length on the left, a dot on a thin line, then the stop card */
+.timeline-row {
+  display: grid;
+  grid-template-columns: 4.75rem 20px minmax(0, 1fr);
+  column-gap: 12px;
+}
+
+.timeline-time {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding-top: 14px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.timeline-time .clock {
+  color: var(--bs-emphasis-color);
+  font-size: 0.9rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-time .length {
+  color: var(--bs-secondary-color);
+  font-size: 0.8rem;
+}
+
+/* The line runs the full height of every row, so it joins up between stops */
+.timeline-rail {
+  position: relative;
+  grid-column: 2;
+}
+
+.timeline-rail::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--line);
+}
+
+/* Start the line at the first dot and stop it at the last one */
+.timeline-row:first-child .timeline-rail::before {
+  top: 20px;
+}
+
+.timeline-row:last-child .timeline-rail::before {
+  bottom: auto;
+  height: 20px;
+}
+
+.timeline-dot {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateX(-50%);
+  border: 3px solid var(--bs-success);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.travel-row > :last-child {
+  grid-column: 3;
+}
+
 /* One stop on the timeline, styled like the activity cards */
 .stop-card {
+  grid-column: 3;
   padding: 16px;
 }
 
@@ -1137,16 +1266,8 @@ onUnmounted(() => {
   gap: 12px 16px;
 }
 
-.stop-time {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: var(--radius-pill);
-  background: var(--ink);
-  color: var(--on-ink);
-  font-size: 0.85rem;
-  font-weight: 700;
+.stop-range {
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .stop-photo {
@@ -1166,6 +1287,16 @@ onUnmounted(() => {
   font-size: 1.05rem;
   font-weight: 700;
   overflow-wrap: anywhere;
+}
+
+.stop-name a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.stop-photo-link {
+  display: block;
+  flex-shrink: 0;
 }
 
 .rain-note {
@@ -1235,11 +1366,15 @@ onUnmounted(() => {
   font-size: 0.8rem;
 }
 
-/* Phones: the time sits on its own line above the photo and details,
-   and the edit buttons go in a row */
+/* Phones: a narrower time column, and the edit buttons go in a row */
 @media (max-width: 575.98px) {
-  .stop-time-row {
-    flex-basis: 100%;
+  .timeline-row {
+    grid-template-columns: 4rem 16px minmax(0, 1fr);
+    column-gap: 8px;
+  }
+
+  .timeline-time .clock {
+    font-size: 0.8rem;
   }
 
   .stop-controls {

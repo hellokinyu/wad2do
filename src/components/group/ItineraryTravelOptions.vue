@@ -129,10 +129,9 @@ function formatDistance(meters) {
 </template>
 
 <style scoped>
-/* The dotted line joining one stop's card to the next */
+/* Sits beside the itinerary's timeline line, between one stop's card and the next */
 .travel-line {
-  border-left: 2px dotted var(--bs-secondary-color);
-  margin: 0 1rem 0 1.5rem;
+  margin: 0 1rem 0 0.25rem;
 }
 
 /* Google Maps-style mode tabs */
