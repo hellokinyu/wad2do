@@ -838,6 +838,7 @@
 
 <script>
 import { ref } from 'vue'
+import { setColorMode } from '@/lib/colorMode'
 
 const THEMES = ['halloween', 'christmas', 'light', 'dark']
 const THEME_SYMBOLS = { halloween: '🎃', christmas: '🎄', light: '☀', dark: '☾' }
@@ -882,6 +883,8 @@ const preview = ref(readPreview())
 
 function setPreview(value) {
   preview.value = value
+  // Light and Dark also switch the whole app's colours
+  setColorMode(value)
   try {
     if (value === 'auto') sessionStorage.removeItem(PREVIEW_KEY)
     else sessionStorage.setItem(PREVIEW_KEY, value)
@@ -1044,8 +1047,7 @@ onUnmounted(() => {
     color 0.2s;
 }
 .navbar:has(> .nav-theme[data-nav-theme='halloween']),
-.navbar:has(> .nav-theme[data-nav-theme='christmas']),
-.navbar:has(> .nav-theme[data-nav-theme='dark']) {
+.navbar:has(> .nav-theme[data-nav-theme='christmas']) {
   --bs-navbar-toggler-border-color: rgba(255, 255, 255, 0.35);
   --bs-navbar-toggler-icon-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.9%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
 }
@@ -1080,37 +1082,31 @@ onUnmounted(() => {
   background: #c8102e;
 }
 
-/* ---------- Light: the original white bar with a black logo ---------- */
-.nav-theme[data-nav-theme='light'] {
-  background: #fff;
+/* ---------- Light & Dark: the plain bar in the app's own colours ----------
+   Light and Dark also switch the whole app's colour mode (src/lib/colorMode.js),
+   so the same theme colours from src/assets/styles.css work for both. */
+.nav-theme[data-nav-theme='light'],
+.nav-theme[data-nav-theme='dark'] {
+  background: var(--bg);
 }
-.navbar:has(> .nav-theme[data-nav-theme='light']) {
-  --nt-logo-color: #111;
+.navbar:has(> .nav-theme[data-nav-theme='light']),
+.navbar:has(> .nav-theme[data-nav-theme='dark']) {
+  --nt-logo-color: var(--ink);
+  --bs-navbar-color: var(--muted);
+  --bs-navbar-hover-color: var(--ink);
+  --bs-navbar-active-color: var(--on-accent);
 }
-.navbar:has(> .nav-theme[data-nav-theme='light']) .navbar-brand {
+.navbar:has(> .nav-theme[data-nav-theme='light']) .navbar-brand,
+.navbar:has(> .nav-theme[data-nav-theme='dark']) .navbar-brand {
   filter: none;
 }
-.navbar:has(> .nav-theme[data-nav-theme='light']) .nav-link.active {
-  background: #f1f1ef;
+.navbar:has(> .nav-theme[data-nav-theme='light']) .nav-link.active,
+.navbar:has(> .nav-theme[data-nav-theme='dark']) .nav-link.active {
+  background: var(--accent);
 }
 .nav-theme[data-nav-theme='light'] .nt-item,
 .nav-theme[data-nav-theme='light'] .nt-walker {
   filter: drop-shadow(0 2px 1.5px rgba(0, 0, 0, 0.2));
-}
-
-/* ---------- Dark: charcoal with soft light text ---------- */
-.nav-theme[data-nav-theme='dark'] {
-  background: linear-gradient(180deg, #111827 0%, #1f2937 100%);
-}
-.navbar:has(> .nav-theme[data-nav-theme='dark']) {
-  --nt-logo-color: #f3f4f6;
-  --bs-border-color: #374151;
-  --bs-navbar-color: #d1d5db;
-  --bs-navbar-hover-color: #ffffff;
-  --bs-navbar-active-color: #ffffff;
-}
-.navbar:has(> .nav-theme[data-nav-theme='dark']) .nav-link.active {
-  background: #374151;
 }
 
 /* ---------- Light & Dark: walking profile animal + its favourite thing ---------- */

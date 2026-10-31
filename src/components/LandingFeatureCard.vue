@@ -51,21 +51,21 @@ defineProps({
   padding-left: 0;
 }
 .feature + .feature {
-  border-left: 1px solid #ddd;
+  border-left: 1px solid var(--line);
 }
 .feature-icon {
   flex: 0 0 58px;
   width: 58px;
   height: 58px;
   border-radius: 50%;
-  background: #efefed;
+  background: var(--surface-2);
   transition:
     transform 0.2s,
     background 0.2s;
 }
 .feature:hover .feature-icon {
   transform: translateY(-4px);
-  background: #e4e4df;
+  background: var(--surface-3);
 }
 .feature-icon svg {
   width: 30px;
@@ -77,7 +77,7 @@ defineProps({
   margin: 9px 0 8px;
 }
 .feature p {
-  color: #777;
+  color: var(--muted);
   font-size: clamp(14px, 0.9vw, 16px);
   line-height: 1.5;
   margin: 0;
@@ -103,7 +103,7 @@ defineProps({
   }
   .feature + .feature {
     border-left: 0;
-    border-top: 1px solid #ddd;
+    border-top: 1px solid var(--line);
     padding-top: 24px;
   }
   .feature h2 {

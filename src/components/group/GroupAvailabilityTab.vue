@@ -305,7 +305,7 @@ const paintValue = ref(true) // true = marking free, false = unmarking
 
 // ---------- heatmap shades ----------
 // One green that gets darker as more people are free: index 0 = nobody ... index 5 = everyone
-const shadeColors = ['#ffffff', '#d8f0df', '#a3dbb3', '#5fbf80', '#2a8f57', '#0b5d3b']
+const shadeColors = ['var(--surface)', '#d8f0df', '#a3dbb3', '#5fbf80', '#2a8f57', '#0b5d3b']
 
 // ---------- slot keys and time helpers ----------
 // A slot is identified by a string like "2026-10-17T14:00" (Singapore time).
@@ -883,9 +883,9 @@ onMounted(async () => {
 .slot {
   height: 1.5rem;
   margin: 1px;
-  border: 1px solid #dfe3e6;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background-color: #fff;
+  background-color: var(--surface);
   display: flex; /* centres the number / emoji */
   align-items: center;
   justify-content: center;
@@ -926,7 +926,7 @@ onMounted(async () => {
 
 /* The range being picked */
 .slot-picked {
-  outline: 3px solid #111;
+  outline: 3px solid var(--ink);
   outline-offset: -2px;
 }
 
@@ -948,7 +948,7 @@ onMounted(async () => {
 }
 
 .availability-tab :is(a, button):focus-visible {
-  outline: 2px solid #111;
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
   box-shadow: none;
 }
@@ -960,9 +960,9 @@ onMounted(async () => {
   gap: 10px;
   margin-bottom: 1rem;
   padding: 14px 16px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 16px;
-  background: #fafafa;
+  background: var(--surface-2);
 }
 
 .status-banner.chosen {
@@ -984,17 +984,17 @@ onMounted(async () => {
 .window-chip {
   min-height: 40px;
   padding: 6px 14px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: white;
-  color: #111;
+  background: var(--surface);
+  color: var(--ink);
   font-size: 0.875rem;
   font-weight: 600;
   transition: background-color 0.2s ease;
 }
 
 .window-chip:hover {
-  background: #f3f3f3;
+  background: var(--surface-2);
 }
 
 /* "My availability" / "Group heatmap" switch, styled like the category chips */
@@ -1002,9 +1002,9 @@ onMounted(async () => {
   display: inline-flex;
   gap: 4px;
   padding: 4px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: #fafafa;
+  background: var(--surface-2);
 }
 
 .mode-option {
@@ -1013,27 +1013,27 @@ onMounted(async () => {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #111;
+  color: var(--ink);
   font-size: 0.9rem;
   font-weight: 600;
   transition: background-color 0.2s ease;
 }
 
 .mode-option:hover {
-  background: #f0f0f0;
+  background: var(--surface-2);
 }
 
 .mode-option.active {
-  background: #111;
-  color: white;
+  background: var(--ink);
+  color: var(--on-ink);
 }
 
 /* The grid, legend and slot picker share one card, like the activity cards */
 .avail-card {
   padding: 16px;
-  border: 1px solid #eee;
+  border: 1px solid var(--line);
   border-radius: 18px;
-  background: white;
+  background: var(--surface);
   box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
 }
 
@@ -1053,9 +1053,9 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: white;
+  background: var(--surface);
   font-size: 0.875rem;
 }
 
@@ -1081,7 +1081,7 @@ onMounted(async () => {
   width: 1.4rem;
   height: 0.9rem;
   border-radius: 4px;
-  border: 1px solid #dfe3e6;
+  border: 1px solid var(--line);
 }
 
 /* Banner that bounces in when everyone is free */
@@ -1101,7 +1101,7 @@ onMounted(async () => {
   animation: fade-in 0.2s ease;
 }
 .popup-card {
-  background: #fff;
+  background: var(--surface);
   border-radius: 20px;
   padding: 1.5rem 2rem;
   text-align: center;

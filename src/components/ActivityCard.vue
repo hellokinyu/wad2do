@@ -184,7 +184,7 @@ watch(
 <style scoped>
 .activity-card {
   overflow: hidden;
-  border: 1px solid #eee;
+  border: 1px solid var(--line);
   border-radius: 18px;
   box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
 }
@@ -230,8 +230,8 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f3f3f3;
-  color: #666;
+  background: var(--surface-2);
+  color: var(--muted);
 }
 
 .activity-card:hover .activity-photo {
@@ -262,7 +262,7 @@ watch(
 }
 
 .activity-name a {
-  color: #111;
+  color: var(--ink);
   text-decoration: none;
 }
 
@@ -318,7 +318,7 @@ watch(
   z-index: -1;
   border: 1px solid rgb(255 255 255 / 75%);
   border-radius: 50%;
-  background: rgb(255 105 135 / 24%);
+  background: rgb(255 190 69 / 30%);
   opacity: 0;
   pointer-events: none;
 }
@@ -331,7 +331,7 @@ watch(
 }
 
 .save-button.saved {
-  color: #dc3545;
+  color: var(--accent);
 }
 
 .save-button.saved .save-icon {
@@ -350,7 +350,7 @@ watch(
   position: absolute;
   top: 50%;
   left: 50%;
-  color: #ff8ca6;
+  color: #ffd27a;
   font-size: 12px;
   line-height: 1;
   opacity: 0;
@@ -463,7 +463,7 @@ watch(
 }
 
 .photo-action:focus-visible {
-  outline: 2px solid white;
+  outline: 2px solid var(--surface);
   outline-offset: 2px;
   box-shadow: 0 0 0 4px rgb(0 0 0 / 60%);
 }

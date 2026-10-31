@@ -229,9 +229,8 @@ onUnmounted(pause)
   min-height: 100svh;
   display: grid;
   grid-template-rows: auto 1fr auto auto;
-  background: linear-gradient(135deg, #fff, #f9f9f8);
-  color: #111;
-  font-family: Arial, Helvetica, sans-serif;
+  background: linear-gradient(135deg, var(--surface), var(--surface-2));
+  color: var(--ink);
 }
 .landing-nav {
   padding: clamp(12px, 2svh, 24px) var(--page-gutter) 8px;
@@ -245,8 +244,12 @@ onUnmounted(pause)
   height: 60px;
   object-fit: contain;
 }
+/* The logo PNG is black, so flip it to light in dark mode */
+:root[data-bs-theme='dark'] .brand-logo {
+  filter: invert(1) brightness(0.95);
+}
 .carousel-dots button:focus-visible {
-  outline: 3px solid #8b7151;
+  outline: 3px solid var(--accent);
   outline-offset: 5px;
 }
 .hero {
@@ -263,7 +266,7 @@ onUnmounted(pause)
 .eyebrow {
   font-size: clamp(10px, 0.75vw, 13px);
   letter-spacing: 2.5px;
-  color: #777;
+  color: var(--muted);
   margin-bottom: 22px;
 }
 h1 {
@@ -284,13 +287,13 @@ h1 {
   content: '';
   position: absolute;
   inset: 5px -5px 0;
-  background: #e8e8e5;
+  background: var(--surface-3);
   border-radius: 8px;
   transform: rotate(-1deg);
   z-index: -1;
 }
 .intro {
-  color: #777;
+  color: var(--muted);
   font-size: clamp(14px, 1vw, 18px);
   line-height: 1.6;
   margin-bottom: clamp(20px, 3svh, 32px);
@@ -313,7 +316,7 @@ h1 {
   border-radius: 20px;
   overflow: hidden;
   margin: 0;
-  background: #e7e5e0;
+  background: var(--surface-3);
 }
 .photo.tall {
   grid-row: span 2;
@@ -333,7 +336,9 @@ h1 {
   display: flex;
   align-items: center;
   gap: 3px;
+  /* A white label on the photo in both modes, so its text stays dark */
   background: #fffffff2;
+  color: #111219;
   border-radius: 30px;
   padding: 6px 9px;
   font-size: clamp(10px, 0.8vw, 14px);
@@ -366,12 +371,12 @@ h1 {
   content: '';
   width: 7px;
   height: 7px;
-  border: 1px solid #999;
+  border: 1px solid var(--line-strong);
   border-radius: 50%;
 }
 .carousel-dots button.selected::after {
-  background: #111;
-  border-color: #111;
+  background: var(--ink);
+  border-color: var(--ink);
 }
 .features {
   display: grid;

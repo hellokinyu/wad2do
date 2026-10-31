@@ -5,7 +5,7 @@
     </div>
     <!-- Owner: Charmaine -->
     <div v-if="loading" class="text-center py-5">
-      <div class="spinner-border text-dark" role="status">
+      <div class="spinner-border text-body" role="status">
         <span class="visually-hidden">Loading...</span>
       </div>
     </div>
@@ -716,13 +716,13 @@ function statusClass(status) {
 }
 
 .title {
-  color: #111;
+  color: var(--ink);
   letter-spacing: -0.03em;
   line-height: 1.1;
 }
 
 .hl {
-  background-color: #e6e6e1;
+  background-color: var(--surface-3);
   border-radius: 0.5rem;
   padding: 0 0.2em;
 }
@@ -732,20 +732,20 @@ function statusClass(status) {
   font-weight: 600;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: #6b6b6b;
+  color: var(--muted);
 }
 
 .lead-text {
   font-size: 1.1rem;
-  color: #555;
+  color: var(--muted);
 }
 
 .muted {
-  color: #6b6b6b;
+  color: var(--muted);
 }
 
 .error-text {
-  color: #b42318;
+  color: var(--bs-danger-text-emphasis);
 }
 
 .logged-out {
@@ -757,13 +757,13 @@ function statusClass(status) {
 }
 
 .stats {
-  border-top: 1px solid #e5e5e5;
-  border-bottom: 1px solid #e5e5e5;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
 .stat {
   padding: 1.25rem 1rem;
-  border-left: 1px solid #e5e5e5;
+  border-left: 1px solid var(--line);
   overflow-wrap: anywhere;
 }
 
@@ -776,7 +776,7 @@ function statusClass(status) {
   font-size: 2rem;
   font-weight: 700;
   letter-spacing: -0.03em;
-  color: #111;
+  color: var(--ink);
   line-height: 1.1;
 }
 
@@ -790,7 +790,7 @@ function statusClass(status) {
   font-weight: 600;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: #6b6b6b;
+  color: var(--muted);
 }
 
 @media (max-width: 767.98px) {
@@ -808,7 +808,7 @@ function statusClass(status) {
   margin-left: 0.35rem;
   padding: 0.1rem 0.6rem;
   border-radius: 999px;
-  background-color: #e6e6e1;
+  background-color: var(--surface-3);
   font-size: 1rem;
   vertical-align: middle;
   letter-spacing: 0;
@@ -816,7 +816,7 @@ function statusClass(status) {
 
 .unsaved {
   padding: 0.3rem 0.8rem;
-  border: 1px solid #111;
+  border: 1px solid var(--ink);
   border-radius: 999px;
   font-size: 0.8rem;
   font-weight: 600;
@@ -824,54 +824,54 @@ function statusClass(status) {
 
 .panel {
   padding: 1.5rem;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 1rem;
-  background-color: #f8f8f7;
+  background-color: var(--surface-2);
 }
 
 .panel-footer {
-  border-top: 1px solid #e5e5e5;
+  border-top: 1px solid var(--line);
 }
 
 .group-label {
   font-weight: 700;
   margin-bottom: 0.6rem;
-  color: #111;
+  color: var(--ink);
 }
 
 .chip {
   display: inline-block;
   padding: 0.45rem 1rem;
-  border: 1px solid #dcdcdc;
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background-color: #fff;
-  color: #111;
+  background-color: var(--surface);
+  color: var(--ink);
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .chip:hover {
-  background-color: #f2f2f0;
-  border-color: #bdbdbd;
+  background-color: var(--surface-2);
+  border-color: var(--line-strong);
 }
 
 .btn-check:checked + .chip {
-  background-color: #111;
-  border-color: #111;
-  color: #fff;
+  background-color: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
 }
 
 .btn-check:focus-visible + .chip {
-  outline: 2px solid #111;
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
 .field {
   padding: 0.6rem 1rem;
-  border: 1px solid #dcdcdc;
+  border: 1px solid var(--line);
   border-radius: 0.75rem;
-  background-color: #fff;
+  background-color: var(--surface);
 }
 
 .form-select.field {
@@ -879,12 +879,12 @@ function statusClass(status) {
 }
 
 .field:focus {
-  border-color: #111;
+  border-color: var(--ink);
   box-shadow: none;
 }
 
 .text-link {
-  color: #111;
+  color: var(--ink);
   text-decoration: none;
 }
 
@@ -894,7 +894,7 @@ function statusClass(status) {
 
 .empty-state {
   padding: 2.5rem 1.5rem;
-  border: 1.5px dashed #cfcfcf;
+  border: 1.5px dashed var(--line-strong);
   border-radius: 1rem;
   text-align: center;
 }
@@ -903,9 +903,9 @@ function statusClass(status) {
   position: relative;
   display: flex;
   flex-direction: column;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 1rem;
-  background-color: #fff;
+  background-color: var(--surface);
   overflow: hidden;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
@@ -929,8 +929,8 @@ function statusClass(status) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #f2f2f0;
-  color: #8a8a8a;
+  background-color: var(--surface-2);
+  color: var(--subtle);
 }
 
 .img-badge {
@@ -939,14 +939,14 @@ function statusClass(status) {
   bottom: 0.75rem;
   padding: 0.2rem 0.65rem;
   border-radius: 999px;
-  background-color: #fff;
-  color: #111;
+  background-color: var(--surface);
+  color: var(--ink);
   font-size: 0.8rem;
   font-weight: 600;
 }
 
 .card-link {
-  color: #111;
+  color: var(--ink);
   text-decoration: none;
 }
 
@@ -959,15 +959,15 @@ function statusClass(status) {
   list-style: none;
   padding: 0;
   margin: 0;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 1rem;
   overflow: hidden;
 }
 
 .submission-row {
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid #e5e5e5;
-  background-color: #fff;
+  border-bottom: 1px solid var(--line);
+  background-color: var(--surface);
 }
 
 .submission-row:last-child {
@@ -983,65 +983,66 @@ function statusClass(status) {
 }
 
 .status-pending {
-  border: 1px solid #cfcfcf;
-  color: #6b6b6b;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
 }
 
 .status-approved {
-  border: 1px solid #111;
-  background-color: #111;
-  color: #fff;
+  border: 1px solid var(--ink);
+  background-color: var(--ink);
+  color: var(--on-ink);
 }
 
 .status-rejected {
-  border: 1px solid #111;
-  color: #111;
+  border: 1px solid var(--ink);
+  color: var(--ink);
 }
 
 .reason {
-  color: #555;
+  color: var(--muted);
 }
 
 .notice {
   padding: 1rem 1.25rem;
-  border: 1px solid #111;
+  border: 1px solid var(--ink);
   border-radius: 1rem;
-  background-color: #f8f8f7;
+  background-color: var(--surface-2);
 }
 
+/* Primary action: amber, like .btn-dark in src/assets/styles.css */
 .btn-ink {
-  --bs-btn-color: #fff;
-  --bs-btn-bg: #111;
-  --bs-btn-border-color: #111;
-  --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: #333;
-  --bs-btn-hover-border-color: #333;
-  --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: #000;
-  --bs-btn-active-border-color: #000;
-  --bs-btn-disabled-color: #fff;
-  --bs-btn-disabled-bg: #111;
-  --bs-btn-disabled-border-color: #111;
+  --bs-btn-color: var(--on-accent);
+  --bs-btn-bg: var(--accent);
+  --bs-btn-border-color: var(--accent);
+  --bs-btn-hover-color: var(--on-accent);
+  --bs-btn-hover-bg: var(--accent-hover);
+  --bs-btn-hover-border-color: var(--accent-hover);
+  --bs-btn-active-color: var(--on-accent);
+  --bs-btn-active-bg: var(--accent-active);
+  --bs-btn-active-border-color: var(--accent-active);
+  --bs-btn-disabled-color: var(--on-accent);
+  --bs-btn-disabled-bg: var(--accent);
+  --bs-btn-disabled-border-color: var(--accent);
   --bs-btn-border-radius: 999px;
   --bs-btn-padding-x: 1.4rem;
   --bs-btn-padding-y: 0.6rem;
-  --bs-btn-font-weight: 600;
+  --bs-btn-font-weight: 700;
 }
 
 .btn-line {
-  --bs-btn-color: #111;
-  --bs-btn-bg: #fff;
-  --bs-btn-border-color: #111;
-  --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: #111;
-  --bs-btn-hover-border-color: #111;
-  --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: #000;
-  --bs-btn-active-border-color: #000;
+  --bs-btn-color: var(--ink);
+  --bs-btn-bg: var(--surface);
+  --bs-btn-border-color: var(--ink);
+  --bs-btn-hover-color: var(--on-ink);
+  --bs-btn-hover-bg: var(--ink);
+  --bs-btn-hover-border-color: var(--ink);
+  --bs-btn-active-color: var(--on-ink);
+  --bs-btn-active-bg: var(--ink);
+  --bs-btn-active-border-color: var(--ink);
   --bs-btn-border-radius: 999px;
   --bs-btn-padding-x: 1.2rem;
   --bs-btn-padding-y: 0.6rem;
-  --bs-btn-font-weight: 600;
+  --bs-btn-font-weight: 700;
 }
 
 .btn-line.btn-sm {
@@ -1051,15 +1052,15 @@ function statusClass(status) {
 }
 
 .btn-grey {
-  --bs-btn-color: #111;
-  --bs-btn-bg: #ececea;
-  --bs-btn-border-color: #ececea;
-  --bs-btn-hover-color: #111;
-  --bs-btn-hover-bg: #dcdcd8;
-  --bs-btn-hover-border-color: #dcdcd8;
-  --bs-btn-active-color: #111;
-  --bs-btn-active-bg: #cfcfca;
-  --bs-btn-active-border-color: #cfcfca;
+  --bs-btn-color: var(--ink);
+  --bs-btn-bg: var(--surface-3);
+  --bs-btn-border-color: var(--surface-3);
+  --bs-btn-hover-color: var(--ink);
+  --bs-btn-hover-bg: var(--line-strong);
+  --bs-btn-hover-border-color: var(--line-strong);
+  --bs-btn-active-color: var(--ink);
+  --bs-btn-active-bg: var(--line-strong);
+  --bs-btn-active-border-color: var(--line-strong);
   --bs-btn-border-radius: 999px;
   --bs-btn-padding-x: 1.2rem;
   --bs-btn-padding-y: 0.6rem;
@@ -1067,13 +1068,13 @@ function statusClass(status) {
 }
 
 .btn-red {
-  --bs-btn-color: #b42318;
-  --bs-btn-bg: #fff;
-  --bs-btn-border-color: #b42318;
-  --bs-btn-hover-color: #fff;
+  --bs-btn-color: var(--bs-danger-text-emphasis);
+  --bs-btn-bg: var(--surface);
+  --bs-btn-border-color: var(--bs-danger-text-emphasis);
+  --bs-btn-hover-color: white;
   --bs-btn-hover-bg: #b42318;
-  --bs-btn-hover-border-color: #b42318;
-  --bs-btn-active-color: #fff;
+  --bs-btn-hover-border-color: var(--bs-danger-text-emphasis);
+  --bs-btn-active-color: white;
   --bs-btn-active-bg: #8f1b12;
   --bs-btn-active-border-color: #8f1b12;
   --bs-btn-border-radius: 999px;

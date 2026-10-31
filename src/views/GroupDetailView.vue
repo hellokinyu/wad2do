@@ -490,9 +490,9 @@ function onSettingsSaved() {
     'steps steps';
   margin-top: 0.5rem;
   overflow: hidden;
-  border: 1px solid #eee;
+  border: 1px solid var(--line);
   border-radius: 22px;
-  background: white;
+  background: var(--surface);
   box-shadow: 0 10px 32px rgb(0 0 0 / 6%);
 }
 
@@ -509,9 +509,9 @@ function onSettingsSaved() {
   z-index: 1;
   width: 22px;
   height: 22px;
-  border: 1px solid #eee;
+  border: 1px solid var(--line);
   border-radius: 50%;
-  background: white;
+  background: var(--surface);
 }
 
 .hero::before {
@@ -562,7 +562,7 @@ function onSettingsSaved() {
 
 .hero-facts svg {
   margin-top: 4px;
-  color: #777;
+  color: var(--muted);
 }
 
 .header-actions {
@@ -583,7 +583,7 @@ function onSettingsSaved() {
   height: 26px;
   margin-left: -7px;
   border-radius: 50%;
-  box-shadow: 0 0 0 2px white;
+  box-shadow: 0 0 0 2px var(--surface);
 }
 
 .faces > :first-child {
@@ -593,15 +593,15 @@ function onSettingsSaved() {
 .face-initial {
   display: inline-grid;
   place-items: center;
-  background: #ececec;
-  color: #444;
+  background: var(--surface-3);
+  color: var(--muted);
   font-size: 0.75rem;
   font-weight: 700;
 }
 
 .face-more {
-  background: #111;
-  color: white;
+  background: var(--ink);
+  color: var(--on-ink);
 }
 
 /* ----- The tabs, as three planning steps along the bottom of the ticket ----- */
@@ -610,7 +610,7 @@ function onSettingsSaved() {
   display: grid;
   grid-area: steps;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-top: 2px dashed #e5e5e5;
+  border-top: 2px dashed var(--line);
 }
 
 /* Each step: its icon in a circle, then its name. The circle is grey until the step is
@@ -622,18 +622,18 @@ function onSettingsSaved() {
   gap: 10px;
   min-height: 44px;
   padding: 14px 16px;
-  color: #555;
+  color: var(--muted);
   text-decoration: none;
   transition: background-color 0.2s ease;
 }
 
 .step + .step {
-  border-left: 1px solid #f0f0f0;
+  border-left: 1px solid var(--line);
 }
 
 .step:hover {
-  background: #fafafa;
-  color: #111;
+  background: var(--surface-2);
+  color: var(--ink);
 }
 
 .step-icon {
@@ -643,8 +643,8 @@ function onSettingsSaved() {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #f0f0f0;
-  color: #666;
+  background: var(--surface-2);
+  color: var(--muted);
 }
 
 .step.done .step-icon {
@@ -663,9 +663,9 @@ function onSettingsSaved() {
 
 /* The tab you're on: ink text and an ink line under it */
 .step.active {
-  background: #fafafa;
-  box-shadow: inset 0 -3px 0 #111;
-  color: #111;
+  background: var(--surface-2);
+  box-shadow: inset 0 -3px 0 var(--ink);
+  color: var(--ink);
 }
 
 .step.active .step-label {
@@ -691,9 +691,9 @@ function onSettingsSaved() {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: white;
+  background: var(--surface);
   color: var(--bs-emphasis-color);
   font-size: 0.875rem;
 }
@@ -715,9 +715,9 @@ function onSettingsSaved() {
 /* The panels that open under the header, like the filters panel on Activities */
 .group-panel {
   padding: 20px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 16px;
-  background: #fafafa;
+  background: var(--surface-2);
 }
 
 .join-panel {
@@ -725,7 +725,7 @@ function onSettingsSaved() {
 }
 
 .group-page :is(a, button):focus-visible {
-  outline: 2px solid #111;
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
   box-shadow: none;
 }
@@ -763,7 +763,7 @@ function onSettingsSaved() {
 
   .header-actions {
     padding: 14px 16px 16px;
-    border-top: 1px solid #f0f0f0;
+    border-top: 1px solid var(--line);
   }
 
   /* Members (with faces) takes the room; Invite and Settings shrink to round icon buttons.

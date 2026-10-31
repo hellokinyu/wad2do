@@ -359,7 +359,7 @@ async function reject() {
         {{ submission.image_url ? 'Photo unavailable' : 'No photo submitted' }}
       </div>
       <div class="preview-badges">
-        <span class="badge rounded-pill text-bg-light">{{ getSetting(submission.indoor) }}</span>
+        <span class="badge rounded-pill bg-body-secondary text-body">{{ getSetting(submission.indoor) }}</span>
         <span
           class="badge rounded-pill text-capitalize"
           :class="{
@@ -436,7 +436,7 @@ async function reject() {
             </div>
           </div>
           <div class="col-12 p-4">
-            <span class="badge rounded-pill text-bg-light mb-2 text-capitalize">{{
+            <span class="badge rounded-pill bg-body-secondary text-body mb-2 text-capitalize">{{
               submission.status
             }}</span>
             <h2 class="h4 fw-bold">{{ submission.name }}</h2>
@@ -813,7 +813,7 @@ async function reject() {
   position: relative;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid #eee;
+  border: 1px solid var(--line);
   border-radius: 18px;
   box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
   transition: box-shadow 0.2s ease;
@@ -822,12 +822,12 @@ async function reject() {
   box-shadow: 0 6px 20px rgb(0 0 0 / 10%);
 }
 .submission-preview:focus-within {
-  outline: 2px solid #212529;
+  outline: 2px solid var(--ink);
   outline-offset: 3px;
 }
 .preview-photo-panel {
   position: relative;
-  background: #f3f3f3;
+  background: var(--surface-2);
 }
 .preview-photo,
 .preview-placeholder {
@@ -864,7 +864,7 @@ async function reject() {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #111;
+  color: var(--ink);
   font: inherit;
   text-align: left;
 }
@@ -882,10 +882,10 @@ async function reject() {
   max-height: calc(100dvh - 32px);
   overflow: hidden;
   padding: 0;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 18px;
   box-shadow: 0 16px 48px rgb(0 0 0 / 20%);
-  color: #212529;
+  color: var(--ink);
 }
 .submission-dialog[open] {
   display: flex;
@@ -897,8 +897,8 @@ async function reject() {
 .dialog-header {
   flex-shrink: 0;
   padding: 20px 24px;
-  border-bottom: 1px solid #eee;
-  background: white;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
 .dialog-body {
   display: block;
@@ -919,7 +919,7 @@ async function reject() {
 }
 .photo-panel,
 .photo-placeholder {
-  background: #f3f3f3;
+  background: var(--surface-2);
 }
 .photo-placeholder {
   min-height: 200px;

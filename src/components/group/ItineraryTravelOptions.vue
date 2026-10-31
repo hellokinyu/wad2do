@@ -142,7 +142,7 @@ function formatDistance(meters) {
   gap: 0.35rem;
   min-height: 36px;
   padding: 0.25rem 0.85rem;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--bs-body-bg);
   color: var(--bs-body-color);
@@ -152,9 +152,9 @@ function formatDistance(meters) {
   cursor: pointer;
 }
 .mode-tab.active {
-  border-color: #111;
-  background: #111;
-  color: white;
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--on-ink);
   font-weight: 600;
 }
 .mode-tab:disabled {

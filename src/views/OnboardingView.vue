@@ -7,7 +7,7 @@
     <!-- Owner: Charmaine -->
     <div class="onboarding-box mx-auto">
       <div v-if="loading" class="text-center py-5">
-        <div class="spinner-border text-dark" role="status">
+        <div class="spinner-border text-body" role="status">
           <span class="visually-hidden">Loading...</span>
         </div>
       </div>
@@ -462,13 +462,13 @@ function exploreActivities() {
 }
 
 .title {
-  color: #111;
+  color: var(--ink);
   letter-spacing: -0.03em;
   line-height: 1.1;
 }
 
 .hl {
-  background-color: #e6e6e1;
+  background-color: var(--surface-3);
   border-radius: 0.5rem;
   padding: 0 0.2em;
 }
@@ -478,20 +478,20 @@ function exploreActivities() {
   font-weight: 600;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: #6b6b6b;
+  color: var(--muted);
 }
 
 .lead-text {
   font-size: 1.1rem;
-  color: #555;
+  color: var(--muted);
 }
 
 .hint {
-  color: #6b6b6b;
+  color: var(--muted);
 }
 
 .hint.ready {
-  color: #111;
+  color: var(--ink);
   font-weight: 600;
 }
 
@@ -505,7 +505,7 @@ function exploreActivities() {
   flex: 1;
   height: 6px;
   border-radius: 999px;
-  background-color: #e6e6e1;
+  background-color: var(--surface-3);
   overflow: hidden;
 }
 
@@ -513,7 +513,7 @@ function exploreActivities() {
   content: '';
   position: absolute;
   inset: 0;
-  background-color: #111;
+  background-color: var(--ink);
   transform: scaleX(0);
   transform-origin: left;
   transition: transform 0.4s ease;
@@ -526,10 +526,10 @@ function exploreActivities() {
 .chip {
   display: inline-block;
   padding: 0.45rem 1rem;
-  border: 1px solid #dcdcdc;
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background-color: #fff;
-  color: #111;
+  background-color: var(--surface);
+  color: var(--ink);
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
@@ -541,20 +541,20 @@ function exploreActivities() {
 }
 
 .chip:hover {
-  background-color: #f2f2f0;
-  border-color: #bdbdbd;
+  background-color: var(--surface-2);
+  border-color: var(--line-strong);
 }
 
 .btn-check:checked + .chip,
 .chip.selected {
-  background-color: #111;
-  border-color: #111;
-  color: #fff;
+  background-color: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
 }
 
 .btn-check:focus-visible + .chip,
 .btn-check:focus-visible + .option-tile {
-  outline: 2px solid #111;
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
@@ -563,19 +563,19 @@ function exploreActivities() {
   display: block;
   height: 100%;
   padding: 1.25rem 1.25rem 1.1rem;
-  border: 1px solid #dcdcdc;
+  border: 1px solid var(--line);
   border-radius: 1rem;
-  background-color: #fff;
+  background-color: var(--surface);
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .option-tile:hover {
-  border-color: #111;
+  border-color: var(--ink);
 }
 
 .tile-hint {
-  color: #6b6b6b;
+  color: var(--muted);
   margin-top: 0.25rem;
 }
 
@@ -585,50 +585,50 @@ function exploreActivities() {
   right: 1rem;
   width: 20px;
   height: 20px;
-  border: 2px solid #c8c8c8;
+  border: 2px solid var(--line-strong);
   border-radius: 50%;
 }
 
 .btn-check:checked + .option-tile {
-  background-color: #111;
-  border-color: #111;
+  background-color: var(--ink);
+  border-color: var(--ink);
 }
 
 .btn-check:checked + .option-tile .title {
-  color: #fff;
+  color: var(--on-ink);
 }
 
 .btn-check:checked + .option-tile .tile-hint {
-  color: #cfcfcf;
+  color: var(--subtle);
 }
 
 .btn-check:checked + .option-tile .tick {
-  border-color: #fff;
-  background-color: #fff;
-  box-shadow: inset 0 0 0 4px #111;
+  border-color: var(--surface);
+  background-color: var(--surface);
+  box-shadow: inset 0 0 0 4px var(--ink);
 }
 
 .field {
   padding: 0.75rem 1rem;
-  border: 1px solid #dcdcdc;
+  border: 1px solid var(--line);
   border-radius: 0.75rem;
 }
 
 .field:focus {
-  border-color: #111;
+  border-color: var(--ink);
   box-shadow: none;
 }
 
 .panel {
   padding: 0.5rem 1.5rem;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 1rem;
-  background-color: #f8f8f7;
+  background-color: var(--surface-2);
 }
 
 .summary-row {
   padding: 1rem 0;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--line);
 }
 
 .summary-row:last-child {
@@ -639,61 +639,62 @@ function exploreActivities() {
   display: inline-block;
   padding: 0.3rem 0.8rem;
   border-radius: 999px;
-  background-color: #111;
-  color: #fff;
+  background-color: var(--ink);
+  color: var(--on-ink);
   font-size: 0.875rem;
   font-weight: 500;
 }
 
 .notice {
   padding: 1rem 1.25rem;
-  border: 1px solid #111;
+  border: 1px solid var(--ink);
   border-radius: 1rem;
-  background-color: #f8f8f7;
+  background-color: var(--surface-2);
 }
 
 .footer-bar {
-  border-top: 1px solid #e5e5e5;
+  border-top: 1px solid var(--line);
 }
 
 .skip-link {
-  color: #6b6b6b;
+  color: var(--muted);
   text-decoration: none;
 }
 
 .skip-link:hover {
-  color: #111;
+  color: var(--ink);
 }
 
+/* Primary action: amber, like .btn-dark in src/assets/styles.css */
 .btn-ink {
-  --bs-btn-color: #fff;
-  --bs-btn-bg: #111;
-  --bs-btn-border-color: #111;
-  --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: #333;
-  --bs-btn-hover-border-color: #333;
-  --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: #000;
-  --bs-btn-active-border-color: #000;
-  --bs-btn-disabled-color: #fff;
-  --bs-btn-disabled-bg: #111;
-  --bs-btn-disabled-border-color: #111;
+  --bs-btn-color: var(--on-accent);
+  --bs-btn-bg: var(--accent);
+  --bs-btn-border-color: var(--accent);
+  --bs-btn-hover-color: var(--on-accent);
+  --bs-btn-hover-bg: var(--accent-hover);
+  --bs-btn-hover-border-color: var(--accent-hover);
+  --bs-btn-active-color: var(--on-accent);
+  --bs-btn-active-bg: var(--accent-active);
+  --bs-btn-active-border-color: var(--accent-active);
+  --bs-btn-disabled-color: var(--on-accent);
+  --bs-btn-disabled-bg: var(--accent);
+  --bs-btn-disabled-border-color: var(--accent);
   --bs-btn-border-radius: 999px;
   --bs-btn-padding-x: 1.4rem;
   --bs-btn-padding-y: 0.6rem;
-  --bs-btn-font-weight: 600;
+  --bs-btn-font-weight: 700;
 }
 
 .btn-line {
-  --bs-btn-color: #111;
-  --bs-btn-bg: #fff;
-  --bs-btn-border-color: #111;
-  --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: #111;
-  --bs-btn-hover-border-color: #111;
-  --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: #000;
-  --bs-btn-active-border-color: #000;
+  --bs-btn-color: var(--ink);
+  --bs-btn-bg: var(--surface);
+  --bs-btn-border-color: var(--ink);
+  --bs-btn-hover-color: var(--on-ink);
+  --bs-btn-hover-bg: var(--ink);
+  --bs-btn-hover-border-color: var(--ink);
+  --bs-btn-active-color: var(--on-ink);
+  --bs-btn-active-bg: var(--ink);
+  --bs-btn-active-border-color: var(--ink);
   --bs-btn-border-radius: 999px;
   --bs-btn-padding-x: 1.2rem;
   --bs-btn-padding-y: 0.6rem;
@@ -747,13 +748,13 @@ function exploreActivities() {
     place-items: center;
     flex: 0 0 22px;
     height: 22px;
-    border: 1.5px solid #c8c8c8;
+    border: 1.5px solid var(--line-strong);
     border-radius: 50%;
   }
   .btn-check:checked + .chip .mobile-choice-mark {
-    border-color: #fff;
-    background: #fff;
-    color: #111;
+    border-color: var(--surface);
+    background: var(--surface);
+    color: var(--ink);
   }
   .btn-check:checked + .chip .mobile-choice-mark::after {
     content: '✓';
@@ -799,7 +800,7 @@ function exploreActivities() {
     gap: 8px 12px;
     margin-top: 0 !important;
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)) !important;
-    background: #fff;
+    background: var(--surface);
     box-shadow: 0 -4px 16px rgb(0 0 0 / 4%);
   }
   .footer-actions {

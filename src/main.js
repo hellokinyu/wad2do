@@ -8,6 +8,10 @@ import 'bootstrap/dist/js/bootstrap.bundle.min.js'
 
 // Our global styles
 import './assets/styles.css'
+import { startColorMode } from './lib/colorMode'
+
+// Light or dark colours before the first paint
+startColorMode()
 
 const app = createApp(App)
 
