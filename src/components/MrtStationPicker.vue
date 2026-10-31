@@ -161,7 +161,7 @@ watch([() => props.modelValue, zoom], revealStation)
   width: 100%;
   height: 420px;
   overflow: auto;
-  border: 1px solid #ccc;
+  border: 1px solid var(--line-strong);
   border-radius: 0.75rem;
 }
 /* Scale targets with the map so neighbouring stations stay separate at 25%. */
@@ -190,12 +190,12 @@ watch([() => props.modelValue, zoom], revealStation)
   width: min(14px, 50%);
   height: min(14px, 50%);
   margin: auto;
-  border: 2px solid #333;
+  border: 2px solid var(--line-strong);
   border-radius: 50%;
-  background: white;
+  background: var(--surface);
 }
 .station-marker:hover {
-  background: #1112;
+  background: rgba(var(--bs-emphasis-color-rgb), 0.08);
 }
 .station-marker.selected {
   background: #165bc633;

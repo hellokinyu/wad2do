@@ -812,7 +812,7 @@ onMounted(loadActivities)
           <li class="page-item">
             <button
               type="button"
-              class="page-link text-dark"
+              class="page-link text-body"
               :disabled="currentPage === 1"
               @click="changePage(currentPage - 1)"
             >
@@ -823,7 +823,7 @@ onMounted(loadActivities)
             <button
               type="button"
               class="page-link"
-              :class="page === currentPage ? 'bg-dark border-dark text-white' : 'text-dark'"
+              :class="page === currentPage ? 'page-current' : 'text-body'"
               :aria-label="`Page ${page}`"
               :aria-current="page === currentPage ? 'page' : undefined"
               @click="changePage(page)"
@@ -834,7 +834,7 @@ onMounted(loadActivities)
           <li class="page-item">
             <button
               type="button"
-              class="page-link text-dark"
+              class="page-link text-body"
               :disabled="currentPage === pageCount"
               @click="changePage(currentPage + 1)"
             >
@@ -865,6 +865,12 @@ onMounted(loadActivities)
   opacity: 0.45;
 }
 
+.page-link.page-current {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
 .activity-controls {
   position: sticky;
   top: var(--navbar-height, 0px);
@@ -872,8 +878,9 @@ onMounted(loadActivities)
   max-height: min(45dvh, calc(100dvh - var(--navbar-height, 0px) - 64px));
   overflow-y: auto;
   padding: 12px 0;
-  border-bottom: 1px solid #eee;
-  background: white;
+  border-bottom: 1px solid var(--line);
+  /* Same colour as the page, so the bar only shows its edge while cards scroll under it */
+  background: var(--bg);
 }
 
 .search-bar .form-control {
@@ -882,7 +889,7 @@ onMounted(loadActivities)
 }
 
 .filters-toggle {
-  --filter-knob-fill: white;
+  --filter-knob-fill: var(--on-ink);
   position: relative;
   display: inline-grid;
   place-items: center;
@@ -890,10 +897,10 @@ onMounted(loadActivities)
   width: 48px;
   height: 48px;
   padding: 9px;
-  border: 1px solid #111;
+  border: 1px solid var(--ink);
   border-radius: 12px;
-  background: white;
-  color: #111;
+  background: var(--surface);
+  color: var(--ink);
   cursor: pointer;
   touch-action: manipulation;
   transition:
@@ -902,12 +909,12 @@ onMounted(loadActivities)
 }
 .filters-toggle:is(:hover, :focus-visible),
 .filters-toggle.has-active-filters {
-  --filter-knob-fill: #111;
-  background: #111;
-  color: white;
+  --filter-knob-fill: var(--ink);
+  background: var(--ink);
+  color: var(--on-ink);
 }
 .filters-toggle:focus-visible {
-  outline: 3px solid #86b7fe;
+  outline: 3px solid var(--accent);
   outline-offset: 2px;
 }
 .filters-icon {
@@ -941,34 +948,34 @@ onMounted(loadActivities)
 .category-chip {
   flex-shrink: 0;
   padding: 7px 16px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: white;
-  color: #111;
+  background: var(--surface);
+  color: var(--ink);
   font-size: 0.875rem;
   transition: background-color 0.2s ease;
 }
 
 .category-chip:hover {
-  background: #f3f3f3;
+  background: var(--surface-2);
 }
 
 .category-chip.active {
-  background: #111;
-  border-color: #111;
-  color: white;
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
 }
 
 .category-chip:focus-visible {
-  outline: 2px solid #111;
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
 .filters-panel,
 .empty-results {
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 16px;
-  background: #fafafa;
+  background: var(--surface-2);
 }
 
 .filters-panel {
@@ -976,7 +983,7 @@ onMounted(loadActivities)
   max-height: calc(100dvh - 32px);
   padding: 0;
   overflow: hidden;
-  background: white;
+  background: var(--surface);
   box-shadow: 0 16px 48px rgb(0 0 0 / 15%);
 }
 
@@ -996,10 +1003,10 @@ onMounted(loadActivities)
 }
 
 .filter-header {
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--line);
 }
 .filter-footer {
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--line);
 }
 .filter-body {
   overflow-y: auto;

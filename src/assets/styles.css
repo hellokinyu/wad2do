@@ -1,1 +1,210 @@
 /* Global WAD2Do styles. Design UI final boss emmanuel owns this */
+
+/* Theme: Brunch Club (light, default) and Supper Club (dark).
+   Every page takes its colours from these names, so changing a value here changes the whole app.
+   Dark mode is on when <html> has data-bs-theme="dark" (set in src/lib/colorMode.js).
+   See DESIGN.md for what each colour is for. */
+
+:root {
+  /* Surfaces, from the page background up to raised panels */
+  --bg: #f5f6fa;
+  --surface: #ffffff; /* cards, dialogs, inputs */
+  --surface-2: #eceef4; /* soft panels, chips, hover */
+  --surface-3: #e1e4ec; /* pressed or stronger grey fills */
+
+  /* Text and lines */
+  --ink: #111219; /* main text, selected chips and tabs */
+  --ink-hover: #2a2d3a;
+  --on-ink: #ffffff; /* text on top of --ink */
+  --muted: #5f6273; /* secondary text */
+  --subtle: #8a8d9c; /* hints, placeholders */
+  --line: #dfe1e9; /* hairlines and card borders */
+  --line-strong: #b9bdcb; /* input and dashed borders */
+
+  /* Amber: primary actions only. Too pale for text on light backgrounds, so text uses --accent-ink */
+  --accent: #ffbe45;
+  --accent-hover: #ffb020;
+  --accent-active: #f0a20c;
+  --on-accent: #1a1206;
+  --accent-ink: #8f5b00;
+  --accent-subtle: #fff1d3;
+
+  /* Teal means keen, coral means not keen */
+  --keen: #3fd9b5;
+  --on-keen: #06221b;
+  --keen-ink: #0b7a62;
+  --keen-subtle: #d9f7ef;
+  --nope: #ff6b7f;
+  --nope-ink: #b42335;
+  --nope-subtle: #ffe3e7;
+
+  --overlay: rgb(17 18 25 / 45%); /* behind dialogs */
+
+  /* Fonts */
+  --font-display: 'Bricolage Grotesque', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Bootstrap reads these, so its buttons, forms, cards and text follow the theme */
+  --bs-body-font-family: var(--font-body);
+  --bs-body-bg: var(--bg);
+  --bs-body-bg-rgb: 245, 246, 250;
+  --bs-body-color: var(--ink);
+  --bs-body-color-rgb: 17, 18, 25;
+  --bs-emphasis-color: var(--ink);
+  --bs-emphasis-color-rgb: 17, 18, 25;
+  --bs-heading-color: var(--ink);
+  --bs-secondary-color: var(--muted);
+  --bs-secondary-color-rgb: 95, 98, 115;
+  --bs-secondary-rgb: 95, 98, 115;
+  --bs-tertiary-color: var(--subtle);
+  --bs-secondary-bg: var(--surface-2);
+  --bs-tertiary-bg: var(--surface-2);
+  --bs-tertiary-bg-rgb: 236, 238, 244;
+  --bs-border-color: var(--line);
+  --bs-border-color-translucent: var(--line);
+  --bs-link-color: var(--ink);
+  --bs-link-color-rgb: 17, 18, 25;
+  --bs-link-hover-color: var(--ink-hover);
+  --bs-link-hover-color-rgb: 42, 45, 58;
+  --bs-focus-ring-color: rgb(255 190 69 / 45%);
+}
+
+[data-bs-theme='dark'] {
+  --bg: #111219;
+  --surface: #1c1e28;
+  --surface-2: #262935;
+  --surface-3: #31354a;
+
+  --ink: #f2f2f5;
+  --ink-hover: #d8d9e0;
+  --on-ink: #111219;
+  --muted: #a3a6b4;
+  --subtle: #7d8091;
+  --line: #2e3140;
+  --line-strong: #4a4e60;
+
+  --accent-ink: #ffbe45;
+  --accent-subtle: #3a2e14;
+
+  --keen-ink: #3fd9b5;
+  --keen-subtle: #12352e;
+  --nope-ink: #ff8a99;
+  --nope-subtle: #3a1a22;
+
+  --overlay: rgb(0 0 0 / 60%);
+
+  --bs-body-bg-rgb: 17, 18, 25;
+  --bs-body-color-rgb: 242, 242, 245;
+  --bs-emphasis-color-rgb: 242, 242, 245;
+  --bs-secondary-color-rgb: 163, 166, 180;
+  --bs-secondary-rgb: 163, 166, 180;
+  --bs-tertiary-bg-rgb: 38, 41, 53;
+  --bs-link-color-rgb: 242, 242, 245;
+  --bs-link-hover-color-rgb: 216, 217, 224;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.h1,
+.h2,
+.h3,
+.h4,
+.h5,
+.h6,
+.display-1,
+.display-2,
+.display-3,
+.display-4,
+.display-5,
+.display-6 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+/* Primary actions are amber */
+.btn-dark {
+  --bs-btn-color: var(--on-accent);
+  --bs-btn-bg: var(--accent);
+  --bs-btn-border-color: var(--accent);
+  --bs-btn-hover-color: var(--on-accent);
+  --bs-btn-hover-bg: var(--accent-hover);
+  --bs-btn-hover-border-color: var(--accent-hover);
+  --bs-btn-active-color: var(--on-accent);
+  --bs-btn-active-bg: var(--accent-active);
+  --bs-btn-active-border-color: var(--accent-active);
+  --bs-btn-disabled-color: var(--on-accent);
+  --bs-btn-disabled-bg: var(--accent);
+  --bs-btn-disabled-border-color: var(--accent);
+  --bs-btn-focus-shadow-rgb: 255, 190, 69;
+  font-weight: 700;
+}
+
+/* Secondary buttons and toggles: outlined, filled with ink once selected */
+.btn-outline-dark {
+  --bs-btn-color: var(--ink);
+  --bs-btn-border-color: var(--line-strong);
+  --bs-btn-hover-color: var(--ink);
+  --bs-btn-hover-bg: var(--surface-2);
+  --bs-btn-hover-border-color: var(--ink);
+  --bs-btn-active-color: var(--on-ink);
+  --bs-btn-active-bg: var(--ink);
+  --bs-btn-active-border-color: var(--ink);
+  --bs-btn-disabled-color: var(--muted);
+  --bs-btn-disabled-border-color: var(--line);
+  --bs-btn-focus-shadow-rgb: 255, 190, 69;
+}
+
+/* Inputs */
+.form-control,
+.form-select {
+  background-color: var(--surface);
+}
+
+.form-control::placeholder {
+  color: var(--subtle);
+}
+
+.form-control:focus,
+.form-select:focus,
+.form-check-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 0.25rem rgb(255 190 69 / 35%);
+}
+
+.form-check-input {
+  background-color: var(--surface);
+  border-color: var(--line-strong);
+}
+
+/* Ticked boxes, radios and switches are amber with a dark mark */
+.form-check-input:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+
+.form-check-input:checked[type='checkbox'] {
+  --bs-form-check-bg-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%231a1206' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e");
+}
+
+.form-check-input:checked[type='radio'] {
+  --bs-form-check-bg-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='2' fill='%231a1206'/%3e%3c/svg%3e");
+}
+
+.form-switch .form-check-input:checked {
+  --bs-form-switch-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%231a1206'/%3e%3c/svg%3e");
+}
+
+.modal-backdrop {
+  --bs-backdrop-bg: var(--overlay);
+  --bs-backdrop-opacity: 1;
+}

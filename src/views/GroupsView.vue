@@ -811,17 +811,15 @@ async function joinGroup() {
 </template>
 
 <style scoped>
-/* Matches the Activities page: near-black ink, pill buttons, soft grey hairlines */
+/* Ink, lines and surfaces come from the theme in src/assets/styles.css */
 .groups-page {
-  --ink: #111;
-  --line: #e5e5e5;
-  --panel: #fafafa;
+  --panel: var(--surface-2);
   --stub-width: 92px;
 }
 
 .groups-page ::selection {
   background: var(--ink);
-  color: white;
+  color: var(--on-ink);
 }
 
 .groups-page :is(a, button):focus-visible {
@@ -874,7 +872,7 @@ svg:not(.animal-avatar) {
   padding: 10px 24px;
   border: 1px solid var(--ink);
   border-radius: 999px;
-  background: white;
+  background: var(--surface);
   color: var(--ink);
   font-size: 1rem;
   font-weight: 600;
@@ -895,12 +893,12 @@ svg:not(.animal-avatar) {
 
 .group-action.active {
   background: var(--ink);
-  color: white;
+  color: var(--on-ink);
 }
 
 .group-action:hover {
   background: var(--ink);
-  color: white;
+  color: var(--on-ink);
   box-shadow: 0 6px 16px rgb(0 0 0 / 14%);
   transform: translateY(-2px);
 }
@@ -914,7 +912,7 @@ svg:not(.animal-avatar) {
 .group-action[aria-expanded='true'],
 .group-action[aria-expanded='true']:hover {
   box-shadow:
-    0 0 0 3px white,
+    0 0 0 3px var(--surface),
     0 0 0 5px var(--ink);
   transform: none;
 }
@@ -925,7 +923,7 @@ svg:not(.animal-avatar) {
   padding: 24px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: white;
+  background: var(--surface);
   box-shadow: 0 10px 32px rgb(0 0 0 / 7%);
 }
 
@@ -962,7 +960,7 @@ svg:not(.animal-avatar) {
   height: 40px;
   border-radius: 50%;
   background: var(--ink);
-  color: white;
+  color: var(--on-ink);
 }
 
 .done-mark svg {
@@ -979,14 +977,14 @@ svg:not(.animal-avatar) {
 .panel .form-control,
 .panel .input-group-text {
   min-height: 48px;
-  border-color: #d9d9d9;
+  border-color: var(--line);
   border-radius: 12px;
   caret-color: var(--ink);
 }
 
 .panel .input-group-text {
   background: var(--panel);
-  color: #555;
+  color: var(--muted);
   font-weight: 600;
 }
 
@@ -1018,7 +1016,7 @@ svg:not(.animal-avatar) {
 /* Mistakes show under their field; Bootstrap's warning icon would cover the date picker */
 .panel .form-control.is-invalid {
   padding-right: 0.75rem;
-  border-color: #b02a37;
+  border-color: var(--bs-danger-text-emphasis);
   background-image: none;
 }
 
@@ -1028,7 +1026,7 @@ svg:not(.animal-avatar) {
 
 .form-error,
 .field-error {
-  color: #b02a37;
+  color: var(--bs-danger-text-emphasis);
   font-weight: 600;
 }
 
@@ -1063,7 +1061,7 @@ svg:not(.animal-avatar) {
   gap: 8px;
   margin-top: 1.5rem;
   padding-top: 1.25rem;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--line);
 }
 
 .panel-footer .btn-link {
@@ -1091,7 +1089,7 @@ svg:not(.animal-avatar) {
 }
 
 .code-input::placeholder {
-  color: #949494;
+  color: var(--subtle);
   font-weight: 500;
 }
 
@@ -1159,7 +1157,7 @@ svg:not(.animal-avatar) {
   padding: 8px 16px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: white;
+  background: var(--surface);
   color: var(--ink);
   font-size: 0.9rem;
   font-weight: 600;
@@ -1167,7 +1165,7 @@ svg:not(.animal-avatar) {
 }
 
 .past-toggle:hover {
-  background: #f3f3f3;
+  background: var(--surface-2);
 }
 
 .past-toggle svg {
@@ -1183,7 +1181,7 @@ svg:not(.animal-avatar) {
 .nothing-next {
   margin: 0;
   padding: 20px;
-  border: 1px dashed #d4d4d4;
+  border: 1px dashed var(--line-strong);
   border-radius: 18px;
   background: var(--panel);
   color: var(--bs-secondary-color);
@@ -1192,8 +1190,8 @@ svg:not(.animal-avatar) {
 .section-count {
   padding: 1px 9px;
   border-radius: 999px;
-  background: #f0f0f0;
-  color: #555;
+  background: var(--surface-2);
+  color: var(--muted);
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
 }
@@ -1214,9 +1212,9 @@ svg:not(.animal-avatar) {
   height: 100%;
   min-height: 168px;
   overflow: hidden;
-  border: 1px solid #eee;
+  border: 1px solid var(--line);
   border-radius: 18px;
-  background: white;
+  background: var(--surface);
   color: var(--ink);
   text-decoration: none;
   box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
@@ -1234,9 +1232,9 @@ svg:not(.animal-avatar) {
   z-index: 1;
   width: 20px;
   height: 20px;
-  border: 1px solid #eee;
+  border: 1px solid var(--line);
   border-radius: 50%;
-  background: white;
+  background: var(--surface);
 }
 
 .ticket::before {
@@ -1291,7 +1289,7 @@ a.ticket:hover {
   width: 20px;
   height: 20px;
   margin-top: 3px;
-  color: #999;
+  color: var(--subtle);
   transition:
     transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
     color 220ms ease;
@@ -1308,7 +1306,7 @@ a.ticket:hover .ticket-arrow {
   padding: 2px 9px;
   border-radius: 999px;
   background: var(--ink);
-  color: white;
+  color: var(--on-ink);
   font-size: 0.75rem;
   font-weight: 700;
 }
@@ -1325,7 +1323,7 @@ a.ticket:hover .ticket-arrow {
   height: 24px;
   margin-left: -6px;
   border-radius: 50%;
-  box-shadow: 0 0 0 2px white;
+  box-shadow: 0 0 0 2px var(--surface);
 }
 
 .faces > :first-child {
@@ -1335,15 +1333,15 @@ a.ticket:hover .ticket-arrow {
 .face-initial {
   display: inline-grid;
   place-items: center;
-  background: #ececec;
-  color: #444;
+  background: var(--surface-3);
+  color: var(--muted);
   font-size: 0.7rem;
   font-weight: 700;
 }
 
 .face-more {
   background: var(--ink);
-  color: white;
+  color: var(--on-ink);
 }
 
 .ticket-meta {
@@ -1365,7 +1363,7 @@ a.ticket:hover .ticket-arrow {
   width: 16px;
   height: 16px;
   margin-top: 2px;
-  color: #777;
+  color: var(--muted);
 }
 
 /* Voting -> Time picked -> Planned, as three bars that fill in */
@@ -1383,7 +1381,7 @@ a.ticket:hover .ticket-arrow {
 .stage-track span {
   height: 6px;
   border-radius: 999px;
-  background: #ececec;
+  background: var(--surface-3);
 }
 
 .stage-track span.done {
@@ -1426,7 +1424,7 @@ a.ticket:hover .ticket-arrow {
   flex-shrink: 0;
   width: var(--stub-width);
   border-right: 2px dashed rgb(0 0 0 / 8%);
-  background: #ececec;
+  background: var(--surface-3);
 }
 
 .ticket-skeleton .ticket-body {
@@ -1437,7 +1435,7 @@ a.ticket:hover .ticket-arrow {
   display: block;
   height: 12px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #efefef 0%, #f7f7f7 50%, #efefef 100%);
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-2) 50%, var(--surface-2) 100%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
 }
@@ -1458,7 +1456,7 @@ a.ticket:hover .ticket-arrow {
 /* ----- Empty ----- */
 .empty-groups {
   padding: 48px 24px;
-  border: 1px dashed #d4d4d4;
+  border: 1px dashed var(--line-strong);
   border-radius: 18px;
   background: var(--panel);
   text-align: center;

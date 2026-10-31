@@ -323,7 +323,7 @@ onUnmounted(invalidate)
   max-height: calc(100dvh - 48px);
   overflow: hidden;
   padding: 0;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 20px;
   box-shadow: 0 16px 48px rgb(0 0 0 / 15%);
 }
@@ -344,10 +344,10 @@ onUnmounted(invalidate)
   flex-shrink: 0;
 }
 .share-header {
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--line);
 }
 .share-footer {
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--line);
 }
 .share-body {
   overflow-y: auto;
@@ -356,8 +356,8 @@ onUnmounted(invalidate)
   padding: 16px 20px;
 }
 .group-option.is-selected {
-  background: #f3f3f3;
-  border-color: #aaa;
+  background: var(--surface-2);
+  border-color: var(--line-strong);
 }
 .group-copy {
   display: flex;

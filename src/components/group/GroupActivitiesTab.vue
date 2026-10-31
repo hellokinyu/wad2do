@@ -1028,7 +1028,7 @@ onUnmounted(() => {
 <style scoped>
 /* One visible focus ring for everything in the tab */
 .activities-tab :is(a, button):focus-visible {
-  outline: 2px solid #111;
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
   box-shadow: none;
 }
@@ -1069,8 +1069,8 @@ onUnmounted(() => {
   margin-left: 0.35rem;
   padding: 1px 9px;
   border-radius: 999px;
-  background: #f0f0f0;
-  color: #555;
+  background: var(--surface-2);
+  color: var(--muted);
   font-size: 0.75rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1080,9 +1080,9 @@ onUnmounted(() => {
 /* Text buttons in near-black, like the links on the Activities page */
 .help-toggle,
 .voters-button {
-  --bs-btn-color: #111;
-  --bs-btn-hover-color: #111;
-  --bs-btn-active-color: #111;
+  --bs-btn-color: var(--ink);
+  --bs-btn-hover-color: var(--ink);
+  --bs-btn-active-color: var(--ink);
 }
 
 /* "How it works" reads as a link at the end of the line; hit-area enlarges its tap target */
@@ -1192,8 +1192,8 @@ onUnmounted(() => {
   inset: 0;
   display: grid;
   place-items: center;
-  background: #f3f3f3;
-  color: #666;
+  background: var(--surface-2);
+  color: var(--muted);
   font-size: 0.875rem;
   font-weight: 600;
 }
@@ -1206,7 +1206,7 @@ onUnmounted(() => {
   align-self: start;
   height: 1.2em;
   overflow: hidden;
-  color: #8a8a8a;
+  color: var(--subtle);
   font-size: 1.25rem;
   font-weight: 700;
   line-height: 1.2;
@@ -1225,8 +1225,8 @@ onUnmounted(() => {
   z-index: 2;
   padding: 5px 12px;
   border-radius: 999px;
-  background: white;
-  color: #111;
+  background: var(--surface);
+  color: var(--ink);
   font-size: 0.75rem;
   font-weight: 700;
   box-shadow: 0 2px 10px rgb(0 0 0 / 18%);
@@ -1337,8 +1337,8 @@ onUnmounted(() => {
 }
 
 .chip-up {
-  background: var(--bs-success-bg-subtle);
-  color: var(--bs-success-text-emphasis);
+  background: var(--keen-subtle);
+  color: var(--keen-ink);
 }
 
 .chip-down {
@@ -1352,7 +1352,7 @@ onUnmounted(() => {
   height: 6px;
   overflow: hidden;
   border-radius: 999px;
-  background: #ececec;
+  background: var(--surface-3);
 }
 
 .tally-keen,
@@ -1362,11 +1362,11 @@ onUnmounted(() => {
 }
 
 .tally-keen {
-  background: var(--bs-success);
+  background: var(--keen);
 }
 
 .tally-not-keen {
-  background: #f1aeb5;
+  background: var(--nope);
 }
 
 /* "3 of 4 voted" button that opens the popup */
@@ -1435,11 +1435,11 @@ onUnmounted(() => {
 }
 
 .voters-heading.up {
-  color: var(--bs-success-text-emphasis);
+  color: var(--keen-ink);
 }
 
 .voters-heading.down {
-  color: var(--bs-danger-text-emphasis);
+  color: var(--nope-ink);
 }
 
 .voters-count {
@@ -1518,32 +1518,32 @@ onUnmounted(() => {
 }
 
 .vote-button.keen:hover {
-  border-color: var(--bs-success);
-  background: var(--bs-success-bg-subtle);
-  color: var(--bs-success-text-emphasis);
+  border-color: var(--keen);
+  background: var(--keen-subtle);
+  color: var(--keen-ink);
 }
 
 .vote-button.not-keen:hover {
-  border-color: var(--bs-danger-border-subtle);
-  background: var(--bs-danger-bg-subtle);
-  color: var(--bs-danger-text-emphasis);
+  border-color: var(--nope);
+  background: var(--nope-subtle);
+  color: var(--nope-ink);
 }
 
 .vote-button.keen.active {
-  border-color: var(--bs-success);
-  background: var(--bs-success);
-  color: white;
+  border-color: var(--keen);
+  background: var(--keen);
+  color: var(--on-keen);
 }
 
 .vote-button.keen.active svg {
-  fill: rgb(255 255 255 / 35%);
+  fill: rgb(6 34 27 / 18%);
 }
 
 /* Not keen stays quiet even when chosen, so saying no doesn't shout */
 .vote-button.not-keen.active {
-  border-color: var(--bs-danger);
-  background: var(--bs-danger-bg-subtle);
-  color: var(--bs-danger-text-emphasis);
+  border-color: var(--nope);
+  background: var(--nope-subtle);
+  color: var(--nope-ink);
 }
 
 .vote-button:active {
@@ -1566,7 +1566,7 @@ onUnmounted(() => {
 }
 
 .vote-button.keen.active .vote-count {
-  background: rgb(255 255 255 / 25%);
+  background: rgb(6 34 27 / 12%);
 }
 
 .remove-confirm {
@@ -1694,7 +1694,7 @@ onUnmounted(() => {
 
 @keyframes landed {
   from {
-    border-color: #111;
+    border-color: var(--ink);
     box-shadow:
       0 0 0 3px rgb(17 17 17 / 14%),
       0 8px 24px rgb(0 0 0 / 8%);
@@ -1755,12 +1755,12 @@ onUnmounted(() => {
   height: 72px;
   margin: 0 auto 1rem;
   border-radius: 50%;
-  background: #f3f3f3;
+  background: var(--surface-2);
 }
 
 .empty-icon svg {
   fill: none;
-  stroke: #111;
+  stroke: var(--ink);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -1785,8 +1785,8 @@ onUnmounted(() => {
   height: 22px;
   margin-right: 0.4rem;
   border-radius: 50%;
-  background: #111;
-  color: white;
+  background: var(--ink);
+  color: var(--on-ink);
   font-size: 0.75rem;
 }
 
@@ -1816,15 +1816,15 @@ onUnmounted(() => {
   padding: 0.5rem 1.25rem;
   border: 0;
   border-radius: 999px;
-  background: #111;
-  color: white;
+  background: var(--ink);
+  color: var(--on-ink);
   font-weight: 600;
   box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
   transition: background-color 0.15s ease;
 }
 
 .update-button:hover {
-  background: #333;
+  background: var(--ink-hover);
 }
 
 .update-button svg {
@@ -1849,7 +1849,7 @@ onUnmounted(() => {
   padding: 0.75rem 1.25rem;
   border-radius: 14px;
   background: var(--bs-dark);
-  color: white;
+  color: var(--on-ink);
   box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
 }
 

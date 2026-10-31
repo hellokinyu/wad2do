@@ -125,9 +125,9 @@ async function leaveGroup() {
 /* Same soft grey panel as the filters on the Activities page */
 .group-panel {
   padding: 20px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 16px;
-  background: #fafafa;
+  background: var(--surface-2);
 }
 
 .member-list {
@@ -135,9 +135,9 @@ async function leaveGroup() {
   padding: 0;
   overflow: hidden;
   list-style: none;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  background: white;
+  background: var(--surface);
 }
 
 .member-row {
@@ -149,7 +149,7 @@ async function leaveGroup() {
 }
 
 .member-row + .member-row {
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--line);
 }
 
 /* First letter of the member's name, for members without a chosen avatar */
@@ -160,8 +160,8 @@ async function leaveGroup() {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #111;
-  color: white;
+  background: var(--ink);
+  color: var(--on-ink);
   font-size: 0.85rem;
   font-weight: 700;
   text-transform: uppercase;

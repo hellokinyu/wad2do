@@ -219,11 +219,11 @@ function towerGlazing({ x, y, width }) {
 
 <style scoped>
 .skyline {
-  --skyline-paper: #fafaf9;
+  --skyline-paper: var(--surface-2);
   position: relative;
   height: var(--landing-skyline-height, clamp(100px, 15svh, 160px));
   margin-top: clamp(12px, 2svh, 24px);
-  color: #555651;
+  color: var(--muted);
   overflow: hidden;
 }
 .skyline svg {

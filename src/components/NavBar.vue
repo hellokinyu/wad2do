@@ -1,5 +1,5 @@
 <template>
-  <nav ref="navbar" class="navbar navbar-expand-md bg-white border-bottom">
+  <nav ref="navbar" class="navbar navbar-expand-md bg-body border-bottom">
     <NavBarTheme />
     <div class="container">
       <RouterLink class="navbar-brand" to="/" aria-label="WAD2Do home">

@@ -102,7 +102,7 @@ test('card favourites persist across pages, reload, details and Profile', async 
   await expect(page).toHaveURL('/activities')
   await expect(firstHeart).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTestId('activity-save-feedback')).toHaveText('Activity saved.')
-  await expect(firstHeart).toHaveCSS('color', 'rgb(220, 53, 69)')
+  await expect(firstHeart).toHaveCSS('color', 'rgb(255, 190, 69)')
   await page.reload()
   await expect(firstHeart).toHaveAttribute('aria-pressed', 'true')
   await page.getByRole('button', { name: 'Next', exact: true }).click()
@@ -308,7 +308,7 @@ test('desktop hearts stay visible on transparent buttons and support keyboard sa
   await page.keyboard.press('Space')
   await expect(heart).toHaveAttribute('aria-pressed', 'true')
   await page.getByTestId('activity-search').focus()
-  await expect(heart.locator('svg')).toHaveCSS('fill', 'rgb(220, 53, 69)')
+  await expect(heart.locator('svg')).toHaveCSS('fill', 'rgb(255, 190, 69)')
   await page
     .getByTestId('activity-card')
     .first()

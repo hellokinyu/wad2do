@@ -887,7 +887,7 @@ onUnmounted(() => {
 }
 
 .itinerary-tab :is(a, button):focus-visible {
-  outline: 2px solid #111;
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
   box-shadow: none;
 }
@@ -895,9 +895,9 @@ onUnmounted(() => {
 /* No plan yet */
 .empty-plan {
   padding: 2.5rem 1rem;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 18px;
-  background: #fafafa;
+  background: var(--surface-2);
   text-align: center;
 }
 
@@ -908,13 +908,13 @@ onUnmounted(() => {
   height: 64px;
   margin: 0 auto 1rem;
   border-radius: 50%;
-  background: #f0f0f0;
+  background: var(--surface-2);
 }
 
 .empty-icon svg {
   width: 28px;
   height: 28px;
-  color: #111;
+  color: var(--ink);
 }
 
 /* Weather line */
@@ -931,8 +931,8 @@ onUnmounted(() => {
 }
 
 .info-banner.muted {
-  border-color: #e5e5e5;
-  background: #fafafa;
+  border-color: var(--line);
+  background: var(--surface-2);
   color: var(--bs-secondary-color);
 }
 
@@ -943,9 +943,9 @@ onUnmounted(() => {
   gap: 1rem;
   margin-bottom: 1rem;
   padding: 16px 20px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 16px;
-  background: #fafafa;
+  background: var(--surface-2);
 }
 
 .summary-panel dt {
@@ -982,9 +982,9 @@ onUnmounted(() => {
 /* One stop on the timeline, styled like the activity cards */
 .stop-card {
   padding: 16px;
-  border: 1px solid #eee;
+  border: 1px solid var(--line);
   border-radius: 18px;
-  background: white;
+  background: var(--surface);
   box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
 }
 
@@ -1003,8 +1003,8 @@ onUnmounted(() => {
   display: inline-block;
   padding: 4px 12px;
   border-radius: 999px;
-  background: #111;
-  color: white;
+  background: var(--ink);
+  color: var(--on-ink);
   font-size: 0.85rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -1035,8 +1035,8 @@ onUnmounted(() => {
 }
 
 .rainy-toggle .form-check-input:checked {
-  border-color: #111;
-  background-color: #111;
+  border-color: var(--ink);
+  background-color: var(--ink);
 }
 
 /* Move up, remove and move down while editing */
@@ -1051,14 +1051,14 @@ onUnmounted(() => {
   place-items: center;
   width: 40px;
   height: 40px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 50%;
-  background: white;
-  color: #111;
+  background: var(--surface);
+  color: var(--ink);
 }
 
 .icon-button:hover:not(:disabled) {
-  background: #f3f3f3;
+  background: var(--surface-2);
 }
 
 .icon-button.danger {
@@ -1075,9 +1075,9 @@ onUnmounted(() => {
   padding: 0;
   overflow: hidden;
   list-style: none;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  background: white;
+  background: var(--surface);
 }
 
 .not-in-plan li {
@@ -1086,13 +1086,13 @@ onUnmounted(() => {
 }
 
 .not-in-plan li + li {
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--line);
 }
 
 .reason-chip {
   padding: 2px 10px;
   border-radius: 999px;
-  background: #f3f3f3;
+  background: var(--surface-2);
   color: var(--bs-secondary-color);
   font-size: 0.8rem;
 }
