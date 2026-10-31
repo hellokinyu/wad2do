@@ -139,7 +139,7 @@ async function shareCode() {
   height: 168px;
   padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
 }
 
@@ -181,7 +181,7 @@ figcaption,
 .invite-code {
   padding: 8px 10px 8px 20px;
   border: 1px dashed var(--line-strong);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--surface-2);
   color: var(--ink);
   font-size: 1.75rem;
@@ -201,12 +201,6 @@ figcaption,
 }
 
 .invite-code:focus-visible,
-.share-button:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 3px;
-  box-shadow: none;
-}
-
 .share-button {
   display: inline-flex;
   align-items: center;

@@ -53,7 +53,7 @@ watch(
 </script>
 
 <template>
-  <article class="activity-card card h-100" data-testid="activity-card">
+  <article class="activity-card surface-card card h-100" data-testid="activity-card">
     <div class="photo-container">
       <RouterLink
         :to="`/activities/${activity.id}`"
@@ -184,9 +184,6 @@ watch(
 <style scoped>
 .activity-card {
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
 }
 
 .card-body {
@@ -463,7 +460,7 @@ watch(
 }
 
 .photo-action:focus-visible {
-  outline: 2px solid var(--surface);
+  outline: 2px solid white; /* on a photo, so white in both modes */
   outline-offset: 2px;
   box-shadow: 0 0 0 4px rgb(0 0 0 / 60%);
 }

@@ -500,7 +500,7 @@ onUnmounted(() => {
 }
 .detail-photo-container {
   overflow: hidden;
-  border-radius: 24px;
+  border-radius: var(--radius-xl);
 }
 .detail-photo,
 .detail-placeholder {
@@ -528,7 +528,7 @@ onUnmounted(() => {
   display: inline-block;
   padding: 6px 12px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-2);
   font-size: 0.875rem;
 }
@@ -547,7 +547,7 @@ onUnmounted(() => {
 .facts-card {
   padding: 24px;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: var(--radius-xl);
 }
 .description {
   white-space: pre-line;
@@ -559,7 +559,7 @@ onUnmounted(() => {
   align-items: baseline;
   gap: 16px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   font-size: 0.9rem;
 }
 .hours-row > span:last-child {
@@ -612,7 +612,7 @@ onUnmounted(() => {
   max-width: min(360px, calc(100% - 32px));
   overflow-wrap: anywhere;
   padding: 14px 20px;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--ink);
   color: var(--on-ink);
 }
@@ -628,7 +628,7 @@ onUnmounted(() => {
     height: 240px;
   }
   .detail-photo-container {
-    border-radius: 18px;
+    border-radius: var(--radius-lg);
   }
   .detail-section,
   .facts-card {

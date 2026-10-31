@@ -14,7 +14,7 @@
 
       <div v-else-if="loadError" class="notice" role="alert" data-testid="onboarding-load-error">
         <p>{{ loadError }}</p>
-        <button type="button" class="btn btn-line" data-testid="onboarding-load-retry" @click="loadProfile">Try again</button>
+        <button type="button" class="btn btn-outline-dark rounded-pill px-4 py-2" data-testid="onboarding-load-retry" @click="loadProfile">Try again</button>
       </div>
 
       <template v-else>
@@ -175,7 +175,7 @@
             </div>
 
             <div class="d-flex flex-wrap align-items-center gap-3">
-              <button type="button" class="btn btn-ink btn-lg" data-testid="onboarding-explore" @click="exploreActivities">
+              <button type="button" class="btn btn-dark rounded-pill px-4 btn-lg" data-testid="onboarding-explore" @click="exploreActivities">
                 Find my hangouts →
               </button>
               <span class="hint">You can change these anytime in Profile.</span>
@@ -186,13 +186,13 @@
 
         <div v-if="errorMessage" class="notice mt-4" role="alert" data-testid="onboarding-error">
           <p class="mb-3">{{ errorMessage }}</p>
-          <button type="button" class="btn btn-line btn-sm" :disabled="saving || !canNext" @click="saveProfile">Try again</button>
+          <button type="button" class="btn btn-outline-dark rounded-pill px-3 btn-sm" :disabled="saving || !canNext" @click="saveProfile">Try again</button>
         </div>
 
         <div v-if="step <= 5" class="footer-bar d-flex justify-content-between align-items-center mt-5 pt-4">
           <button
             type="button"
-            class="onboarding-back btn btn-line"
+            class="onboarding-back btn btn-outline-dark rounded-pill px-4 py-2"
             :class="{ invisible: step === 1 }"
             :disabled="saving"
             data-testid="onboarding-back"
@@ -213,7 +213,7 @@
             </button>
             <button
               type="button"
-              class="onboarding-next btn btn-ink"
+              class="onboarding-next btn btn-dark rounded-pill px-4 py-2"
               :disabled="!canNext || saving"
               data-testid="onboarding-next"
               @click="goNext"
@@ -469,7 +469,7 @@ function exploreActivities() {
 
 .hl {
   background-color: var(--surface-3);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-sm);
   padding: 0 0.2em;
 }
 
@@ -504,7 +504,7 @@ function exploreActivities() {
   position: relative;
   flex: 1;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background-color: var(--surface-3);
   overflow: hidden;
 }
@@ -527,7 +527,7 @@ function exploreActivities() {
   display: inline-block;
   padding: 0.45rem 1rem;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background-color: var(--surface);
   color: var(--ink);
   font-weight: 500;
@@ -554,7 +554,7 @@ function exploreActivities() {
 
 .btn-check:focus-visible + .chip,
 .btn-check:focus-visible + .option-tile {
-  outline: 2px solid var(--ink);
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -564,7 +564,7 @@ function exploreActivities() {
   height: 100%;
   padding: 1.25rem 1.25rem 1.1rem;
   border: 1px solid var(--line);
-  border-radius: 1rem;
+  border-radius: var(--radius-lg);
   background-color: var(--surface);
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
@@ -611,7 +611,7 @@ function exploreActivities() {
 .field {
   padding: 0.75rem 1rem;
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
+  border-radius: var(--radius-md);
 }
 
 .field:focus {
@@ -622,7 +622,7 @@ function exploreActivities() {
 .panel {
   padding: 0.5rem 1.5rem;
   border: 1px solid var(--line);
-  border-radius: 1rem;
+  border-radius: var(--radius-lg);
   background-color: var(--surface-2);
 }
 
@@ -638,7 +638,7 @@ function exploreActivities() {
 .tag {
   display: inline-block;
   padding: 0.3rem 0.8rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background-color: var(--ink);
   color: var(--on-ink);
   font-size: 0.875rem;
@@ -648,7 +648,7 @@ function exploreActivities() {
 .notice {
   padding: 1rem 1.25rem;
   border: 1px solid var(--ink);
-  border-radius: 1rem;
+  border-radius: var(--radius-lg);
   background-color: var(--surface-2);
 }
 
@@ -666,41 +666,6 @@ function exploreActivities() {
 }
 
 /* Primary action: amber, like .btn-dark in src/assets/styles.css */
-.btn-ink {
-  --bs-btn-color: var(--on-accent);
-  --bs-btn-bg: var(--accent);
-  --bs-btn-border-color: var(--accent);
-  --bs-btn-hover-color: var(--on-accent);
-  --bs-btn-hover-bg: var(--accent-hover);
-  --bs-btn-hover-border-color: var(--accent-hover);
-  --bs-btn-active-color: var(--on-accent);
-  --bs-btn-active-bg: var(--accent-active);
-  --bs-btn-active-border-color: var(--accent-active);
-  --bs-btn-disabled-color: var(--on-accent);
-  --bs-btn-disabled-bg: var(--accent);
-  --bs-btn-disabled-border-color: var(--accent);
-  --bs-btn-border-radius: 999px;
-  --bs-btn-padding-x: 1.4rem;
-  --bs-btn-padding-y: 0.6rem;
-  --bs-btn-font-weight: 700;
-}
-
-.btn-line {
-  --bs-btn-color: var(--ink);
-  --bs-btn-bg: var(--surface);
-  --bs-btn-border-color: var(--ink);
-  --bs-btn-hover-color: var(--on-ink);
-  --bs-btn-hover-bg: var(--ink);
-  --bs-btn-hover-border-color: var(--ink);
-  --bs-btn-active-color: var(--on-ink);
-  --bs-btn-active-bg: var(--ink);
-  --bs-btn-active-border-color: var(--ink);
-  --bs-btn-border-radius: 999px;
-  --bs-btn-padding-x: 1.2rem;
-  --bs-btn-padding-y: 0.6rem;
-  --bs-btn-font-weight: 600;
-}
-
 .area-group {
   margin-bottom: 1.25rem;
 }
@@ -741,7 +706,7 @@ function exploreActivities() {
     width: 100%;
     min-height: 52px;
     padding: 12px 16px;
-    border-radius: 14px;
+    border-radius: var(--radius-md);
   }
   .mobile-choice-mark {
     display: inline-grid;

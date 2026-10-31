@@ -15,8 +15,8 @@
       <h1 class="display-5 fw-bold title mb-3">Log in to see your <span class="hl">profile.</span></h1>
       <p class="lead-text mb-4">Your preferences, saved activities and submissions all live here.</p>
       <div class="d-flex flex-wrap gap-2">
-        <RouterLink to="/login" class="btn btn-ink">Log in →</RouterLink>
-        <RouterLink to="/signup" class="btn btn-line">Sign up</RouterLink>
+        <RouterLink to="/login" class="btn btn-dark rounded-pill px-4 py-2">Log in →</RouterLink>
+        <RouterLink to="/signup" class="btn btn-outline-dark rounded-pill px-4 py-2">Sign up</RouterLink>
       </div>
     </div>
 
@@ -27,7 +27,7 @@
 
       <div v-if="profileError" class="notice mb-4" role="alert" data-testid="profile-error">
         <p class="mb-2">{{ profileError }}</p>
-        <button type="button" class="btn btn-line btn-sm" @click="loadProfile">Try again</button>
+        <button type="button" class="btn btn-outline-dark rounded-pill px-3 btn-sm" @click="loadProfile">Try again</button>
       </div>
 
       <section class="mb-4" data-testid="profile-account">
@@ -61,14 +61,14 @@
                 />
                 <button
                   type="button"
-                  class="btn btn-ink"
+                  class="btn btn-dark rounded-pill px-4 py-2"
                   :disabled="nameDraft === '' || savingName"
                   data-testid="profile-save-name"
                   @click="saveName"
                 >
                   Save
                 </button>
-                <button type="button" class="btn btn-line" @click="editingName = false">Cancel</button>
+                <button type="button" class="btn btn-outline-dark rounded-pill px-4 py-2" @click="editingName = false">Cancel</button>
               </div>
               <p v-if="nameError" class="error-text small mt-2 mb-0">{{ nameError }}</p>
             </div>
@@ -86,7 +86,7 @@
             </button>
             <button
               type="button"
-              class="btn btn-red btn-sm"
+              class="btn btn-outline-danger rounded-pill px-3 btn-sm"
               :disabled="loggingOut"
               data-testid="profile-logout"
               @click="logOut"
@@ -98,8 +98,8 @@
         <div v-if="editingAvatar" class="panel mt-4">
           <AnimalAvatarPicker v-model="avatarDraft" :disabled="savingAvatar" />
           <div class="d-flex gap-2 mt-3">
-            <button type="button" class="btn btn-ink" :disabled="!findProfileAnimal(avatarDraft) || savingAvatar" data-testid="profile-save-avatar" @click="saveAvatar">{{ savingAvatar ? 'Saving…' : 'Save picture' }}</button>
-            <button type="button" class="btn btn-line" :disabled="savingAvatar" @click="editingAvatar = false">Cancel</button>
+            <button type="button" class="btn btn-dark rounded-pill px-4 py-2" :disabled="!findProfileAnimal(avatarDraft) || savingAvatar" data-testid="profile-save-avatar" @click="saveAvatar">{{ savingAvatar ? 'Saving…' : 'Save picture' }}</button>
+            <button type="button" class="btn btn-outline-dark rounded-pill px-4 py-2" :disabled="savingAvatar" @click="editingAvatar = false">Cancel</button>
           </div>
           <p v-if="avatarError" class="error-text mt-3 mb-0" role="alert" data-testid="profile-avatar-error">{{ avatarError }}</p>
         </div>
@@ -204,7 +204,7 @@
           <div class="d-flex flex-wrap align-items-center gap-3 mt-4 pt-4 panel-footer">
             <button
               type="button"
-              class="btn btn-ink"
+              class="btn btn-dark rounded-pill px-4 py-2"
               :disabled="!hasChanges || savingPrefs || !!profileError"
               data-testid="profile-save-prefs"
               @click="savePreferences"
@@ -240,13 +240,13 @@
 
         <div v-if="savedError" class="notice" role="alert">
           <p class="mb-2">{{ savedError }}</p>
-          <button type="button" class="btn btn-line btn-sm" @click="loadSaved">Try again</button>
+          <button type="button" class="btn btn-outline-dark rounded-pill px-3 btn-sm" @click="loadSaved">Try again</button>
         </div>
 
         <div v-else-if="savedActivities.length === 0" class="empty-state" data-testid="saved-empty">
           <p class="fs-5 fw-bold title mb-1">No saved activities yet</p>
           <p class="muted mb-3">Tap the heart on any activity to keep it here.</p>
-          <RouterLink to="/activities" class="btn btn-ink">Browse activities →</RouterLink>
+          <RouterLink to="/activities" class="btn btn-dark rounded-pill px-4 py-2">Browse activities →</RouterLink>
         </div>
 
         <div v-else class="row g-3" data-testid="saved-list">
@@ -268,7 +268,7 @@
                 <div v-else class="mb-3"></div>
                 <button
                   type="button"
-                  class="btn btn-line btn-sm mt-auto align-self-start unsave-btn"
+                  class="btn btn-outline-dark rounded-pill px-3 btn-sm mt-auto align-self-start unsave-btn"
                   :data-testid="'unsave-' + activity.id"
                   @click="unsave(activity.id)"
                 >
@@ -293,13 +293,13 @@
 
         <div v-if="submissionsError" class="notice" role="alert">
           <p class="mb-2">{{ submissionsError }}</p>
-          <button type="button" class="btn btn-line btn-sm" @click="loadSubmissions">Try again</button>
+          <button type="button" class="btn btn-outline-dark rounded-pill px-3 btn-sm" @click="loadSubmissions">Try again</button>
         </div>
 
         <div v-else-if="submissions.length === 0" class="empty-state" data-testid="submissions-empty">
           <p class="fs-5 fw-bold title mb-1">Know a great hangout spot?</p>
           <p class="muted mb-3">Share it and we'll add it for everyone once it's approved.</p>
-          <RouterLink to="/activities/submit" class="btn btn-ink">Submit an activity →</RouterLink>
+          <RouterLink to="/activities/submit" class="btn btn-dark rounded-pill px-4 py-2">Submit an activity →</RouterLink>
         </div>
 
         <ul v-else class="submission-list" data-testid="submissions-list">
@@ -723,7 +723,7 @@ function statusClass(status) {
 
 .hl {
   background-color: var(--surface-3);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-sm);
   padding: 0 0.2em;
 }
 
@@ -807,7 +807,7 @@ function statusClass(status) {
   display: inline-block;
   margin-left: 0.35rem;
   padding: 0.1rem 0.6rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background-color: var(--surface-3);
   font-size: 1rem;
   vertical-align: middle;
@@ -817,7 +817,7 @@ function statusClass(status) {
 .unsaved {
   padding: 0.3rem 0.8rem;
   border: 1px solid var(--ink);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 0.8rem;
   font-weight: 600;
 }
@@ -825,7 +825,7 @@ function statusClass(status) {
 .panel {
   padding: 1.5rem;
   border: 1px solid var(--line);
-  border-radius: 1rem;
+  border-radius: var(--radius-lg);
   background-color: var(--surface-2);
 }
 
@@ -843,7 +843,7 @@ function statusClass(status) {
   display: inline-block;
   padding: 0.45rem 1rem;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background-color: var(--surface);
   color: var(--ink);
   font-weight: 500;
@@ -863,14 +863,14 @@ function statusClass(status) {
 }
 
 .btn-check:focus-visible + .chip {
-  outline: 2px solid var(--ink);
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
 .field {
   padding: 0.6rem 1rem;
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
+  border-radius: var(--radius-md);
   background-color: var(--surface);
 }
 
@@ -895,7 +895,7 @@ function statusClass(status) {
 .empty-state {
   padding: 2.5rem 1.5rem;
   border: 1.5px dashed var(--line-strong);
-  border-radius: 1rem;
+  border-radius: var(--radius-lg);
   text-align: center;
 }
 
@@ -904,7 +904,7 @@ function statusClass(status) {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line);
-  border-radius: 1rem;
+  border-radius: var(--radius-lg);
   background-color: var(--surface);
   overflow: hidden;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -912,7 +912,7 @@ function statusClass(status) {
 
 .saved-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-raised);
 }
 
 .saved-img-wrap {
@@ -938,7 +938,7 @@ function statusClass(status) {
   left: 0.75rem;
   bottom: 0.75rem;
   padding: 0.2rem 0.65rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background-color: var(--surface);
   color: var(--ink);
   font-size: 0.8rem;
@@ -960,7 +960,7 @@ function statusClass(status) {
   padding: 0;
   margin: 0;
   border: 1px solid var(--line);
-  border-radius: 1rem;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -977,7 +977,7 @@ function statusClass(status) {
 .status {
   flex-shrink: 0;
   padding: 0.25rem 0.75rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 0.8rem;
   font-weight: 600;
 }
@@ -1005,52 +1005,11 @@ function statusClass(status) {
 .notice {
   padding: 1rem 1.25rem;
   border: 1px solid var(--ink);
-  border-radius: 1rem;
+  border-radius: var(--radius-lg);
   background-color: var(--surface-2);
 }
 
 /* Primary action: amber, like .btn-dark in src/assets/styles.css */
-.btn-ink {
-  --bs-btn-color: var(--on-accent);
-  --bs-btn-bg: var(--accent);
-  --bs-btn-border-color: var(--accent);
-  --bs-btn-hover-color: var(--on-accent);
-  --bs-btn-hover-bg: var(--accent-hover);
-  --bs-btn-hover-border-color: var(--accent-hover);
-  --bs-btn-active-color: var(--on-accent);
-  --bs-btn-active-bg: var(--accent-active);
-  --bs-btn-active-border-color: var(--accent-active);
-  --bs-btn-disabled-color: var(--on-accent);
-  --bs-btn-disabled-bg: var(--accent);
-  --bs-btn-disabled-border-color: var(--accent);
-  --bs-btn-border-radius: 999px;
-  --bs-btn-padding-x: 1.4rem;
-  --bs-btn-padding-y: 0.6rem;
-  --bs-btn-font-weight: 700;
-}
-
-.btn-line {
-  --bs-btn-color: var(--ink);
-  --bs-btn-bg: var(--surface);
-  --bs-btn-border-color: var(--ink);
-  --bs-btn-hover-color: var(--on-ink);
-  --bs-btn-hover-bg: var(--ink);
-  --bs-btn-hover-border-color: var(--ink);
-  --bs-btn-active-color: var(--on-ink);
-  --bs-btn-active-bg: var(--ink);
-  --bs-btn-active-border-color: var(--ink);
-  --bs-btn-border-radius: 999px;
-  --bs-btn-padding-x: 1.2rem;
-  --bs-btn-padding-y: 0.6rem;
-  --bs-btn-font-weight: 700;
-}
-
-.btn-line.btn-sm {
-  --bs-btn-padding-x: 0.9rem;
-  --bs-btn-padding-y: 0.35rem;
-  --bs-btn-font-size: 0.875rem;
-}
-
 .btn-grey {
   --bs-btn-color: var(--ink);
   --bs-btn-bg: var(--surface-3);
@@ -1061,30 +1020,13 @@ function statusClass(status) {
   --bs-btn-active-color: var(--ink);
   --bs-btn-active-bg: var(--line-strong);
   --bs-btn-active-border-color: var(--line-strong);
-  --bs-btn-border-radius: 999px;
+  --bs-btn-border-radius: var(--radius-pill);
   --bs-btn-padding-x: 1.2rem;
   --bs-btn-padding-y: 0.6rem;
   --bs-btn-font-weight: 600;
 }
 
-.btn-red {
-  --bs-btn-color: var(--bs-danger-text-emphasis);
-  --bs-btn-bg: var(--surface);
-  --bs-btn-border-color: var(--bs-danger-text-emphasis);
-  --bs-btn-hover-color: white;
-  --bs-btn-hover-bg: #b42318;
-  --bs-btn-hover-border-color: var(--bs-danger-text-emphasis);
-  --bs-btn-active-color: white;
-  --bs-btn-active-bg: #8f1b12;
-  --bs-btn-active-border-color: #8f1b12;
-  --bs-btn-border-radius: 999px;
-  --bs-btn-padding-x: 1.2rem;
-  --bs-btn-padding-y: 0.6rem;
-  --bs-btn-font-weight: 600;
-}
-
-.btn-grey.btn-sm,
-.btn-red.btn-sm {
+.btn-grey.btn-sm {
   --bs-btn-padding-x: 0.9rem;
   --bs-btn-padding-y: 0.35rem;
   --bs-btn-font-size: 0.875rem;

@@ -29,7 +29,7 @@ Dark mode is on when `<html>` has `data-bs-theme="dark"`. [src/lib/colorMode.js]
 | `--ink-hover`                        | `#2a2d3a`             | `#d8d9e0`             | Hover on an `--ink` fill                      |
 | `--on-ink`                           | `#ffffff`             | `#111219`             | Text on an `--ink` fill                       |
 | `--muted`                            | `#5f6273`             | `#a3a6b4`             | Secondary text                                |
-| `--subtle`                           | `#8a8d9c`             | `#7d8091`             | Hints, placeholders                           |
+| `--subtle`                           | `#686b7d`             | `#8d91a3`             | Hints, placeholders                           |
 | `--line`                             | `#dfe1e9`             | `#2e3140`             | Hairlines, card borders                       |
 | `--line-strong`                      | `#b9bdcb`             | `#4a4e60`             | Input borders, dashed borders                 |
 | `--accent`                           | `#ffbe45`             | `#ffbe45`             | Primary buttons, saved heart, active nav icon |
@@ -66,27 +66,115 @@ Dark mode is on when `<html>` has `data-bs-theme="dark"`. [src/lib/colorMode.js]
 
 Both are loaded from Google Fonts in [index.html](index.html). Use `var(--font-display)` or `var(--font-body)` if you need to set a font yourself. Don't set `font-family` to anything else.
 
+## Corners
+
+| Name            | Size  | Use it for                  |
+| --------------- | ----- | --------------------------- |
+| `--radius-xs`   | 6px   | Tiny swatches and tooltips  |
+| `--radius-sm`   | 10px  | Small tiles, thumbnails     |
+| `--radius-md`   | 14px  | Panels, inputs, inner boxes |
+| `--radius-lg`   | 18px  | Cards                       |
+| `--radius-xl`   | 22px  | Page heroes                 |
+| `--radius-pill` | 999px | Buttons, chips, tags        |
+
+Circles (avatars, round icon buttons) use `50%`. Don't type any other `border-radius` value.
+
+## Shadows
+
+| Name              | Use it for                         |
+| ----------------- | ---------------------------------- |
+| `--shadow-sm`     | Labels on photos, small popovers   |
+| `--shadow-card`   | Cards at rest                      |
+| `--shadow-raised` | Cards on hover, or anything lifted |
+| `--shadow-float`  | Floating buttons and toasts        |
+| `--shadow-dialog` | Dialogs and pop-up panels          |
+
+They're stronger in dark mode, where faint shadows disappear.
+
+## Focus
+
+Every link, button and tabbable element gets the same keyboard focus ring from `styles.css`: a 2px ink outline. Don't write your own `:focus-visible` rule unless the control needs a different shape (for example the dashed outline on the MRT map). If you do, use `outline: var(--focus-ring)`.
+
+The ring is ink, not amber, because amber is too faint against the light page for keyboard users to see.
+
+## Cards
+
+For the standard card (hairline border, 18px corners, card background, soft shadow), add the `surface-card` class. Don't re-write those four lines:
+
+```html
+<article class="vote-card surface-card">…</article>
+```
+
+Your own class only adds what's different, like padding or a hover shadow:
+
+```css
+.vote-card {
+  padding: 16px;
+}
+
+.vote-card:hover {
+  box-shadow: var(--shadow-raised);
+}
+```
+
+## Buttons
+
+Use Bootstrap's buttons. Don't define your own button colours in a page.
+
+| Button               | Classes                                           |
+| -------------------- | ------------------------------------------------- |
+| Primary (amber)      | `btn btn-dark rounded-pill px-4 py-2`             |
+| Secondary (outlined) | `btn btn-outline-dark rounded-pill px-4 py-2`     |
+| Small secondary      | `btn btn-outline-dark btn-sm rounded-pill px-3`   |
+| Delete or remove     | `btn btn-outline-danger btn-sm rounded-pill px-3` |
+| Large primary        | `btn btn-dark btn-lg rounded-pill px-4`           |
+
+All buttons are semibold. When a `btn-outline-dark` is a selected `btn-check` toggle, it fills with ink.
+
+## Pop-ups
+
+Every pop-up uses [BaseDialog.vue](src/components/BaseDialog.vue). It handles Esc, clicking the dim area, keeping Tab inside, stopping the page behind from scrolling, and giving focus back to the button that opened it. Don't build a pop-up from a `<div>` or a bare `<dialog>`.
+
+```vue
+<BaseDialog v-model:open="showVoters" title="Who voted" class="voters-dialog">
+  …content…
+  <template #footer>…buttons…</template>
+</BaseDialog>
+```
+
+- Set the width with `--dialog-width` on your class (default 460px).
+- Use `:closable="!saving"` to stop it closing mid-request, and `flush` for edge-to-edge content like a photo.
+- Use `:open` with `@close` instead of `v-model:open` when closing needs to run your own code.
+- Focus the button that opens it before opening (`event.currentTarget.focus()`), because Safari doesn't focus buttons on click.
+
 ## Bootstrap
 
 `styles.css` points Bootstrap's own variables at the theme, so these follow it with no extra work:
 
-- **`btn-dark`** is the amber primary button. Use it for the main action on a screen.
-- **`btn-outline-dark`** is the secondary button. It's outlined, and filled with ink when it's a selected `btn-check` toggle.
 - **Text and surfaces:** `text-body`, `text-secondary`, `text-muted`, `bg-body`, `bg-body-secondary`, `border`.
-- **Components:** form controls, checkboxes, radios and switches (amber when ticked), cards, modals, dropdowns.
+- **Components:** form controls, checkboxes, radios and switches (amber when ticked), cards, modals, dropdowns and list groups, which all use the card background.
 
 Avoid `bg-white`, `bg-light`, `bg-dark`, `text-dark`, `text-white` and `text-bg-light`. They don't change in dark mode. Use `bg-body`, `text-body` or a theme name instead. The exception is labels on photos.
 
-## Using it in a component
+## Where styles go
+
+Each style lives in exactly one place:
+
+1. **`src/assets/styles.css`**: the theme names (colours, corners, shadows, fonts, focus) and styles shared by many pages, like `surface-card`.
+2. **Bootstrap classes**: buttons, forms, spacing and layout utilities.
+3. **`<style scoped>` in a component**: only what's unique to that component, using the names above.
+
+If you're about to copy a block of CSS from another file, it belongs in step 1 or 2 instead.
 
 ```css
-.my-card {
-  border: 1px solid var(--line);
-  background: var(--surface);
+.my-panel {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
   color: var(--ink);
 }
 
-.my-card .hint {
+.my-panel .hint {
   color: var(--muted);
 }
 

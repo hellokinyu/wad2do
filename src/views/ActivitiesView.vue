@@ -4,7 +4,7 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import ActivityCard from '@/components/ActivityCard.vue'
 import ActivityShareDialog from '@/components/ActivityShareDialog.vue'
-import { moveDialogFocus } from '@/lib/dialogFocus'
+import BaseDialog from '@/components/BaseDialog.vue'
 import { getPrice } from '@/lib/activityDisplay'
 import { rankActivities } from '@/lib/activityRanking'
 import { useAuth } from '@/composables/useAuth'
@@ -140,8 +140,39 @@ const requestedPage = ref(
 )
 const resultsSummary = ref(null)
 const filtersPanel = ref(null)
+const showFilters = ref(false)
 const stickyControls = ref(null)
 const filtersTrigger = ref(null)
+
+// Category chip strip: one scrolling row. chipsBefore/chipsAfter say whether there are more chips
+// off either edge, which turns on that side's fade and arrow.
+const chipStrip = ref(null)
+const chipsBefore = ref(false)
+const chipsAfter = ref(false)
+let chipResize
+
+function updateChipEdges() {
+  const strip = chipStrip.value
+  if (!strip) return
+  chipsBefore.value = strip.scrollLeft > 4
+  chipsAfter.value = strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 4
+}
+
+function scrollChips(direction) {
+  const strip = chipStrip.value
+  if (!strip) return
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  strip.scrollBy({
+    left: direction * strip.clientWidth * 0.8,
+    behavior: reduceMotion ? 'auto' : 'smooth',
+  })
+}
+
+onMounted(() => {
+  chipResize = new ResizeObserver(updateChipEdges)
+  if (chipStrip.value) chipResize.observe(chipStrip.value)
+})
+onUnmounted(() => chipResize?.disconnect())
 
 const finishScrollRender = beginActivitiesRender()
 watch([loading, profileLoading, sortBy], async ([loading, profileLoading, sort]) => {
@@ -151,14 +182,14 @@ watch([loading, profileLoading, sortBy], async ([loading, profileLoading, sort])
 })
 onUnmounted(finishScrollRender)
 
+// Safari doesn't focus buttons on click; focus it so BaseDialog can hand focus back on close
 function openFilters(event) {
   event.currentTarget.focus({ preventScroll: true })
-  filtersPanel.value.showModal()
+  showFilters.value = true
 }
 
 function closeFilters() {
-  filtersPanel.value.close()
-  filtersTrigger.value?.focus({ preventScroll: true })
+  showFilters.value = false
 }
 
 watch([keyword, selectedCategory, selectedSetting, selectedArea, selectedPrice, sortBy], () => {
@@ -187,6 +218,21 @@ onBeforeRouteLeave(() => {
 const categories = computed(() => {
   const values = activities.value.map((activity) => activity.category).filter(Boolean)
   return [...new Set(values)].sort()
+})
+
+// New chips arrive with the activities, so recheck which edges have more to scroll to
+watch(categories, async () => {
+  await nextTick()
+  updateChipEdges()
+})
+
+// Picking a category here or in the filter panel brings its chip into view
+watch(selectedCategory, async () => {
+  await nextTick()
+  chipStrip.value
+    ?.querySelector('.category-chip.active')
+    ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  updateChipEdges()
 })
 
 const areas = computed(() => {
@@ -314,10 +360,8 @@ function clearFilters() {
   selectedArea.value = ''
   selectedPrice.value = ''
   sortBy.value = 'best-match'
-  const target = filtersPanel.value?.open
-    ? filtersPanel.value.querySelector('.btn-close')
-    : filtersTrigger.value
-  target?.focus({ preventScroll: true })
+  if (showFilters.value) filtersPanel.value?.focusClose()
+  else filtersTrigger.value?.focus({ preventScroll: true })
 }
 
 const activeFilters = computed(() =>
@@ -415,19 +459,20 @@ onMounted(loadActivities)
 
 <template>
   <div class="container activities-page py-4 py-md-5" data-testid="activities-page">
-    <header
-      class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4"
-    >
+    <header class="page-header">
       <div>
-        <h1 class="fw-bold">What are we doing today?</h1>
+        <h1 class="page-title">What are we doing today?</h1>
         <p class="text-secondary mb-0">Discover activities around Singapore.</p>
       </div>
       <RouterLink
         to="/activities/submit"
-        class="btn btn-outline-dark rounded-pill px-4"
+        class="btn btn-outline-dark rounded-pill submit-link"
         data-testid="submit-activity-button"
       >
-        + Submit an activity
+        <svg viewBox="0 0 24 24" class="submit-icon" aria-hidden="true" focusable="false">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        Submit an activity
       </RouterLink>
     </header>
 
@@ -437,9 +482,13 @@ onMounted(loadActivities)
       aria-label="Activity search and filters"
       data-testid="activity-controls"
     >
-      <div class="search-bar d-flex gap-2 mb-3">
-        <div class="flex-grow-1">
+      <div class="search-bar">
+        <div class="search-field">
           <label for="activity-search" class="visually-hidden">Search activities</label>
+          <svg viewBox="0 0 24 24" class="search-icon" aria-hidden="true" focusable="false">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
           <input
             id="activity-search"
             v-model="keyword"
@@ -466,8 +515,8 @@ onMounted(loadActivities)
           <svg
             class="filters-icon"
             viewBox="0 0 28 28"
-            width="28"
-            height="28"
+            width="24"
+            height="24"
             fill="none"
             stroke="currentColor"
             stroke-width="1.8"
@@ -480,37 +529,71 @@ onMounted(loadActivities)
             <circle class="filter-knob filter-knob-middle" cx="20" cy="14" r="3" />
             <circle class="filter-knob filter-knob-bottom" cx="11" cy="22" r="3" />
           </svg>
+          <span class="filters-label" aria-hidden="true">Filters</span>
+          <span v-if="activeFilters.length" class="filters-count" aria-hidden="true">{{
+            activeFilters.length
+          }}</span>
         </button>
       </div>
 
       <div class="browse-controls">
-        <div class="category-chips" role="group" aria-label="Quick category filters">
-          <button
-            type="button"
-            class="category-chip"
-            :class="{ active: selectedCategory === '' }"
-            :aria-pressed="selectedCategory === ''"
-            data-testid="category-chip-all"
-            @click="selectedCategory = ''"
+        <!-- The fades and arrows only appear on a side that has more chips to scroll to -->
+        <div class="chip-strip" :class="{ 'has-before': chipsBefore, 'has-after': chipsAfter }">
+          <div
+            ref="chipStrip"
+            class="category-chips"
+            role="group"
+            aria-label="Quick category filters"
+            @scroll.passive="updateChipEdges"
           >
-            All activities
-          </button>
+            <button
+              type="button"
+              class="category-chip"
+              :class="{ active: selectedCategory === '' }"
+              :aria-pressed="selectedCategory === ''"
+              data-testid="category-chip-all"
+              @click="selectedCategory = ''"
+            >
+              All activities
+            </button>
 
+            <button
+              v-for="category in categories"
+              :key="category"
+              type="button"
+              class="category-chip"
+              :class="{ active: selectedCategory === category }"
+              :aria-pressed="selectedCategory === category"
+              data-testid="category-chip"
+              @click="selectedCategory = category"
+            >
+              {{ category }}
+            </button>
+          </div>
+          <!-- Mouse shortcuts only: keyboard users Tab through the chips, which scroll into view -->
           <button
-            v-for="category in categories"
-            :key="category"
+            v-show="chipsBefore"
             type="button"
-            class="category-chip"
-            :class="{ active: selectedCategory === category }"
-            :aria-pressed="selectedCategory === category"
-            data-testid="category-chip"
-            @click="selectedCategory = category"
+            class="chip-arrow chip-arrow-before"
+            tabindex="-1"
+            aria-hidden="true"
+            @click="scrollChips(-1)"
           >
-            {{ category }}
+            <svg viewBox="0 0 24 24" focusable="false"><path d="m15 18-6-6 6-6" /></svg>
+          </button>
+          <button
+            v-show="chipsAfter"
+            type="button"
+            class="chip-arrow chip-arrow-after"
+            tabindex="-1"
+            aria-hidden="true"
+            @click="scrollChips(1)"
+          >
+            <svg viewBox="0 0 24 24" focusable="false"><path d="m9 18 6-6-6-6" /></svg>
           </button>
         </div>
         <div class="sort-control">
-          <label for="sort-filter" class="visually-hidden">Sort by</label>
+          <label for="sort-filter" class="sort-label">Sort by</label>
           <select id="sort-filter" v-model="sortBy" class="form-select" data-testid="sort-filter">
             <option v-for="option in sortOptions" :key="option.value" :value="option.value">
               {{ option.label }}
@@ -520,8 +603,8 @@ onMounted(loadActivities)
       </div>
 
       <div
-        v-if="hasFilters"
-        class="d-flex flex-wrap gap-2 mt-3"
+        v-if="activeFilters.length"
+        class="applied-filters"
         role="group"
         aria-label="Applied filters"
       >
@@ -529,17 +612,19 @@ onMounted(loadActivities)
           v-for="filter in activeFilters"
           :key="filter.key"
           type="button"
-          class="category-chip"
+          class="applied-filter"
           :aria-label="`Remove ${filter.label} filter`"
           data-testid="active-filter"
           @click="removeFilter(filter)"
         >
-          {{ filter.label }} <span aria-hidden="true">×</span>
+          {{ filter.label }}
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
         </button>
         <button
-          v-if="hasFilters"
           type="button"
-          class="btn btn-link text-secondary btn-sm"
+          class="clear-all"
           data-testid="clear-all-filters"
           @click="clearFilters"
         >
@@ -548,94 +633,83 @@ onMounted(loadActivities)
       </div>
     </section>
 
-    <dialog
+    <BaseDialog
       id="activity-filters"
       ref="filtersPanel"
+      v-model:open="showFilters"
       class="filters-panel"
-      aria-labelledby="activity-filters-title"
-      @cancel.prevent="closeFilters"
-      @keydown.tab.prevent="moveDialogFocus"
+      title="Filter activities"
+      close-label="Close filters"
     >
-      <header class="filter-header d-flex justify-content-between align-items-center gap-3">
-        <h2 id="activity-filters-title" class="h4 fw-bold mb-0">Filter activities</h2>
-        <button
-          type="button"
-          class="btn-close"
-          aria-label="Close filters"
-          @click="closeFilters"
-        ></button>
-      </header>
-      <div class="filter-body">
-        <div class="row g-3">
-          <div class="col-12 col-sm-6">
-            <label for="category-filter" class="form-label">Category</label>
-            <select
-              id="category-filter"
-              v-model="selectedCategory"
-              class="form-select"
-              data-testid="category-filter"
-            >
-              <option value="">All categories</option>
-              <option v-for="category in categories" :key="category" :value="category">
-                {{ category }}
-              </option>
-            </select>
-          </div>
-          <div class="col-12 col-sm-6">
-            <label for="area-filter" class="form-label">Area</label>
-            <select
-              id="area-filter"
-              v-model="selectedArea"
-              class="form-select"
-              data-testid="area-filter"
-            >
-              <option value="">All areas</option>
-              <option v-for="area in areas" :key="area" :value="area">{{ area }}</option>
-            </select>
-          </div>
-          <div class="col-12 col-sm-6">
-            <label for="price-filter" class="form-label">Price per person</label>
-            <select
-              id="price-filter"
-              v-model="selectedPrice"
-              class="form-select"
-              data-testid="price-filter"
-            >
-              <option value="">All prices</option>
-              <option v-for="range in priceRanges" :key="range.value" :value="range.value">
-                {{ range.label }}
-              </option>
-            </select>
-          </div>
-          <div class="col-12 col-sm-6">
-            <label for="setting-filter" class="form-label">Indoor / outdoor</label>
-            <select
-              id="setting-filter"
-              v-model="selectedSetting"
-              class="form-select"
-              data-testid="setting-filter"
-            >
-              <option value="">All</option>
-              <option value="indoor">Indoor</option>
-              <option value="outdoor">Outdoor</option>
-            </select>
-          </div>
-          <div class="col-12 mobile-sort-control">
-            <label for="mobile-sort-filter" class="form-label">Sort by</label>
-            <select
-              id="mobile-sort-filter"
-              v-model="sortBy"
-              class="form-select"
-              data-testid="mobile-sort-filter"
-            >
-              <option v-for="option in sortOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-          </div>
+      <div class="row g-3">
+        <div class="col-12 col-sm-6">
+          <label for="category-filter" class="form-label">Category</label>
+          <select
+            id="category-filter"
+            v-model="selectedCategory"
+            class="form-select"
+            data-testid="category-filter"
+          >
+            <option value="">All categories</option>
+            <option v-for="category in categories" :key="category" :value="category">
+              {{ category }}
+            </option>
+          </select>
+        </div>
+        <div class="col-12 col-sm-6">
+          <label for="area-filter" class="form-label">Area</label>
+          <select
+            id="area-filter"
+            v-model="selectedArea"
+            class="form-select"
+            data-testid="area-filter"
+          >
+            <option value="">All areas</option>
+            <option v-for="area in areas" :key="area" :value="area">{{ area }}</option>
+          </select>
+        </div>
+        <div class="col-12 col-sm-6">
+          <label for="price-filter" class="form-label">Price per person</label>
+          <select
+            id="price-filter"
+            v-model="selectedPrice"
+            class="form-select"
+            data-testid="price-filter"
+          >
+            <option value="">All prices</option>
+            <option v-for="range in priceRanges" :key="range.value" :value="range.value">
+              {{ range.label }}
+            </option>
+          </select>
+        </div>
+        <div class="col-12 col-sm-6">
+          <label for="setting-filter" class="form-label">Indoor / outdoor</label>
+          <select
+            id="setting-filter"
+            v-model="selectedSetting"
+            class="form-select"
+            data-testid="setting-filter"
+          >
+            <option value="">All</option>
+            <option value="indoor">Indoor</option>
+            <option value="outdoor">Outdoor</option>
+          </select>
+        </div>
+        <div class="col-12 mobile-sort-control">
+          <label for="mobile-sort-filter" class="form-label">Sort by</label>
+          <select
+            id="mobile-sort-filter"
+            v-model="sortBy"
+            class="form-select"
+            data-testid="mobile-sort-filter"
+          >
+            <option v-for="option in sortOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
         </div>
       </div>
-      <footer class="filter-footer d-flex gap-2">
+      <template #footer>
         <button
           type="button"
           class="btn btn-outline-secondary"
@@ -653,8 +727,8 @@ onMounted(loadActivities)
         >
           Show {{ filteredActivities.length }} activities
         </button>
-      </footer>
-    </dialog>
+      </template>
+    </BaseDialog>
 
     <div
       v-if="favouritesError"
@@ -871,55 +945,156 @@ onMounted(loadActivities)
   color: var(--on-ink);
 }
 
+/* ---------- Page header ---------- */
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 24px;
+  margin-bottom: 24px;
+}
+
+.page-title {
+  margin-bottom: 6px;
+  font-size: clamp(1.9rem, 1.3rem + 2.2vw, 2.75rem);
+  font-weight: 800;
+  line-height: 1.05;
+  text-wrap: balance;
+}
+
+.submit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-inline: 16px 20px;
+}
+
+.submit-icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+/* ---------- Sticky search and filters ---------- */
 .activity-controls {
   position: sticky;
   top: var(--navbar-height, 0px);
   z-index: 1010;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   max-height: min(45dvh, calc(100dvh - var(--navbar-height, 0px) - 64px));
   overflow-y: auto;
-  padding: 12px 0;
+  padding: 14px 0;
   border-bottom: 1px solid var(--line);
   /* Same colour as the page, so the bar only shows its edge while cards scroll under it */
   background: var(--bg);
 }
 
-.search-bar .form-control {
+/* Search box and Filters button are one pair: same height, same pill shape, same border */
+.search-bar {
+  display: flex;
+  gap: 10px;
+}
+
+.search-field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.search-icon {
+  position: absolute;
+  top: 50%;
+  left: 18px;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.search-field .form-control {
   min-height: 48px;
-  border-radius: 12px;
+  padding-inline: 48px 18px;
+  border-radius: var(--radius-pill);
+}
+
+.search-field .form-control:hover:not(:focus) {
+  border-color: var(--line-strong);
 }
 
 .filters-toggle {
-  --filter-knob-fill: var(--on-ink);
+  --filter-knob-fill: var(--surface);
   position: relative;
-  display: inline-grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   flex-shrink: 0;
-  width: 48px;
   height: 48px;
-  padding: 9px;
-  border: 1px solid var(--ink);
-  border-radius: 12px;
+  min-width: 48px;
+  padding: 0 18px 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--ink);
+  font-weight: 600;
   cursor: pointer;
   touch-action: manipulation;
   transition:
     background-color 180ms ease,
+    border-color 180ms ease,
     color 180ms ease;
 }
-.filters-toggle:is(:hover, :focus-visible),
+
+.filters-toggle:hover {
+  --filter-knob-fill: var(--surface-2);
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+}
+
+/* With filters on, the button fills with ink like any selected control */
 .filters-toggle.has-active-filters {
   --filter-knob-fill: var(--ink);
+  border-color: var(--ink);
   background: var(--ink);
   color: var(--on-ink);
 }
-.filters-toggle:focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
+
+.filters-toggle.has-active-filters:hover {
+  --filter-knob-fill: var(--ink-hover);
+  border-color: var(--ink-hover);
+  background: var(--ink-hover);
 }
+
 .filters-icon {
+  flex-shrink: 0;
   pointer-events: none;
 }
+
+.filters-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--on-ink);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The slider knobs slide across on hover: the button's one bit of play */
 .filter-knob {
   fill: var(--filter-knob-fill);
   transition:
@@ -938,98 +1113,226 @@ onMounted(loadActivities)
   transition-delay: 140ms, 0ms;
 }
 
-.category-chips {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 4px 2px;
-}
-
-.category-chip {
-  flex-shrink: 0;
-  padding: 7px 16px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 0.875rem;
-  transition: background-color 0.2s ease;
-}
-
-.category-chip:hover {
-  background: var(--surface-2);
-}
-
-.category-chip.active {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--on-ink);
-}
-
-.category-chip:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-}
-
-.filters-panel,
-.empty-results {
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface-2);
-}
-
-.filters-panel {
-  width: min(620px, calc(100% - 32px));
-  max-height: calc(100dvh - 32px);
-  padding: 0;
-  overflow: hidden;
-  background: var(--surface);
-  box-shadow: 0 16px 48px rgb(0 0 0 / 15%);
-}
-
-.filters-panel[open] {
-  display: flex;
-  flex-direction: column;
-}
-
-.filters-panel::backdrop {
-  background: rgb(0 0 0 / 35%);
-}
-
-.filter-header,
-.filter-footer {
-  flex-shrink: 0;
-  padding: 20px;
-}
-
-.filter-header {
-  border-bottom: 1px solid var(--line);
-}
-.filter-footer {
-  border-top: 1px solid var(--line);
-}
-.filter-body {
-  overflow-y: auto;
-  padding: 20px;
-  min-height: 0;
-}
+/* ---------- Category chips and sort ---------- */
 .browse-controls {
   display: flex;
   align-items: center;
   gap: 16px;
 }
-.category-chips {
+
+.chip-strip {
+  position: relative;
   flex: 1;
   min-width: 0;
 }
+
+/* One row that scrolls sideways. No scrollbar: a fade on the edge with more chips says there's
+   more, and the arrows (mouse only) or a swipe get there. */
+.category-chips {
+  --fade-before: 0px;
+  --fade-after: 0px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 5px 4px; /* room for the 2px focus ring and its 2px gap */
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black var(--fade-before),
+    black calc(100% - var(--fade-after)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black var(--fade-before),
+    black calc(100% - var(--fade-after)),
+    transparent 100%
+  );
+}
+
+.category-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.has-before .category-chips {
+  --fade-before: 56px;
+}
+
+.has-after .category-chips {
+  --fade-after: 56px;
+}
+
+.category-chip {
+  flex-shrink: 0;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.category-chip:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+}
+
+.category-chip.active {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+/* Arrows only show for a mouse; v-show hides the one on a side with nothing more */
+.chip-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  display: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-50%);
+}
+
+.chip-arrow:hover {
+  background: var(--surface-2);
+}
+
+.chip-arrow-before {
+  left: 0;
+}
+
+.chip-arrow-after {
+  right: 0;
+}
+
+.chip-arrow svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chip-arrow {
+    display: grid;
+  }
+}
+
 .sort-control {
-  margin-left: auto;
-  width: min(100%, 230px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex-shrink: 0;
 }
+
+.sort-label {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sort-control .form-select {
+  width: auto;
+  min-height: 38px;
+  padding: 0 40px 0 16px;
+  border-radius: var(--radius-pill);
+  background-position: right 14px center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sort-control .form-select:hover:not(:focus) {
+  border-color: var(--line-strong);
+}
+
 .mobile-sort-control {
   display: none;
 }
+
+/* ---------- Applied filters ---------- */
+.applied-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.applied-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px 0 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.applied-filter:hover {
+  background: var(--surface-3);
+}
+
+.applied-filter svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.clear-all {
+  padding: 4px 6px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.clear-all:hover {
+  color: var(--ink);
+}
+
+/* ---------- Everything else on the page ---------- */
+.empty-results {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+
+/* BaseDialog does the layout; this only sets the width */
+.filters-panel {
+  --dialog-width: 620px;
+}
+
 #activities-results-summary {
   scroll-margin-top: calc(var(--navbar-height, 0px) + 16px);
 }
@@ -1059,14 +1362,35 @@ onMounted(loadActivities)
     text-align: center;
   }
 
-  .browse-controls {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
+  .page-header {
+    margin-bottom: 16px;
+  }
+
+  /* Icon-only round Filters button; the count sits on its corner */
+  .filters-toggle {
+    width: 48px;
+    padding: 0;
+    border-radius: 50%;
+  }
+  .filters-label {
+    display: none;
+  }
+  .filters-count {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    box-shadow: 0 0 0 2px var(--bg);
+  }
+
+  /* Chips run edge to edge on a phone, so a swipe starts from the screen edge */
+  .chip-strip {
+    margin-inline: calc(var(--bs-gutter-x, 1.5rem) * -0.5);
   }
   .category-chips {
-    flex: auto;
+    padding-inline: calc(var(--bs-gutter-x, 1.5rem) * 0.5);
+    scroll-padding-inline: calc(var(--bs-gutter-x, 1.5rem) * 0.5);
   }
+
   .sort-control {
     display: none;
   }

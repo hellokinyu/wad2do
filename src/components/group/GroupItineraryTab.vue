@@ -740,7 +740,7 @@ onUnmounted(() => {
       <ol class="list-unstyled mb-0" data-testid="itinerary-timeline">
         <template v-for="(stop, index) in displayStops" :key="stop.original.activity_id">
           <li
-            class="stop-card"
+            class="stop-card surface-card"
             :class="{ rainy: stop.isRainyView }"
             data-testid="itinerary-stop"
           >
@@ -886,17 +886,11 @@ onUnmounted(() => {
   stroke-linejoin: round;
 }
 
-.itinerary-tab :is(a, button):focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-  box-shadow: none;
-}
-
 /* No plan yet */
 .empty-plan {
   padding: 2.5rem 1rem;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--surface-2);
   text-align: center;
 }
@@ -925,7 +919,7 @@ onUnmounted(() => {
   margin-bottom: 1rem;
   padding: 12px 16px;
   border: 1px solid var(--bs-info-border-subtle);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--bs-info-bg-subtle);
   color: var(--bs-info-text-emphasis);
 }
@@ -944,7 +938,7 @@ onUnmounted(() => {
   margin-bottom: 1rem;
   padding: 16px 20px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--surface-2);
 }
 
@@ -976,16 +970,12 @@ onUnmounted(() => {
 .time-input {
   width: auto;
   min-height: 44px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
 }
 
 /* One stop on the timeline, styled like the activity cards */
 .stop-card {
   padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: var(--surface);
-  box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
 }
 
 .stop-card.rainy {
@@ -1002,7 +992,7 @@ onUnmounted(() => {
 .stop-time {
   display: inline-block;
   padding: 4px 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--ink);
   color: var(--on-ink);
   font-size: 0.85rem;
@@ -1013,7 +1003,7 @@ onUnmounted(() => {
 
 .stop-photo {
   flex-shrink: 0;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   object-fit: cover;
 }
 
@@ -1076,7 +1066,7 @@ onUnmounted(() => {
   overflow: hidden;
   list-style: none;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--surface);
 }
 
@@ -1091,7 +1081,7 @@ onUnmounted(() => {
 
 .reason-chip {
   padding: 2px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-2);
   color: var(--bs-secondary-color);
   font-size: 0.8rem;

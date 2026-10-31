@@ -143,7 +143,7 @@ function formatDistance(meters) {
   min-height: 36px;
   padding: 0.25rem 0.85rem;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bs-body-bg);
   color: var(--bs-body-color);
   cursor: default;

@@ -162,7 +162,7 @@ watch([() => props.modelValue, zoom], revealStation)
   height: 420px;
   overflow: auto;
   border: 1px solid var(--line-strong);
-  border-radius: 0.75rem;
+  border-radius: var(--radius-md);
 }
 /* Scale targets with the map so neighbouring stations stay separate at 25%. */
 .map-canvas {
