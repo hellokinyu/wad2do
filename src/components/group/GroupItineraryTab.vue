@@ -202,14 +202,126 @@ function recalculateTimes() {
   })
 }
 
+// The group's chosen free time, e.g. { start: '15:00', end: '19:00' }, or null before one is picked
+const freeTime = computed(() => {
+  if (!group.value?.chosen_start || !group.value?.chosen_end) return null
+  return {
+    start: toSgKey(group.value.chosen_start).slice(11),
+    end: toSgKey(group.value.chosen_end).slice(11),
+  }
+})
+const timeError = ref('')
+const timeNote = ref('') // says when a time change took stops out of the plan
+
+// '01:00' -> minutes on the plan's day. When the free time runs past midnight,
+// a time before it starts is the next morning, so it counts after 24:00.
+function planMinutes(time) {
+  const minutes = toMinutes(time)
+  if (!freeTime.value) return minutes
+  const from = toMinutes(freeTime.value.start)
+  const overnight = toMinutes(freeTime.value.end) <= from
+  return overnight && minutes < from ? minutes + 24 * 60 : minutes
+}
+
+// True when the day from `start` to `end` fits inside the group's free time
+function fitsFreeTime(start, end) {
+  if (!freeTime.value) return true
+  let to = toMinutes(freeTime.value.end)
+  if (to <= toMinutes(freeTime.value.start)) to += 24 * 60 // free time runs past midnight
+  return planMinutes(start) >= toMinutes(freeTime.value.start) && planMinutes(end) <= to
+}
+
+function outsideFreeTimeMessage() {
+  return `Pick a time within the group's free time (${freeTime.value.start}–${freeTime.value.end}).`
+}
+
+// The stops that still fit when the day ends at `end`. A stop that runs past it
+// is cut short if it keeps at least half its time, otherwise it's left out too.
+function stopsUntil(end) {
+  const endMinutes = planMinutes(end)
+  const kept = []
+  for (const stop of itinerary.value.stops) {
+    const start = planMinutes(stop.start)
+    const finish = planMinutes(stop.end)
+    if (finish <= endMinutes) {
+      kept.push(stop)
+    } else {
+      if (endMinutes - start >= (finish - start) / 2) kept.push({ ...stop, end }) // shortened
+      break // every later stop starts after this one, so it's past the end too
+    }
+  }
+  return kept
+}
+
+// Keep only the stops that fit, and say how many were taken out
+function useStops(kept) {
+  const removed = itinerary.value.stops.length - kept.length
+  itinerary.value.stops = kept
+  timeError.value = ''
+  timeNote.value = removed
+    ? `${removed} ${removed === 1 ? "stop doesn't" : "stops don't"} fit any more, so ${removed === 1 ? 'it was' : 'they were'} moved to "Also voted for".`
+    : ''
+}
+
+// A new start time moves every stop. A later start can push the last stops past the
+// group's free time, so those are cut short or taken out, like an earlier end time.
+function changeDayStart(event) {
+  const start = event.target.value
+  if (start === dayStart.value) return
+  const before ={ dayStart: dayStart.value, stops: itinerary.value.stops.map((s) => ({ ...s })) }
+  const putBack = (message) => {
+    dayStart.value = before.dayStart
+    itinerary.value.stops = before.stops
+    event.target.value = before.dayStart
+    timeError.value = message
+  }
+  if (!start) return putBack('')
+  if (!fitsFreeTime(start, start)) return putBack(outsideFreeTimeMessage())
+  dayStart.value = start
+  recalculateTimes()
+  if (!freeTime.value || !itinerary.value.stops.length) return useStops(itinerary.value.stops)
+  const kept = stopsUntil(freeTime.value.end)
+  if (!kept.length) {
+    return putBack(`That's too late to fit the first stop before the group's free time ends at ${freeTime.value.end}.`)
+  }
+  useStops(kept)
+}
+
+// A later end time makes the last stop longer, but not past the group's free time.
+// An earlier one cuts short or takes out the stops that no longer fit.
+function changeDayEnd(event) {
+  const stops = itinerary.value.stops
+  const end = event.target.value
+  if (end === endTime.value) return
+  const putBack = (message) => {
+    event.target.value = endTime.value
+    timeError.value = message
+  }
+  if (!stops.length || !end) return putBack('')
+  if (!fitsFreeTime(startTime.value, end)) return putBack(outsideFreeTimeMessage())
+  if (planMinutes(end) >= planMinutes(stops.at(-1).end)) {
+    stops.at(-1).end = end
+    return useStops(stops)
+  }
+  const kept = stopsUntil(end)
+  if (!kept.length) {
+    return putBack(`That's too early to fit the first stop, which starts at ${stops[0].start}.`)
+  }
+  useStops(kept)
+}
+
 function startEditing() {
   savedCopy = JSON.parse(JSON.stringify(itinerary.value))
   dayStart.value = itinerary.value.stops[0]?.start || '10:00'
+  timeError.value = ''
+  timeNote.value = ''
   isEditing.value = true
 }
 
 function discardChanges() {
   isEditing.value = false
+  timeError.value = ''
+  timeNote.value = ''
   dayStart.value = savedCopy.stops[0]?.start || '10:00'
   itinerary.value = savedCopy
 }
@@ -662,7 +774,39 @@ onUnmounted(() => {
         </div>
         <div>
           <dt>Time</dt>
-          <dd>{{ startTime }} – {{ endTime }}</dd>
+          <!-- Read-only text until Edit is pressed, so the panel doesn't change shape -->
+          <dd class="d-flex align-items-center gap-1">
+            <input
+              :value="dayStart"
+              type="time"
+              class="time-input"
+              :class="isEditing ? 'form-control' : 'form-control-plaintext'"
+              :readonly="!isEditing"
+              :min="freeTime?.start"
+              :max="freeTime?.end"
+              aria-label="Start time"
+              aria-describedby="itinerary-time-error"
+              data-testid="itinerary-start-time"
+              @blur="changeDayStart"
+              @keydown.enter="changeDayStart"
+            />
+            –
+            <input
+              :value="endTime"
+              type="time"
+              class="time-input"
+              :class="isEditing ? 'form-control' : 'form-control-plaintext'"
+              :readonly="!isEditing"
+              :disabled="!itinerary.stops.length"
+              :min="freeTime?.start"
+              :max="freeTime?.end"
+              aria-label="End time"
+              aria-describedby="itinerary-time-error"
+              data-testid="itinerary-end-time"
+              @blur="changeDayEnd"
+              @keydown.enter="changeDayEnd"
+            />
+          </dd>
         </div>
         <div data-testid="itinerary-cost">
           <dt>Cost per person</dt>
@@ -682,6 +826,10 @@ onUnmounted(() => {
           <dd>{{ itinerary.stops.length }}</dd>
         </div>
       </dl>
+      <p v-if="isEditing && timeError" id="itinerary-time-error" class="text-danger small"
+        role="alert" data-testid="itinerary-time-error">{{ timeError }}</p>
+      <p v-else-if="isEditing && timeNote" class="text-secondary small" role="status"
+        data-testid="itinerary-time-note">{{ timeNote }}</p>
       <div class="edit-bar">
         <button
           v-if="!isEditing"
@@ -716,17 +864,6 @@ onUnmounted(() => {
             Re-plan
           </button>
         </template>
-        <div v-if="isEditing" class="d-flex align-items-center gap-2 ms-sm-auto">
-          <label for="day-start" class="form-label small fw-semibold mb-0">Start at</label>
-          <input
-            id="day-start"
-            v-model="dayStart"
-            type="time"
-            class="form-control time-input"
-            data-testid="itinerary-start-time"
-            @change="recalculateTimes"
-          />
-        </div>
       </div>
       <p v-if="isEditing && travelLoading" role="status" class="text-secondary small">
         Checking travel times before saving…
@@ -965,10 +1102,23 @@ onUnmounted(() => {
   min-height: 44px;
 }
 
+/* Sized to the summary text so the panel doesn't jump when editing starts */
 .time-input {
   width: auto;
-  min-height: 44px;
+  height: 1.75rem;
+  padding: 0 4px;
+  color: inherit;
+  font-weight: 600;
   border-radius: var(--radius-md);
+}
+
+.time-input.form-control-plaintext {
+  padding: 0;
+}
+
+/* No clock icon while the time is read-only */
+.time-input.form-control-plaintext::-webkit-calendar-picker-indicator {
+  display: none;
 }
 
 /* One stop on the timeline, styled like the activity cards */
