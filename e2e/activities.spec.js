@@ -251,9 +251,12 @@ test('phone layout has one card per row and an accessible filter panel', async (
   await expect(page.getByTestId('activity-name-link').first()).toBeInViewport()
   await expect(cards.first().getByText('S$25 / person')).toBeInViewport()
   await expect(page.getByTestId('activities-count')).toBeVisible()
-  // Submitting is rarer than browsing, so on phones it waits below the results
-  const submit = await page.getByTestId('submit-activity-button').boundingBox()
-  expect(submit.y).toBeGreaterThan((await cards.last().boundingBox()).y)
+  const navbar = page.getByRole('navigation').first()
+  await expect(navbar.getByTestId('nav-submit-activity')).toBeInViewport()
+  await expect(navbar.getByRole('link', { name: 'WAD2Do home' })).toBeHidden()
+  await expect(page.getByTestId('submit-activity-button')).toHaveCount(0)
+  const navBox = await navbar.boundingBox()
+  expect(Math.abs(navBox.y + navBox.height - 667)).toBeLessThan(1)
 
   await page.getByRole('button', { name: 'Outdoor', exact: true }).click()
   await expect(cards).toHaveCount(2)
@@ -419,6 +422,10 @@ const paginatedCatalogue = Array.from({ length: 45 }, (_, index) => ({
 }))
 
 for (const width of [375, 1440]) {
+  const openSecondPage =
+    width < 768
+      ? async () => {}
+      : async (page) => page.getByRole('button', { name: 'Page 2', exact: true }).click()
   for (const backAction of [
     { name: 'browser Back', run: (page) => page.goBack() },
     { name: 'activity Back', run: (page) => page.getByTestId('activity-back').click() },
@@ -443,8 +450,8 @@ for (const width of [375, 1440]) {
       await selectFilter(page, 'price-filter', '20-50')
       await page.getByTestId('activity-search').fill('Workshop')
       await selectSort(page, 'price-asc')
-      await page.getByRole('button', { name: 'Page 2', exact: true }).click()
-      const link = page.getByTestId('activity-name-link').nth(3)
+      await openSecondPage(page)
+      const link = page.getByTestId('activity-name-link').nth(width < 768 ? 23 : 3)
       const name = await link.textContent()
       await link.evaluate((element) =>
         element.scrollIntoView({ block: 'center', behavior: 'instant' }),
@@ -460,7 +467,7 @@ for (const width of [375, 1440]) {
       await expect.poll(() => Boolean(releaseCatalogue)).toBe(true)
       await expect(page.getByTestId('activities-loading')).toBeVisible()
       releaseCatalogue()
-      await expect(page.getByTestId('activity-name-link')).toHaveCount(6)
+      await expect(page.getByTestId('activity-name-link')).toHaveCount(width < 768 ? 26 : 6)
       await expect
         .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - scrollTop))
         .toBeLessThanOrEqual(1)
@@ -470,9 +477,8 @@ for (const width of [375, 1440]) {
       await expect(page.getByTestId('area-filter')).toHaveValue('Tiong Bahru')
       await expect(page.getByTestId('price-filter')).toHaveValue('20-50')
       await expect(page.getByTestId('sort-filter')).toHaveValue('price-asc')
-      await expect(page.getByRole('button', { name: 'Page 2', exact: true })).toHaveAttribute(
-        'aria-current',
-        'page',
+      await expect(page.locator('button[aria-label="Page 2"][aria-current="page"]')).toHaveCount(
+        width < 768 ? 0 : 1,
       )
     })
   }
@@ -520,8 +526,10 @@ test('returning to Best match waits for preferences before restoring scroll', as
 })
 
 for (const count of [40, 45]) {
-  test(`pagination shows 20 per page with ${count} activities on a phone`, async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 })
+  test(`desktop pagination switches to continuous mobile scrolling with ${count} activities`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 667 })
     const records = paginatedCatalogue.slice(0, count)
     await mockActivities(page, records)
     await page.goto('/activities')
@@ -540,6 +548,25 @@ for (const count of [40, 45]) {
     await expect(page.getByTestId('activities-count')).toHaveText(
       `Showing 21–40 of ${count} activities`,
     )
+
+    // Switching from desktop page 2 must still show the whole catalogue on mobile.
+    await page.setViewportSize({ width: 375, height: 667 })
+    await expect(names).toHaveText(records.map((activity) => activity.name))
+    await expect(pagination).toHaveCount(0)
+    await expect(page.getByTestId('activities-count')).toHaveText(
+      `Showing 1–${count} of ${count} activities`,
+    )
+    await names.last().scrollIntoViewIfNeeded()
+    await expect(names.last()).toBeInViewport()
+    await expect(page.getByTestId('nav-submit-activity')).toBeInViewport()
+    await page.getByTestId('activity-search').fill('Workshop 0')
+    await expect(names).toHaveText(['Workshop 0'])
+    await page.getByTestId('activity-search').fill('')
+    await expect(names).toHaveCount(count)
+
+    await page.setViewportSize({ width: 1280, height: 667 })
+    await expect(names).toHaveCount(20)
+    await expect(pagination).toBeVisible()
     const lastPage = Math.ceil(count / 20)
     const lastStart = (lastPage - 1) * 20
     await pagination.getByRole('button', { name: `Page ${lastPage}`, exact: true }).click()
@@ -965,20 +992,21 @@ for (const [width, height] of [
   [1024, 667],
   [1440, 667],
 ]) {
-  test(`search and filters stay below the navbar while browsing at ${width}x${height}`, async ({
+  test(`search and filters stay at the top while browsing at ${width}x${height}`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height })
     await mockActivities(page, paginatedCatalogue)
     await page.goto('/activities')
     const controls = page.getByTestId('activity-controls')
-    await expect(page.getByTestId('activity-card')).toHaveCount(20)
+    await expect(page.getByTestId('activity-card')).toHaveCount(width < 768 ? 45 : 20)
     await page.evaluate(() => window.scrollTo(0, 1500))
     await expect
       .poll(async () => {
         const navbar = await page.getByRole('navigation').first().boundingBox()
         const box = await controls.boundingBox()
-        return Math.abs(box.y - navbar.y - navbar.height)
+        const top = width < 768 ? 0 : navbar.y + navbar.height
+        return Math.abs(box.y - top)
       })
       .toBeLessThan(1)
     await expect(page.getByTestId('activity-search')).toBeInViewport()
@@ -988,19 +1016,13 @@ for (const [width, height] of [
     await page.getByTestId('area-filter').selectOption('Tiong Bahru')
     await page.getByTestId('filter-confirm').click()
     await expect(page.getByTestId('filters-toggle')).toBeFocused()
-    await page
-      .getByRole('navigation', { name: 'Activity pages' })
-      .getByRole('button', { name: 'Next' })
-      .click()
-    await expect(page.getByTestId('activities-count')).toHaveText('Showing 21–40 of 45 activities')
-    await expect
-      .poll(async () => {
-        const bar = await controls.boundingBox()
-        const summary = await page.getByTestId('activities-count').boundingBox()
-        return summary.y - bar.y - bar.height
-      })
-      .toBeGreaterThanOrEqual(0)
-    await expect(page.getByTestId('activities-count')).toBeInViewport()
+    await expect(page.getByTestId('activities-pagination')).toHaveCount(width < 768 ? 0 : 1)
+    await expect(page.getByTestId('activities-count')).toHaveText(
+      `Showing 1–${width < 768 ? 45 : 20} of 45 activities`,
+    )
+    const lastCard = page.getByTestId('activity-card').last()
+    await lastCard.scrollIntoViewIfNeeded()
+    await expect(lastCard).toBeInViewport()
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,

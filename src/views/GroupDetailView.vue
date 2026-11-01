@@ -34,6 +34,16 @@ const showMembers = ref(false)
 const showSettings = ref(false)
 const joinError = ref('')
 
+function toggleInvite() {
+  showInvite.value = !showInvite.value
+  showSettings.value = false
+}
+
+function toggleSettings() {
+  showSettings.value = !showSettings.value
+  showInvite.value = false
+}
+
 // Get the logged-in user from Supabase Auth (null if nobody is logged in)
 async function getUser() {
   const { data } = await supabase.auth.getUser()
@@ -341,7 +351,7 @@ function onSettingsSaved() {
             :class="{ active: showInvite }"
             :aria-expanded="showInvite"
             data-testid="invite-button"
-            @click="showInvite = !showInvite"
+            @click="toggleInvite"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path
@@ -356,7 +366,7 @@ function onSettingsSaved() {
             :class="{ active: showSettings }"
             :aria-expanded="showSettings"
             data-testid="settings-button"
-            @click="showSettings = !showSettings"
+            @click="toggleSettings"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="12" cy="12" r="3" />
