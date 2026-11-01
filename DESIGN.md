@@ -15,7 +15,7 @@ Dark mode is on when `<html>` has `data-bs-theme="dark"`. [src/lib/colorMode.js]
 
 - By default it follows the phone or computer's own light/dark setting.
 - Picking **Light** or **Dark** in the navbar theme picker overrides that for the rest of the browser tab.
-- **Auto**, **Halloween** and **Christmas** only change the navbar's decoration and follow the system setting for everything else.
+- **Auto**, **New Year**, **National Day**, **Halloween** and **Christmas** only change the navbar's decoration and follow the system setting for everything else.
 
 ## Colours
 
