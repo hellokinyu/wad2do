@@ -159,7 +159,7 @@ const browseRow = ref(null)
 const appliedFilters = ref(null)
 const filtersTrigger = ref(null)
 
-// Phones get a different page order (Submit moves below the results), so track the breakpoint.
+// Phones use the navbar's submit shortcut and a compact filter layout.
 const phoneQuery = window.matchMedia('(max-width: 767.98px)')
 const isPhone = ref(phoneQuery.matches)
 function updatePhone(event) {
@@ -426,9 +426,12 @@ async function applySuggestion(item) {
 
 const pageCount = computed(() => Math.max(1, Math.ceil(filteredActivities.value.length / pageSize)))
 const currentPage = computed(() => Math.min(requestedPage.value, pageCount.value))
-const pageStart = computed(() => (currentPage.value - 1) * pageSize)
-const pagedActivities = computed(() =>
-  filteredActivities.value.slice(pageStart.value, pageStart.value + pageSize),
+const pageStart = computed(() => (isPhone.value ? 0 : (currentPage.value - 1) * pageSize))
+// The catalogue is already loaded for search, so phones can show every match in one list.
+const displayedActivities = computed(() =>
+  isPhone.value
+    ? filteredActivities.value
+    : filteredActivities.value.slice(pageStart.value, pageStart.value + pageSize),
 )
 const visiblePages = computed(() => {
   const start = Math.max(1, Math.min(currentPage.value - 2, pageCount.value - 4))
@@ -612,7 +615,7 @@ onMounted(loadActivities)
         <h1 class="page-title">What are we doing this weekend?</h1>
         <p class="page-lede text-secondary mb-0">Discover activities around Singapore.</p>
       </div>
-      <!-- On phones this moves below the results, so search comes first -->
+      <!-- Phones use the plus button in the bottom navbar. -->
       <RouterLink
         v-if="!isPhone"
         to="/activities/submit"
@@ -626,7 +629,7 @@ onMounted(loadActivities)
       </RouterLink>
     </header>
 
-    <!-- Only this row stays under the navbar on phones; the chips scroll away with the page -->
+    <!-- On phones this row sticks to the top; the chips scroll away with the page. -->
     <div
       ref="searchRow"
       class="search-row"
@@ -1016,7 +1019,7 @@ onMounted(loadActivities)
           data-testid="activities-count"
         >
           Showing {{ filteredActivities.length ? pageStart + 1 : 0 }}–{{
-            pageStart + pagedActivities.length
+            pageStart + displayedActivities.length
           }}
           of {{ filteredActivities.length }} activities
         </p>
@@ -1091,7 +1094,7 @@ onMounted(loadActivities)
 
       <div v-else class="row g-4" data-testid="activities-grid">
         <div
-          v-for="activity in pagedActivities"
+          v-for="activity in displayedActivities"
           :key="activity.id"
           class="col-12 col-md-6 col-lg-4"
         >
@@ -1108,7 +1111,7 @@ onMounted(loadActivities)
       </div>
 
       <nav
-        v-if="pageCount > 1"
+        v-if="!isPhone && pageCount > 1"
         class="mt-4"
         aria-label="Activity pages"
         data-testid="activities-pagination"
@@ -1153,20 +1156,6 @@ onMounted(loadActivities)
       </nav>
     </template>
 
-    <div v-if="isPhone && !loading" class="submit-prompt">
-      <p class="text-secondary mb-2">Know a spot we're missing?</p>
-      <RouterLink
-        to="/activities/submit"
-        class="btn btn-outline-dark rounded-pill submit-link"
-        data-testid="submit-activity-button"
-      >
-        <svg viewBox="0 0 24 24" class="submit-icon" aria-hidden="true" focusable="false">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-        Submit an activity
-      </RouterLink>
-    </div>
-
     <ActivityShareDialog :activity="shareTarget" @close="shareTarget = null" @shared="announce" />
   </div>
 </template>
@@ -1187,6 +1176,7 @@ onMounted(loadActivities)
   /* Height of the sticky search row: 14px + 48px search + 12px + 1px edge.
      On roomy screens the chip row sticks right under it. */
   --search-row-height: 75px;
+  --navbar-top-height: var(--navbar-height, 0px);
 }
 
 .page-header {
@@ -1224,17 +1214,10 @@ onMounted(loadActivities)
   stroke-linecap: round;
 }
 
-.submit-prompt {
-  margin-top: 40px;
-  padding-top: 24px;
-  border-top: 1px solid var(--line);
-  text-align: center;
-}
-
 /* ---------- Sticky search row ---------- */
 .search-row {
   position: sticky;
-  top: var(--navbar-height, 0px);
+  top: var(--navbar-top-height);
   z-index: 1011;
   display: flex;
   gap: 10px;
@@ -1377,7 +1360,7 @@ onMounted(loadActivities)
 @media (min-width: 768px) and (min-height: 600px) {
   .browse-row {
     position: sticky;
-    top: calc(var(--navbar-height, 0px) + var(--search-row-height));
+    top: calc(var(--navbar-top-height) + var(--search-row-height));
     z-index: 1010;
   }
 
@@ -1641,7 +1624,7 @@ onMounted(loadActivities)
 }
 
 #activities-results-summary {
-  scroll-margin-top: calc(var(--navbar-height, 0px) + 16px);
+  scroll-margin-top: calc(var(--navbar-top-height) + 16px);
 }
 
 .empty-results {
@@ -1765,6 +1748,10 @@ onMounted(loadActivities)
 }
 
 @media (max-width: 767.98px) {
+  .activities-page {
+    --navbar-top-height: 0px;
+  }
+
   .page-header {
     margin-bottom: 4px;
   }
@@ -1807,6 +1794,7 @@ onMounted(loadActivities)
 
   .save-feedback {
     left: 1rem;
+    bottom: calc(var(--navbar-height, 61px) + 1rem);
     max-width: none;
   }
 }
