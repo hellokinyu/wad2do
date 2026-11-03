@@ -39,6 +39,10 @@ plan uses the plain itinerary route instead.
 states, and reports success only after saving a nonempty plan. A generated result with no
 stops offers Change time and Back to voting, and is not automatically saved. Successful
 saves emit `plan-saved`, so `GroupDetailView.vue` refreshes its header stage after completion.
+Empty drafts use the confirmed outing start. Saving waits for travel calculations, then
+rejects stops outside the confirmed time window while keeping the draft and showing an error.
+The initial group/votes/plan/activity reads share one 30-second deadline. A stalled read
+shows the retry screen; leaving or retrying aborts the previous read and ignores late responses.
 
 The existing `group_planning.sql` trigger invalidates the previous itinerary when the
 confirmed start or end changes. The summary warns before **Replace time & rebuild**.
@@ -52,7 +56,7 @@ Run the focused checks against a production build:
 
 ```sh
 pnpm run build
-CI=1 pnpm exec playwright test e2e/availability-flow.spec.js e2e/group-database.spec.js e2e/itinerary-hours.spec.js e2e/itinerary-editing.spec.js e2e/group-stage-colour.spec.js --project=chromium --retries=0 --workers=2
+CI=1 pnpm exec playwright test e2e/availability-flow.spec.js e2e/group-database.spec.js e2e/itinerary-hours.spec.js e2e/itinerary-editing.spec.js e2e/itinerary-safeguards.spec.js e2e/group-stage-colour.spec.js --project=chromium --retries=0 --workers=2
 ```
 
 These use intercepted Supabase, routing and weather requests. They cover phone/tablet/desktop

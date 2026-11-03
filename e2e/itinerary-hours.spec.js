@@ -574,7 +574,7 @@ test('Save waits for edited travel times and reopening preserves the saved sched
   await page.route('**/functions/v1/onemap-route', async (route) => {
     await ready
     await route.fulfill({
-      json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 90 }] },
+      json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 60 }] },
     })
   })
   const request = page.waitForRequest('**/functions/v1/onemap-route')
@@ -584,12 +584,12 @@ test('Save waits for edited travel times and reopening preserves the saved sched
   expect(state.writes).toHaveLength(1)
   release()
   await expect(page.getByTestId('itinerary-save')).toBeEnabled()
-  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('22:30–23:30')
+  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('22:00–23:00')
   await page.getByTestId('itinerary-save').click()
   await expect(page.getByTestId('itinerary-edit')).toBeVisible()
-  expect(state.saved.stops[1]).toMatchObject({ start: '22:30', end: '23:30' })
+  expect(state.saved.stops[1]).toMatchObject({ start: '22:00', end: '23:00' })
   await page.reload()
-  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('22:30–23:30')
+  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('22:00–23:00')
   expect(state.writes).toHaveLength(2)
 })
 
