@@ -251,7 +251,7 @@
                 :style="{ backgroundColor: c }"
               ></span>
               <span>Everyone free 🎉</span>
-              <span>Number = people free · ⭐ = best slot</span>
+              <span>Number = people free · ⭐ = most people free so far</span>
             </div>
             <p v-if="mode === 'heatmap'" class="mt-2 mb-0 small" data-testid="slot-info">
               <template v-if="inspect">
@@ -649,9 +649,9 @@ const bestSlot = computed(() => {
 const noOverlap = computed(
   () => allResponded.value && (!bestSlot.value || bestSlot.value.count < members.value.length),
 )
-// ⭐ goes on EVERY slot tied for the most people free (only when nobody overlaps fully)
+// Mark tied best slots from the responses so far; everyone-free slots use 🎉 instead.
 function isBestSlot(day, t) {
-  return noOverlap.value && bestSlot.value && freeCount(day, t) === bestSlot.value.count
+  return bestSlot.value && freeCount(day, t) === bestSlot.value.count
 }
 
 // What to print inside a heatmap cell: 🎉 everyone, ⭐ best slot, otherwise the number of people free
@@ -783,8 +783,8 @@ const rangeAttendance = computed(() => {
     (member) => keys.length && keys.every((key) => freeBySlot.value[key]?.includes(member.id)),
   ).length
   if (count === members.value.length && count > 0) return '🎉 Everyone free'
-  const best = noOverlap.value && count > 0 && count === bestSlot.value?.count
-  return (best ? '⭐ ' : '') + count + ' of ' + members.value.length + ' free throughout' + (best ? ' · Best available' : '')
+  const best = count > 0 && count === bestSlot.value?.count
+  return (best ? '⭐ ' : '') + count + ' of ' + members.value.length + ' free throughout' + (best ? (allResponded.value ? ' · Best available' : ' · Best so far') : '')
 })
 const budgetLabel = computed(() => 'S$' + (group.value.budget_per_person ?? 0))
 const canPlan = computed(

@@ -16,9 +16,9 @@ No database migration is needed.
 - The action summary shows the actual range, duration, people free throughout the whole
   range, and group budget. Different members being free in successive blocks do not count
   as someone who can attend the entire outing.
-  🎉 marks everyone-free blocks, suggestions and selected ranges. When everyone has responded
-  without a full overlap, ⭐ marks tied best blocks and selected ranges that retain that many
-  of the same members throughout.
+  🎉 marks everyone-free blocks, suggestions and selected ranges. ⭐ marks tied best blocks
+  from the responses so far, even while members have not answered, and selected ranges that
+  retain that many of the same members throughout. Pending responses label the result Best so far.
 - A complete new range enables **Confirm time & build itinerary**. A saved time with no plan
   enables **Build itinerary**. An unchanged time with an existing plan enables **View itinerary**,
   which opens the saved plan without regenerating it. Clear selection restores the saved-time action.

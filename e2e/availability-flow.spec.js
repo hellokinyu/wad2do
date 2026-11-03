@@ -141,6 +141,33 @@ test('stars mark tied best blocks and a range the same members can attend throug
   await expect(page.getByTestId('availability-action')).toContainText('⭐ 2 of 3 free throughout · Best available')
 })
 
+test('stars appear on best-so-far grid blocks before everyone has responded', async ({ page }) => {
+  const state = await mockItinerary(page, { hours, start: null, end: null })
+  const friend = '66666666-6666-4666-8666-666666666666'
+  state.members = [
+    { id: mockUser.id, display_name: 'Demo User' },
+    { id: friend, display_name: 'Friend' },
+    { id: '77777777-7777-4777-8777-777777777777', display_name: 'Not answered yet' },
+  ]
+  state.availability = [
+    { user_id: mockUser.id, slot_start: '2026-10-30T10:00:00+08:00' },
+    { user_id: mockUser.id, slot_start: '2026-10-30T10:30:00+08:00' },
+    { user_id: friend, slot_start: '2026-10-30T10:00:00+08:00' },
+    { user_id: friend, slot_start: '2026-10-30T10:30:00+08:00' },
+  ]
+  await page.goto(`/groups/${groupId}/availability`)
+  await page.getByTestId('availability-next').click()
+  await expect(page.getByTestId('availability-response-count')).toContainText('2 of 3')
+  await expect(slot(page, '10:00')).toHaveText('⭐')
+  await expect(slot(page, '10:30')).toHaveText('⭐')
+  await expect(slot(page, '11:00')).toHaveText('')
+  await slot(page, '10:00').click()
+  await slot(page, '10:30').click()
+  await expect(page.getByTestId('availability-action')).toContainText('⭐ 2 of 3 free throughout')
+  await expect(page.getByTestId('availability-action')).toContainText('Best so far')
+  await page.screenshot({ path: test.info().outputPath('best-so-far-stars.png'), fullPage: false })
+})
+
 test('attendance counts members free for the entire range rather than changing people per block', async ({
   page,
 }) => {
