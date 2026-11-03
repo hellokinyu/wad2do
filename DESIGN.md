@@ -159,6 +159,13 @@ Short confirmations ("Saved to your Profile.") float at the bottom of the screen
 - A message with a next step (for example "Go vote in Saturday Squad" after sharing) stays until it's closed, because a link that vanishes can't be tapped.
 - Its close button sends keyboard focus somewhere sensible (the results), since the button disappears with the message.
 
+## Tab icon
+
+The browser-tab icon is the wordmark's face on amber: dark eyes and an open smile in a rounded amber square. It stays the same in light and dark browsers.
+
+- [public/favicon.svg](public/favicon.svg) is the source. Its edges sit on a 4-unit grid of its 64-unit box, so they land on whole pixels at 16px and 32px. Keep that grid if you change it.
+- `public/favicon.ico` (16, 32 and 48px, for Safari and older browsers) and `public/apple-touch-icon.png` (180px, a full square, for phone home screens) are rendered from that SVG. If the SVG changes, render them again.
+
 ## Bootstrap
 
 `styles.css` points Bootstrap's own variables at the theme, so these follow it with no extra work:
