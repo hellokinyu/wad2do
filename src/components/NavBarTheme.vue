@@ -1257,7 +1257,7 @@
 
 <script>
 import { ref } from 'vue'
-import { setColorMode } from '@/lib/colorMode'
+import { seasonalTheme, setColorMode } from '@/lib/colorMode'
 
 const THEMES = ['newyear', 'nationalday', 'halloween', 'christmas', 'light', 'dark']
 const THEME_SYMBOLS = {
@@ -1307,34 +1307,6 @@ const FIREWORKS = Array.from({ length: 9 }, (_, i) => ({
   delay: `-${(i * 0.7).toFixed(1)}s`,
 }))
 
-// Each festive theme's big day (month is 1-based).
-const FESTIVALS = [
-  { theme: 'newyear', month: 1, day: 1 },
-  { theme: 'nationalday', month: 8, day: 9 },
-  { theme: 'halloween', month: 10, day: 31 },
-  { theme: 'christmas', month: 12, day: 25 },
-]
-
-// Picks the festive theme whose day is nearest to today, before or after.
-// e.g. early November is still Halloween; from late November it's Christmas.
-function seasonalTheme(date = new Date()) {
-  const today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-  let nearest = 'light'
-  let nearestGap = Infinity
-  for (const festival of FESTIVALS) {
-    // Check last year and next year too, so 30 Dec counts as close to 1 Jan.
-    for (const offset of [-1, 0, 1]) {
-      const day = new Date(today.getFullYear() + offset, festival.month - 1, festival.day)
-      const gap = Math.abs(day - today)
-      if (gap < nearestGap) {
-        nearest = festival.theme
-        nearestGap = gap
-      }
-    }
-  }
-  return nearest
-}
-
 function readPreview() {
   try {
     return sessionStorage.getItem(PREVIEW_KEY) ?? 'auto'
@@ -1349,7 +1321,7 @@ const preview = ref(readPreview())
 
 function setPreview(value) {
   preview.value = value
-  // Light and Dark also switch the whole app's colours
+  // Every theme also recolours the pages, not just the navbar
   setColorMode(value)
   try {
     if (value === 'auto') sessionStorage.removeItem(PREVIEW_KEY)
