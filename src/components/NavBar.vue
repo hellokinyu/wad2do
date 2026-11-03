@@ -219,6 +219,10 @@ onUnmounted(() => {
   height: 60px;
   object-fit: contain;
 }
+/* The profile avatar makes its link taller than the icon links, so centre them all on one line */
+.navbar-nav {
+  align-items: center;
+}
 .nav-link {
   display: flex;
   align-items: center;

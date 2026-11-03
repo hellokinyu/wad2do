@@ -1084,11 +1084,6 @@ svg:not(.animal-avatar) {
   font-weight: 600;
 }
 
-.panel .btn-dark {
-  --bs-btn-bg: var(--ink);
-  --bs-btn-border-color: var(--ink);
-}
-
 /* Mistakes show under their field; Bootstrap's warning icon would cover the date picker */
 .panel .form-control.is-invalid {
   padding-right: 0.75rem;
