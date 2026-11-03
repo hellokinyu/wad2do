@@ -5,14 +5,16 @@ import { supabase } from '@/lib/supabase'
 import { getVisitHoursWarnings } from '@/lib/openingHours'
 import { fetchTravelOptions } from '@/lib/travelOptions'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
-import { formatPart, getStageStyle } from '@/lib/groupDisplay'
 import { useAuth } from '@/composables/useAuth'
 import { getPrice } from '@/lib/activityDisplay'
 import ItineraryTravelOptions from '@/components/group/ItineraryTravelOptions.vue'
 import ItineraryLoadingCar from '@/components/group/ItineraryLoadingCar.vue'
 
 const TRAVEL_MINUTES = 30
+const emit = defineEmits(['plan-saved'])
 const itinerary = ref(null)
+const loadingMessage = ref('Loading itinerary…')
+const planSaved = ref(false)
 const budget = computed(() => group.value?.budget_per_person ?? 0)
 // The group's voted activities (loaded from Supabase by loadVotes)
 const votedActivities = ref([])
@@ -44,30 +46,6 @@ const endTime = computed(() => {
 })
 
 const isOverBudget = computed(() => totalCost.value > budget.value)
-
-// How full the budget bar is, as a percentage (a full bar when there's no budget to compare to)
-const budgetPercent = computed(() => {
-  if (budget.value <= 0) return totalCost.value > 0 ? 100 : 0
-  return Math.min(100, (totalCost.value / budget.value) * 100)
-})
-
-// '2026-10-31' -> 'Sat 31 Oct'
-const planDay = computed(() => {
-  if (!itinerary.value?.date) return '-'
-  return formatPart(itinerary.value.date, { weekday: 'short', day: 'numeric', month: 'short' })
-    .replace(',', '')
-})
-
-// The same stub colours as the group's ticket: green once planned, grey once the day is over
-const stageStyle = computed(() => getStageStyle({ ...group.value, itineraries: [true] }))
-
-// '10:00', '11:30' -> '1h 30m'
-function formatDuration(start, end) {
-  const minutes = (((toMinutes(end) - toMinutes(start)) % 1440) + 1440) % 1440
-  const hours = Math.floor(minutes / 60)
-  if (!hours) return minutes + 'm'
-  return minutes % 60 ? hours + 'h ' + (minutes % 60) + 'm' : hours + 'h'
-}
 
 // '09:00' -> '9:00 am', '12:10' -> '12:10 pm'
 function formatClock(time) {
@@ -106,20 +84,24 @@ const loadedUserId = user.value?.id
 let savedRevision
 let disposed = false
 let saveController
+let loadController
 
 const group = ref(null) // { chosen_start, chosen_end, budget_per_person }
 const loading = ref(true)
 const errorMessage = ref('')
 
-async function loadGroup() {
+async function loadGroup(signal) {
   const { data, error } = await supabase
     .from('groups')
     .select('chosen_start, chosen_end, budget_per_person, plan_revision')
     .eq('id', groupId)
     .maybeSingle()
+    .abortSignal(signal)
+  signal.throwIfAborted()
   if (error) throw error
   group.value = data
   savedRevision = data?.plan_revision
+  dayStart.value = data?.chosen_start ? toSgKey(data.chosen_start).slice(11) : '10:00'
 }
 
 // Supabase timestamp (UTC) -> '2026-10-25T10:00' in Singapore time (UTC+8)
@@ -262,9 +244,11 @@ const hasUnsavedChanges = computed(() =>
     JSON.stringify(itinerary.value?.stops) !== JSON.stringify(savedCopy?.stops)),
 )
 
-onBeforeRouteLeave(() =>
-  !hasUnsavedChanges.value || window.confirm('Leave and discard your unsaved itinerary changes?'),
-)
+onBeforeRouteLeave(() => {
+  if (hasUnsavedChanges.value && !window.confirm('Leave and discard your unsaved itinerary changes?'))
+    return false
+  loadController?.abort()
+})
 
 function warnBeforeUnload(event) {
   if (!hasUnsavedChanges.value) return
@@ -398,7 +382,7 @@ function changeDayEnd(event) {
 
 function startEditing() {
   savedCopy = JSON.parse(JSON.stringify(itinerary.value))
-  dayStart.value = itinerary.value.stops[0]?.start || '10:00'
+  dayStart.value = itinerary.value.stops[0]?.start || freeTime.value?.start || '10:00'
   timeError.value = ''
   timeNote.value = ''
   isEditing.value = true
@@ -408,7 +392,7 @@ function discardChanges() {
   isEditing.value = false
   timeError.value = ''
   timeNote.value = ''
-  dayStart.value = savedCopy.stops[0]?.start || '10:00'
+  dayStart.value = savedCopy.stops[0]?.start || freeTime.value?.start || '10:00'
   itinerary.value = savedCopy
 }
 
@@ -438,6 +422,10 @@ async function saveChanges() {
       saveError.value = "Some travel times couldn't be checked. Retry them before saving."
       return false
     }
+    if (itinerary.value.stops.some((stop) => !fitsFreeTime(stop.start, stop.end))) {
+      saveError.value = outsideFreeTimeMessage()
+      return false
+    }
     // Only save the fields from the brief. Name, photo etc. come from the activity.
     const stopsToSave = itinerary.value.stops.map((s) => ({
       activity_id: s.activity_id,
@@ -460,6 +448,8 @@ async function saveChanges() {
     if (error) throw error
     savedRevision = data
     isEditing.value = false // only leave edit mode if it worked
+    planSaved.value = itinerary.value.stops.length > 0
+    emit('plan-saved')
     return true
   } catch (error) {
     console.log(error)
@@ -543,6 +533,7 @@ async function replan() {
   timeError.value = ''
   timeNote.value = ''
   loading.value = true
+  loadingMessage.value = 'Building your itinerary…'
   travelRequest += 1
   travelLoading.value = false
   travelPromise = Promise.resolve()
@@ -559,12 +550,14 @@ async function replan() {
 }
 
 // Load this group's saved plan, or null if nobody has saved one yet
-async function loadSavedPlan() {
+async function loadSavedPlan(signal) {
   const { data, error } = await supabase
     .from('itineraries')
     .select('stops, total_cost')
     .eq('group_id', groupId)
     .maybeSingle()
+    .abortSignal(signal)
+  signal.throwIfAborted()
   if (error) throw error
   return data
 }
@@ -590,13 +583,15 @@ function toPlanActivity(id, a) {
 
 // Load the activities in a saved plan by their ids, not through votes,
 // so a stop keeps its name, address and hours even when nobody votes for it any more
-async function loadPlanActivities(stops) {
+async function loadPlanActivities(stops, signal) {
   const ids = [...new Set(stops.map((s) => s.activity_id))]
   if (!ids.length) return []
   const { data, error } = await supabase
     .from('activities')
     .select('id, ' + ACTIVITY_FIELDS)
     .in('id', ids)
+    .abortSignal(signal)
+  signal.throwIfAborted()
   if (error) throw error
   return data.map((a) => toPlanActivity(a.id, a))
 }
@@ -619,11 +614,13 @@ function useSavedPlan(saved, activities) {
 }
 
 // Load this group's votes, add them up per activity, and keep the ones with more ups than downs
-async function loadVotes() {
+async function loadVotes(signal) {
   const { data, error } = await supabase
     .from('votes')
     .select('activity_id, value, activities(' + ACTIVITY_FIELDS + ')')
     .eq('group_id', groupId)
+    .abortSignal(signal)
+  signal.throwIfAborted()
   if (error) throw error
 
   const byActivity = {} // activity_id -> the activity, with its vote total
@@ -703,7 +700,14 @@ async function buildPlan() {
 
 // Load an existing plan, or build and save one before showing it.
 async function loadPage() {
+  loadController?.abort()
+  const controller = new AbortController()
+  loadController = controller
+  const currentLoad = () => !disposed && loadController === controller &&
+    !controller.signal.aborted && user.value?.id === loadedUserId
   loading.value = true
+  loadingMessage.value = 'Loading itinerary…'
+  planSaved.value = false
   travelRequest += 1
   travelLoading.value = false
   travelPromise = Promise.resolve()
@@ -711,20 +715,31 @@ async function loadPage() {
   saveError.value = ''
   saveConflict.value = false
   try {
-    await loadGroup()
-    await loadVotes()
-    const saved = await loadSavedPlan()
     const rebuild = route.query.replan === '1'
+    const { saved, activities } = await requestWithTimeout(async (signal) => {
+      await loadGroup(signal)
+      await loadVotes(signal)
+      const saved = await loadSavedPlan(signal)
+      const activities = saved && !rebuild ? await loadPlanActivities(saved.stops, signal) : []
+      return { saved, activities }
+    }, controller)
+    if (!currentLoad()) return
+    planSaved.value = !!saved?.stops.length
     if (saved && !rebuild) {
-      useSavedPlan(saved, await loadPlanActivities(saved.stops)) // the group already has a plan: show it
+      useSavedPlan(saved, activities) // the group already has a plan: show it
       await loadTravel()
     } else {
+      loadingMessage.value = 'Building your itinerary…'
       await buildPlan()
+      planSaved.value = false
     }
+    if (!currentLoad()) return
     if (itinerary.value) {
-      if ((!saved || rebuild) && !(await saveChanges())) {
-        throw new Error('Generated plan could not be saved.')
+      if ((!saved || rebuild) && itinerary.value.stops.length) {
+        loadingMessage.value = 'Saving itinerary…'
+        if (!(await saveChanges())) throw new Error('Generated plan could not be saved.')
       }
+      if (!currentLoad()) return
       if (rebuild) {
         const query = { ...route.query }
         delete query.replan
@@ -733,10 +748,11 @@ async function loadPage() {
       loadWeather()
     }
   } catch (error) {
+    if (disposed || loadController !== controller) return
     console.log(error)
     errorMessage.value = saveError.value || "Couldn't load the plan. Please try again."
   } finally {
-    loading.value = false
+    if (!disposed && loadController === controller) loading.value = false
   }
 }
 
@@ -858,6 +874,7 @@ onUnmounted(() => {
   disposed = true
   travelRequest += 1
   saveController?.abort()
+  loadController?.abort()
 })
 </script>
 
@@ -868,9 +885,10 @@ onUnmounted(() => {
       <h2 class="h5 fw-bold mb-1">Itinerary</h2>
       <p class="text-secondary mb-0">Your day, planned from the group's votes and free time.</p>
     </div>
-    <ItineraryLoadingCar v-if="loading" />
+    <ItineraryLoadingCar v-if="loading" :message="loadingMessage" />
     <div v-else-if="errorMessage" class="alert alert-danger" role="alert" data-testid="itinerary-error">
       <p>{{ errorMessage }}</p>
+      <p v-if="group?.chosen_start" class="small">Your group time is saved. Retry building the itinerary or choose another time.</p>
       <button
         class="btn btn-outline-danger rounded-pill px-4"
         data-testid="itinerary-retry"
@@ -878,6 +896,7 @@ onUnmounted(() => {
       >
         {{ saveConflict ? 'Load latest plan' : 'Try again' }}
       </button>
+      <RouterLink :to="{ name: 'group-availability' }" class="btn btn-link text-body">Change group time</RouterLink>
     </div>
 
     <!-- No plan yet -->
@@ -887,7 +906,7 @@ onUnmounted(() => {
           <path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4zM8 2v16M16 6v16" />
         </svg>
       </div>
-      <p class="mb-3">No plan yet. Pick a time on the Availability tab, then press Plan.</p>
+      <p class="mb-3">No plan yet. Add your availability, then choose a group time to build your itinerary.</p>
       <RouterLink :to="{ name: 'group-availability' }" class="btn btn-dark rounded-pill px-4">
         Go to Availability
       </RouterLink>
@@ -895,6 +914,13 @@ onUnmounted(() => {
 
     <!-- There is a plan -->
     <fieldset v-else class="border-0 p-0 m-0 w-100" :disabled="saving" data-testid="itinerary-plan">
+      <div v-if="!itinerary.stops.length" class="alert alert-warning" role="status" data-testid="itinerary-no-fit">
+        <p class="fw-semibold mb-1">No activities fit this time and budget.</p>
+        <p class="small mb-2">Choose a longer time, adjust the group budget, or vote for other activities.</p>
+        <RouterLink :to="{ name: 'group-availability' }" class="btn btn-outline-dark rounded-pill me-2">Change time</RouterLink>
+        <RouterLink :to="{ name: 'group-activities' }" class="btn btn-link text-body">Back to voting</RouterLink>
+      </div>
+      <p v-else-if="planSaved && !isEditing" class="text-success-emphasis small" role="status" data-testid="itinerary-saved-status">✓ Itinerary saved for your group.</p>
       <p v-if="weatherLoading" class="text-secondary small">Checking the weather...</p>
       <div v-else-if="weather" class="info-banner" data-testid="itinerary-weather">
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1026,7 +1052,7 @@ onUnmounted(() => {
         <button type="button" class="btn btn-sm btn-outline-dark rounded-pill px-3"
           data-testid="itinerary-travel-retry" @click="loadTravel">Retry</button>
       </div>
-      <p v-if="saveError" class="text-danger" data-testid="itinerary-save-error">{{ saveError }}</p>
+      <p v-if="saveError" class="text-danger" role="alert" data-testid="itinerary-save-error">{{ saveError }}</p>
       <button v-if="saveConflict" type="button" class="btn btn-outline-dark rounded-pill mb-3"
         data-testid="itinerary-load-latest" @click="reloadLatestPlan">Load latest plan</button>
 

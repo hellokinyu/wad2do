@@ -19,6 +19,10 @@ export async function mockItinerary(
     writes: [],
     saveFailures: 0,
     voteFailures: 0,
+    availability: [],
+    timeSaveFailures: 0,
+    holdTimeSave: false,
+    releaseTimeSave: null,
     votes: [
       {
         activity_id: activityId,
@@ -46,7 +50,7 @@ export async function mockItinerary(
     is_member: true,
   }
   state.group = group
-  await page.route('**/rest/v1/**', (route) => {
+  await page.route('**/rest/v1/**', async (route) => {
     const request = route.request()
     // Every activity ever voted for stays in the catalog, even after its votes are removed
     state.catalog ??= {}
@@ -55,6 +59,16 @@ export async function mockItinerary(
     if (table === 'profiles') return route.fulfill({ json: { is_admin: false } })
     if (table === 'groups') {
       if (request.method() === 'PATCH') {
+        if (state.holdTimeSave) {
+          state.holdTimeSave = false
+          await new Promise((resolve) => {
+            state.releaseTimeSave = resolve
+          })
+        }
+        if (state.timeSaveFailures > 0) {
+          state.timeSaveFailures--
+          return route.fulfill({ status: 500, json: { message: 'Time save failed' } })
+        }
         const update = request.postDataJSON()
         if (update.chosen_start !== group.chosen_start || update.chosen_end !== group.chosen_end) {
           state.saved = null
@@ -67,7 +81,17 @@ export async function mockItinerary(
     if (table === 'wad2do_group_details') return route.fulfill({ json: group })
     if (table === 'group_members') return route.fulfill({ json: { user_id: mockUser.id } })
     if (table === 'get_group_member_names')
-      return route.fulfill({ json: [{ id: mockUser.id, display_name: 'Demo User' }] })
+      return route.fulfill({
+        json: state.members || [{ id: mockUser.id, display_name: 'Demo User' }],
+      })
+    if (table === 'availability') return route.fulfill({ json: state.availability || [] })
+    if (table === 'replace_group_availability') {
+      const body = request.postDataJSON()
+      state.availability = (state.availability || [])
+        .filter((row) => row.user_id !== mockUser.id)
+        .concat(body.p_slots.map((slot_start) => ({ user_id: mockUser.id, slot_start })))
+      return route.fulfill({ status: 204, body: '' })
+    }
     if (table === 'votes') {
       if (state.voteFailures > 0) {
         state.voteFailures--
@@ -78,7 +102,8 @@ export async function mockItinerary(
     if (table === 'save_group_itinerary') {
       const body = request.postDataJSON()
       const plan = {
-        group_id: body.p_group_id, stops: body.p_stops,
+        group_id: body.p_group_id,
+        stops: body.p_stops,
         total_cost: body.p_stops.reduce((total, stop) => total + stop.cost, 0),
         updated_by: body.p_expected_user_id,
       }

@@ -436,8 +436,7 @@ async function pickNewTimeAndPlan(page) {
   await page.getByTestId('slot-2026-10-31T10:00').click()
   await page.getByTestId('slot-2026-10-31T11:30').click()
   await page.getByTestId('confirm-time').click()
-  await expect(page.getByTestId('chosen-slot')).toContainText('31 Oct')
-  await page.getByTestId('plan-button').click()
+  await expect(page).toHaveURL(/\/itinerary/)
 }
 
 for (const failure of ['request', 'no routes']) {
@@ -477,7 +476,7 @@ for (const failure of ['request', 'no routes']) {
   })
 }
 
-test('Plan our day replaces the saved plan using the latest chosen time and votes', async ({ page }) => {
+test('confirm and build replaces the saved plan using the latest chosen time and votes', async ({ page }) => {
   const state = await mockItinerary(page, {
     hours: week({ Fri: { open24h: true }, Sat: { open24h: true } }),
   })
@@ -575,7 +574,7 @@ test('Save waits for edited travel times and reopening preserves the saved sched
   await page.route('**/functions/v1/onemap-route', async (route) => {
     await ready
     await route.fulfill({
-      json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 90 }] },
+      json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 60 }] },
     })
   })
   const request = page.waitForRequest('**/functions/v1/onemap-route')
@@ -585,12 +584,12 @@ test('Save waits for edited travel times and reopening preserves the saved sched
   expect(state.writes).toHaveLength(1)
   release()
   await expect(page.getByTestId('itinerary-save')).toBeEnabled()
-  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('22:30–23:30')
+  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('22:00–23:00')
   await page.getByTestId('itinerary-save').click()
   await expect(page.getByTestId('itinerary-edit')).toBeVisible()
-  expect(state.saved.stops[1]).toMatchObject({ start: '22:30', end: '23:30' })
+  expect(state.saved.stops[1]).toMatchObject({ start: '22:00', end: '23:00' })
   await page.reload()
-  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('22:30–23:30')
+  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('22:00–23:00')
   expect(state.writes).toHaveLength(2)
 })
 
@@ -714,9 +713,6 @@ test('confirming a new time invalidates the old plan before opening the Itinerar
   await page.getByTestId('slot-2026-10-31T15:00').click()
   await page.getByTestId('slot-2026-10-31T16:30').click()
   await page.getByTestId('confirm-time').click()
-  await expect(page.getByTestId('chosen-slot')).toContainText('31 Oct')
-  expect(state.saved).toBeNull()
-  await page.getByTestId('tab-itinerary').click()
   await expect(page.getByTestId('itinerary-summary')).toContainText('2026-10-31')
   await expect(page.getByTestId('itinerary-stop')).toContainText('15:00–16:00')
 })

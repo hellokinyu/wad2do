@@ -1,6 +1,7 @@
 <script setup>
 import AnimalAvatar from '@/components/AnimalAvatar.vue'
 
+defineProps({ message: { type: String, default: 'Loading plan…' } })
 // The friends in the car, from the back seat to the driver's seat
 const passengers = ['panda', 'cat', 'dog']
 </script>
@@ -51,7 +52,7 @@ const passengers = ['panda', 'cat', 'dog']
         </div>
       </div>
     </div>
-    <p class="loading-text">Loading plan...</p>
+    <p class="loading-text" aria-live="polite">{{ message }}</p>
   </div>
 </template>
 
