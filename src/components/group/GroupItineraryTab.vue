@@ -1284,13 +1284,26 @@ onUnmounted(() => {
 /* Date, time, cost and stops */
 .summary-panel {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem 1.5rem;
   margin-bottom: 1rem;
   padding: 16px 20px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--surface-2);
+}
+
+/* Leave room for both time inputs, including their controls while editing. */
+@media (min-width: 576px) {
+  .summary-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 1fr);
+  }
+}
+
+@media (min-width: 992px) {
+  .summary-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 1.6fr) minmax(0, 1fr) minmax(0, 0.5fr);
+  }
 }
 
 .summary-panel dt {
