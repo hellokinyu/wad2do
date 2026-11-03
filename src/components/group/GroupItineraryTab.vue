@@ -1,12 +1,13 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { getVisitHoursWarnings } from '@/lib/openingHours'
 import { fetchTravelOptions } from '@/lib/travelOptions'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
 import { formatPart, getStageStyle } from '@/lib/groupDisplay'
 import { useAuth } from '@/composables/useAuth'
+import { getPrice } from '@/lib/activityDisplay'
 import ItineraryTravelOptions from '@/components/group/ItineraryTravelOptions.vue'
 import ItineraryLoadingCar from '@/components/group/ItineraryLoadingCar.vue'
 
@@ -22,10 +23,11 @@ const allVotedActivities = ref([])
 const totalCost = computed(() => {
   let total = 0
   for (const stop of itinerary.value.stops) {
-    total += stop.cost
+    total += stop.cost ?? 0
   }
   return total
 })
+const hasUnknownPrices = computed(() => itinerary.value?.stops.some((stop) => stop.cost === null))
 
 // The day starts at the first stop and ends at the last one
 const startTime = computed(() => {
@@ -89,6 +91,7 @@ const notInPlan = computed(() => {
 
 // A short reason why an activity isn't in the plan
 function whyNotInPlan(activity) {
+  if (activity.cost === null) return 'Price unknown; cannot check the budget'
   const extra = totalCost.value + activity.cost - budget.value
   if (extra > 0) return 'Over budget by $' + extra
   return "Doesn't fit the time or opening hours"
@@ -154,7 +157,7 @@ const isRainy = computed(() => {
 function getRainAlternative(stop) {
   if (stop.indoor) return null
   const usedIds = itinerary.value.stops.map((s) => s.activity_id)
-  return votedActivities.value.find((a) => a.indoor && !usedIds.includes(a.activity_id)) || null
+  return votedActivities.value.find((a) => a.indoor && a.cost !== null && !usedIds.includes(a.activity_id)) || null
 }
 
 // The end time when `activity` starts at `start`, using its own length
@@ -236,6 +239,41 @@ const isEditing = ref(false)
 const replanButton = ref(null)
 let savedCopy = null // the plan as it was before editing, for Discard
 const dayStart = ref('10:00') // when the first stop begins
+const startField = ref(null)
+const endField = ref(null)
+const startDraft = ref(dayStart.value)
+const endDraft = ref('-')
+
+// Background weather/travel updates must not replace a time the user is still typing.
+watch(
+  [dayStart, () => itinerary.value ? endTime.value : '', isEditing],
+  ([start, end, editing], [previousStart, previousEnd]) => {
+    if (!editing || document.activeElement !== startField.value || startDraft.value === previousStart)
+      startDraft.value = start
+    if (!editing || document.activeElement !== endField.value || endDraft.value === previousEnd)
+      endDraft.value = end
+  },
+  { immediate: true },
+)
+
+const hasUnsavedChanges = computed(() =>
+  user.value?.id === loadedUserId && isEditing.value &&
+  (startDraft.value !== dayStart.value || endDraft.value !== endTime.value ||
+    JSON.stringify(itinerary.value?.stops) !== JSON.stringify(savedCopy?.stops)),
+)
+
+onBeforeRouteLeave(() =>
+  !hasUnsavedChanges.value || window.confirm('Leave and discard your unsaved itinerary changes?'),
+)
+
+function warnBeforeUnload(event) {
+  if (!hasUnsavedChanges.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+onMounted(() => window.addEventListener('beforeunload', warnBeforeUnload))
+onUnmounted(() => window.removeEventListener('beforeunload', warnBeforeUnload))
 
 // Give every stop a new start and end, in order, keeping each one's duration.
 // The gap after each stop is the real travel time of the chosen (or fastest) mode.
@@ -304,6 +342,7 @@ function stopsUntil(end) {
 function useStops(kept) {
   const removed = itinerary.value.stops.length - kept.length
   itinerary.value.stops = kept
+  endDraft.value = endTime.value
   timeError.value = ''
   timeNote.value = removed
     ? `${removed} ${removed === 1 ? "stop doesn't" : "stops don't"} fit any more, so ${removed === 1 ? 'it was' : 'they were'} moved to "Also voted for".`
@@ -319,7 +358,7 @@ function changeDayStart(event) {
   const putBack = (message) => {
     dayStart.value = before.dayStart
     itinerary.value.stops = before.stops
-    event.target.value = before.dayStart
+    event.target.value = startDraft.value = before.dayStart
     timeError.value = message
   }
   if (!start) return putBack('')
@@ -341,7 +380,7 @@ function changeDayEnd(event) {
   const end = event.target.value
   if (end === endTime.value) return
   const putBack = (message) => {
-    event.target.value = endTime.value
+    event.target.value = endDraft.value = endTime.value
     timeError.value = message
   }
   if (!stops.length || !end) return putBack('')
@@ -380,6 +419,10 @@ const saveConflict = ref(false)
 // Save the plan for this group (creates the row the first time, updates it after)
 async function saveChanges() {
   if (saving.value) return false
+  if (hasUnknownPrices.value) {
+    saveError.value = 'Remove stops with unknown prices before saving so the budget can be checked.'
+    return false
+  }
   saving.value = true
   saveError.value = ''
   saveConflict.value = false
@@ -472,6 +515,7 @@ function moveStop(index, direction) {
 
 // Add a voted activity to the end of the plan, even if it goes over budget
 function addStop(activity) {
+  if (activity.cost === null) return
   const before = [...itinerary.value.stops]
   itinerary.value.stops.push({
     activity_id: activity.activity_id,
@@ -534,7 +578,7 @@ function toPlanActivity(id, a) {
     activity_id: id,
     name: a.name,
     image_url: a.image_url || '',
-    cost: a.price_per_person ?? 0,
+    cost: getPrice(a.price_per_person),
     indoor: a.indoor,
     opening_hours: a.opening_hours,
     address: a.address || '',
@@ -563,7 +607,7 @@ function useSavedPlan(saved, activities) {
   const stops = saved.stops
     .map((s) => {
       const activity = activities.find((a) => a.activity_id === s.activity_id) || {}
-      return { ...activity, ...s }
+      return { ...activity, ...s, cost: activity.activity_id && activity.cost === null ? null : getPrice(s.cost) }
     })
     .filter((stop) => {
       const voted = allVotedActivities.value.find((a) => a.activity_id === stop.activity_id)
@@ -612,7 +656,7 @@ async function buildPlan() {
   let spent = 0
 
   for (const activity of sorted) {
-    if (current + activity.duration_min > endMinutes || spent + activity.cost > budget.value)
+    if (activity.cost === null || current + activity.duration_min > endMinutes || spent + activity.cost > budget.value)
       continue
     const previous = stops.at(-1)
     let arrival = current
@@ -878,7 +922,8 @@ onUnmounted(() => {
           <!-- Read-only text until Edit is pressed, so the panel doesn't change shape -->
           <dd class="d-flex align-items-center gap-1">
             <input
-              :value="dayStart"
+              ref="startField"
+              v-model="startDraft"
               type="time"
               class="time-input"
               :class="isEditing ? 'form-control' : 'form-control-plaintext'"
@@ -893,7 +938,8 @@ onUnmounted(() => {
             />
             –
             <input
-              :value="endTime"
+              ref="endField"
+              v-model="endDraft"
               type="time"
               class="time-input"
               :class="isEditing ? 'form-control' : 'form-control-plaintext'"
@@ -913,6 +959,9 @@ onUnmounted(() => {
           <dt>Cost per person</dt>
           <dd>
             <span :class="{ 'text-danger': isOverBudget }">${{ totalCost }}</span> of ${{ budget }}
+            <span v-if="hasUnknownPrices" class="d-block text-warning-emphasis small">
+              Known subtotal only; total incomplete because a stop's price is unknown. Remove unknown-price stops before saving.
+            </span>
             <span
               v-if="isOverBudget"
               class="badge rounded-pill text-bg-warning ms-1"
@@ -943,7 +992,7 @@ onUnmounted(() => {
         <template v-else>
           <button
             class="btn btn-dark rounded-pill px-4"
-            :disabled="saving || travelLoading || travelFailed"
+            :disabled="saving || travelLoading || travelFailed || hasUnknownPrices"
             data-testid="itinerary-save"
             @click="saveChanges"
           >
@@ -1016,7 +1065,7 @@ onUnmounted(() => {
                   </RouterLink>
                 </h3>
                 <p class="stop-range small text-secondary mb-1">{{ stop.start }}–{{ stop.end }}</p>
-                <p class="mb-1 small fw-semibold">${{ stop.cost }} per person</p>
+                <p class="mb-1 small fw-semibold">{{ stop.cost === null ? 'Price unknown' : '$' + stop.cost + ' per person' }}</p>
                 <p class="text-secondary small mb-1">{{ stop.reason }}</p>
                 <span
                   v-for="warning in getStopWarnings(stop)"
@@ -1113,12 +1162,13 @@ onUnmounted(() => {
             :key="activity.activity_id"
             class="d-flex flex-wrap align-items-center gap-2"
           >
-            <span class="flex-grow-1">{{ activity.name }} (${{ activity.cost }})</span>
+            <span class="flex-grow-1">{{ activity.name }} ({{ activity.cost === null ? 'Price unknown' : '$' + activity.cost }})</span>
             <span class="reason-chip">{{ whyNotInPlan(activity) }}</span>
             <button
               v-if="isEditing"
               class="btn btn-sm btn-outline-dark rounded-pill px-3"
               data-testid="itinerary-add-stop"
+              :disabled="activity.cost === null"
               @click="addStop(activity)"
             >
               Add anyway
