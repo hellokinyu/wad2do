@@ -201,6 +201,7 @@ for (const [field, value, firstRange, lastRange] of [
       await ready
       await route.fulfill({ json: { data: { records: [{ forecasts: [] }] } } })
     })
+    await page.clock.setFixedTime(new Date('2026-10-29T12:00:00+08:00'))
     await page.goto(`/groups/${groupId}/itinerary`)
     await page.getByTestId('itinerary-edit').click()
     const input = page.getByTestId(`itinerary-${field}-time`)
@@ -531,6 +532,55 @@ test('a failed first save shows an error and retry persists the generated plan',
   await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
   expect(state.writes).toHaveLength(2)
   expect(state.saved.stops[0]).toMatchObject({ start: '20:00', end: '21:00' })
+})
+
+test('a plan for today shows the 24-hour forecast', async ({ page }) => {
+  await mockItinerary(page, { hours: week({ Fri: { open: '20:00', close: '02:00' } }) })
+  await page.clock.setFixedTime(new Date('2026-10-30T14:00:00+08:00'))
+  await page.route('**/twenty-four-hr-forecast', (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          records: [
+            {
+              general: {
+                validPeriod: {
+                  start: '2026-10-30T12:00:00+08:00',
+                  end: '2026-10-31T12:00:00+08:00',
+                },
+                temperature: { low: 25, high: 35 },
+                forecast: { code: 'HT', text: 'Heavy Thundery Showers' },
+              },
+            },
+          ],
+        },
+      },
+    }),
+  )
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-weather')).toHaveText(
+    'Friday: Heavy Thundery Showers, 25–35°C',
+  )
+})
+
+test('a plan for a past day says the day has passed instead of offering a forecast', async ({
+  page,
+}) => {
+  await mockItinerary(page, { hours: week({ Fri: { open: '20:00', close: '02:00' } }) })
+  await page.clock.setFixedTime(new Date('2026-10-31T00:30:00+08:00'))
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-weather-past')).toHaveText(
+    "This day has passed, so there's no forecast.",
+  )
+  await expect(page.getByTestId('itinerary-weather-unavailable')).toHaveCount(0)
+})
+
+test('a future plan with no forecast yet says to check back', async ({ page }) => {
+  await mockItinerary(page, { hours: week({ Fri: { open: '20:00', close: '02:00' } }) })
+  await page.clock.setFixedTime(new Date('2026-10-20T12:00:00+08:00'))
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-weather-unavailable')).toBeVisible()
+  await expect(page.getByTestId('itinerary-weather-past')).toHaveCount(0)
 })
 
 test('rain alternatives and swaps check the replacement venue hours', async ({ page }) => {

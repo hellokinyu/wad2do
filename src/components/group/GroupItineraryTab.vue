@@ -6,6 +6,7 @@ import { getVisitHoursWarnings } from '@/lib/openingHours'
 import { fetchTravelOptions } from '@/lib/travelOptions'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
 import { formatPart, getStageStyle } from '@/lib/groupDisplay'
+import { fetchForecasts, getSgToday } from '@/lib/weatherForecast'
 import { useAuth } from '@/composables/useAuth'
 import { getPrice } from '@/lib/activityDisplay'
 import ItineraryTravelOptions from '@/components/group/ItineraryTravelOptions.vue'
@@ -19,13 +20,18 @@ const votedActivities = ref([])
 // Every voted activity with its vote total, including ones with more downs than ups
 const allVotedActivities = ref([])
 
+// 20.299999999999997 -> 20.3, so adding prices can't leave stray decimals
+function toCents(amount) {
+  return Math.round(amount * 100) / 100
+}
+
 // Add up the cost of every stop
 const totalCost = computed(() => {
   let total = 0
   for (const stop of itinerary.value.stops) {
     total += stop.cost ?? 0
   }
-  return total
+  return toCents(total)
 })
 const hasUnknownPrices = computed(() => itinerary.value?.stops.some((stop) => stop.cost === null))
 
@@ -92,8 +98,8 @@ const notInPlan = computed(() => {
 // A short reason why an activity isn't in the plan
 function whyNotInPlan(activity) {
   if (activity.cost === null) return 'Price unknown; cannot check the budget'
-  const extra = totalCost.value + activity.cost - budget.value
-  if (extra > 0) return 'Over budget by $' + extra
+  const extra = toCents(totalCost.value + activity.cost - budget.value)
+  if (extra > 0) return 'Over budget by $' + extra.toFixed(2)
   return "Doesn't fit the time or opening hours"
 }
 
@@ -133,19 +139,19 @@ const weatherLoading = ref(true)
 
 async function loadWeather() {
   try {
-    const response = await fetch('https://api-open.data.gov.sg/v2/real-time/api/four-day-outlook')
-    const json = await response.json()
-    const forecasts = json.data.records[0].forecasts
+    const forecasts = await fetchForecasts()
 
-    // Find the day that matches our plan. '2026-10-21T00:00:00+08:00' -> '2026-10-21'
-    weather.value =
-      forecasts.find((day) => day.timestamp.slice(0, 10) === itinerary.value.date) || null
+    // Find the day that matches our plan
+    weather.value = forecasts.find((day) => day.date === itinerary.value.date) || null
   } catch (error) {
     console.log(error)
   } finally {
     weatherLoading.value = false
   }
 }
+// True once the plan's date has gone by in Singapore
+const isPlanPast = computed(() => itinerary.value?.date < getSgToday())
+
 // True when the forecast mentions showers, rain or thunder
 const isRainy = computed(() => {
   if (!weather.value) return false
@@ -895,7 +901,13 @@ onUnmounted(() => {
 
     <!-- There is a plan -->
     <fieldset v-else class="border-0 p-0 m-0 w-100" :disabled="saving" data-testid="itinerary-plan">
-      <p v-if="weatherLoading" class="text-secondary small">Checking the weather...</p>
+      <div v-if="isPlanPast" class="info-banner muted" data-testid="itinerary-weather-past">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+        </svg>
+        <span>This day has passed, so there's no forecast.</span>
+      </div>
+      <p v-else-if="weatherLoading" class="text-secondary small">Checking the weather...</p>
       <div v-else-if="weather" class="info-banner" data-testid="itinerary-weather">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />

@@ -140,7 +140,7 @@ test('an activity left out for budget can be added anyway and shows as over budg
   await expect(page.getByTestId('itinerary-cost')).toContainText('$10 of $50')
   await expect(page.getByTestId('itinerary-over-budget')).toHaveCount(0)
   await expect(page.getByTestId('itinerary-not-in-plan')).toContainText('Pricey activity ($60)')
-  await expect(page.getByTestId('itinerary-not-in-plan')).toContainText('Over budget by $20')
+  await expect(page.getByTestId('itinerary-not-in-plan')).toContainText('Over budget by $20.00')
   await page.getByTestId('itinerary-edit').click()
   await page.getByTestId('itinerary-add-stop').click()
   await expect(page.getByTestId('itinerary-stop')).toHaveCount(2)
@@ -149,6 +149,20 @@ test('an activity left out for budget can be added anyway and shows as over budg
   await page.getByTestId('itinerary-save').click()
   await expect(page.getByTestId('itinerary-edit')).toBeVisible()
   expect(state.saved.total_cost).toBe(70)
+})
+
+test('prices with cents show the over-budget amount to 2dp and can still be saved', async ({ page }) => {
+  const state = await mockItinerary(page, { hours: week({ Fri: { open24h: true } }) })
+  state.votes[0].activities.price_per_person = 10.2
+  addVotes(state, [[secondId, 'Pricey activity', { price_per_person: 60.1 }]])
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-not-in-plan')).toContainText('Over budget by $20.30')
+  await page.getByTestId('itinerary-edit').click()
+  await page.getByTestId('itinerary-add-stop').click()
+  await expect(page.getByTestId('itinerary-cost')).toContainText('$70.3 of $50')
+  await page.getByTestId('itinerary-save').click()
+  await expect(page.getByTestId('itinerary-edit')).toBeVisible()
+  expect(state.saved.stops).toHaveLength(2)
 })
 
 test('stop names open the activity details, but not while editing', async ({ page }) => {
@@ -209,6 +223,7 @@ test('a saved unknown-price stop is flagged without rewriting the saved plan', a
 test('unknown-price indoor activities are not offered as rainy-day swaps', async ({ page }) => {
   const state = await mockItinerary(page, { hours: week({ Fri: { open24h: true } }), rainy: true })
   addVotes(state, [[secondId, 'Unknown indoor activity', { price_per_person: null, indoor: true }]])
+  await page.clock.setFixedTime(new Date('2026-10-29T12:00:00+08:00'))
   await page.goto(`/groups/${groupId}/itinerary`)
   await expect(page.getByTestId('itinerary-weather')).toBeVisible()
   await expect(page.getByTestId('itinerary-stop')).toHaveCount(1)
