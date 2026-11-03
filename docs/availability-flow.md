@@ -39,6 +39,8 @@ plan uses the plain itinerary route instead.
 states, and reports success only after saving a nonempty plan. A generated result with no
 stops offers Change time and Back to voting, and is not automatically saved. Successful
 saves emit `plan-saved`, so `GroupDetailView.vue` refreshes its header stage after completion.
+Stale saves return `PT409` rather than a retryable serialization error. Their drafts remain
+visible and Save stays disabled until the member explicitly loads the latest plan.
 Empty drafts use the confirmed outing start. Saving waits for travel calculations, then
 rejects stops outside the confirmed time window while keeping the draft and showing an error.
 The initial group/votes/plan/activity reads share one 30-second deadline. A stalled read

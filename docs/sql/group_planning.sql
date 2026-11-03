@@ -64,7 +64,8 @@ begin
     raise exception 'Only group members can do this.' using errcode = '42501';
   end if;
   if p_expected_revision is distinct from current_group.plan_revision then
-    raise exception 'The plan or group time changed. Load the latest plan before saving.' using errcode = '40001';
+    -- 40001 makes PostgREST 14 retry forever; a stale revision needs a new user decision.
+    raise exception 'The plan or group time changed. Load the latest plan before saving.' using errcode = 'PT409';
   end if;
   if current_group.chosen_start is null or current_group.chosen_end is null then
     raise exception 'Choose a group time before saving.' using errcode = '22023';
