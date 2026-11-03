@@ -1296,13 +1296,13 @@ onUnmounted(() => {
 /* Leave room for both time inputs, including their controls while editing. */
 @media (min-width: 576px) {
   .summary-panel {
-    grid-template-columns: minmax(0, 1fr) minmax(15rem, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 1fr);
   }
 }
 
 @media (min-width: 992px) {
   .summary-panel {
-    grid-template-columns: minmax(0, 1fr) minmax(15rem, 1.6fr) minmax(0, 1fr) minmax(0, 0.5fr);
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 1.6fr) minmax(0, 1fr) minmax(0, 0.5fr);
   }
 }
 
