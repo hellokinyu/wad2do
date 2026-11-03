@@ -598,6 +598,7 @@ test('rain alternatives and swaps check the replacement venue hours', async ({ p
       opening_hours: week({ Fri: { open: '22:00', close: '02:00' } }),
     },
   })
+  await page.clock.setFixedTime(new Date('2026-10-29T12:00:00+08:00'))
   await page.goto(`/groups/${groupId}/itinerary`)
   await page.getByTestId('itinerary-edit').click()
   await page.getByTestId('itinerary-rainy-toggle').check()
@@ -825,6 +826,7 @@ test('an indoor swap uses the replacement duration and moves the later stops', a
     ...state.votes[0], activity_id: '77777777-7777-4777-8777-777777777777',
     activities: { ...state.votes[0].activities, name: 'Second activity' },
   })
+  await page.clock.setFixedTime(new Date('2026-10-29T12:00:00+08:00'))
   await page.goto(`/groups/${groupId}/itinerary`)
   await expect(page.getByTestId('itinerary-stop')).toHaveCount(2)
   // Voted for after the plan was made, so it's only a rainy-day option

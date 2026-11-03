@@ -232,6 +232,35 @@ test('unknown-price indoor activities are not offered as rainy-day swaps', async
   await expect(page.getByTestId('itinerary-rainy-toggle')).toHaveCount(0)
 })
 
+for (const [name, forecastText, now, banner, toggles] of [
+  ['rain is forecast', 'Thundery Showers', '2026-10-29T12:00:00+08:00', 'itinerary-weather', 1],
+  ['the day is dry', 'Fair', '2026-10-29T12:00:00+08:00', 'itinerary-weather', 0],
+  ['no forecast is out yet', null, '2026-10-20T12:00:00+08:00', 'itinerary-weather-unavailable', 1],
+  ['the day has passed', null, '2026-10-31T12:00:00+08:00', 'itinerary-weather-past', 0],
+]) {
+  const forecasts = forecastText
+    ? [{
+        timestamp: '2026-10-30T00:00:00+08:00',
+        day: 'Friday',
+        forecast: { text: forecastText, summary: forecastText },
+        temperature: { low: 25, high: 30 },
+      }]
+    : []
+
+  test(`the rainy option is ${toggles ? 'offered' : 'hidden'} when ${name}`, async ({ page }) => {
+    const state = await mockItinerary(page, { hours: week({ Fri: { open24h: true } }), rainy: true })
+    // Over budget, so it stays out of the plan and can be the indoor alternative
+    addVotes(state, [[secondId, 'Indoor activity', { price_per_person: 60, indoor: true }]])
+    await page.route('https://api-open.data.gov.sg/**', (route) =>
+      route.fulfill({ json: { data: { records: [{ forecasts }] } } }),
+    )
+    await page.clock.setFixedTime(new Date(now))
+    await page.goto(`/groups/${groupId}/itinerary`)
+    await expect(page.getByTestId(banner)).toBeVisible()
+    await expect(page.getByTestId('itinerary-rainy-toggle')).toHaveCount(toggles)
+  })
+}
+
 test('unsaved itinerary edits warn on navigation and unload, while saved or discarded edits do not', async ({ page }) => {
   await mockItinerary(page, { hours: week({ Fri: { open24h: true } }) })
   await page.goto(`/groups/${groupId}/itinerary`)

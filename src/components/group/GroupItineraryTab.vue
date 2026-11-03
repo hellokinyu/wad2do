@@ -142,9 +142,14 @@ const isRainy = computed(() => {
   return text.includes('shower') || text.includes('rain') || text.includes('thunder')
 })
 
+// Offer rainy-day options when rain is forecast or there's no forecast yet, but not on a dry day
+const offersRainOption = computed(
+  () => !weatherLoading.value && !isPlanPast.value && (isRainy.value || !weather.value),
+)
+
 // An indoor activity the group voted for that isn't already in the plan
 function getRainAlternative(stop) {
-  if (stop.indoor) return null
+  if (stop.indoor || !offersRainOption.value) return null
   const usedIds = itinerary.value.stops.map((s) => s.activity_id)
   return votedActivities.value.find((a) => a.indoor && a.cost !== null && !usedIds.includes(a.activity_id)) || null
 }
@@ -1475,9 +1480,11 @@ onUnmounted(() => {
   color: var(--bs-info-text-emphasis);
 }
 
+/* Blue with a white dot when on, instead of the usual amber */
 .rainy-toggle .form-check-input:checked {
-  border-color: var(--ink);
-  background-color: var(--ink);
+  --bs-form-switch-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23fff'/%3e%3c/svg%3e");
+  border-color: #0d6efd;
+  background-color: #0d6efd;
 }
 
 /* Move up, remove and move down while editing */
