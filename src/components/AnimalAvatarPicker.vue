@@ -62,23 +62,27 @@ const selection = defineModel({ type: String, default: '' })
   align-items: center;
   gap: 0.65rem;
   padding: 1.15rem 0.35rem 0.8rem;
-  border: 2px solid #e5e5e0;
+  border: 2px solid var(--line);
   border-radius: 1.25rem;
-  background: #fff;
+  background: var(--surface);
+  color: var(--ink);
   transition:
     border-color 0.15s,
     background-color 0.15s;
 }
 .animal-option input:checked + .animal-tile {
-  border-color: #242820;
-  background: #f4f6ef;
+  /* Festive themes outline the chosen animal in the navbar's second colour */
+  border-color: var(--accent-edge, var(--ink));
+  background: var(--surface-2);
+  /* Every festive tile already has a coloured border, so the chosen one gets a thicker ring */
+  box-shadow: 0 0 0 2px var(--accent-edge, transparent);
 }
 .animal-option input:focus-visible + .animal-tile {
-  outline: 3px solid #617247;
+  outline: var(--focus-ring);
   outline-offset: 3px;
 }
 .animal-option:hover .animal-tile {
-  border-color: #929987;
+  border-color: var(--line-strong);
 }
 .animal-option input:disabled + .animal-tile {
   opacity: 0.65;
