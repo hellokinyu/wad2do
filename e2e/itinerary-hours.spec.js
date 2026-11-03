@@ -436,8 +436,7 @@ async function pickNewTimeAndPlan(page) {
   await page.getByTestId('slot-2026-10-31T10:00').click()
   await page.getByTestId('slot-2026-10-31T11:30').click()
   await page.getByTestId('confirm-time').click()
-  await expect(page.getByTestId('chosen-slot')).toContainText('31 Oct')
-  await page.getByTestId('plan-button').click()
+  await expect(page).toHaveURL(/\/itinerary/)
 }
 
 for (const failure of ['request', 'no routes']) {
@@ -477,7 +476,7 @@ for (const failure of ['request', 'no routes']) {
   })
 }
 
-test('Plan our day replaces the saved plan using the latest chosen time and votes', async ({ page }) => {
+test('confirm and build replaces the saved plan using the latest chosen time and votes', async ({ page }) => {
   const state = await mockItinerary(page, {
     hours: week({ Fri: { open24h: true }, Sat: { open24h: true } }),
   })
@@ -714,9 +713,6 @@ test('confirming a new time invalidates the old plan before opening the Itinerar
   await page.getByTestId('slot-2026-10-31T15:00').click()
   await page.getByTestId('slot-2026-10-31T16:30').click()
   await page.getByTestId('confirm-time').click()
-  await expect(page.getByTestId('chosen-slot')).toContainText('31 Oct')
-  expect(state.saved).toBeNull()
-  await page.getByTestId('tab-itinerary').click()
   await expect(page.getByTestId('itinerary-summary')).toContainText('2026-10-31')
   await expect(page.getByTestId('itinerary-stop')).toContainText('15:00–16:00')
 })

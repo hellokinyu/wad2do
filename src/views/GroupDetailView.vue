@@ -441,7 +441,9 @@ function onSettingsSaved() {
       </section>
 
       <div class="tab-content">
-        <RouterView />
+        <RouterView v-slot="{ Component }">
+          <component :is="Component" @plan-saved="refreshStage" />
+        </RouterView>
       </div>
     </div>
   </div>

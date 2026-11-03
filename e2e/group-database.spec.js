@@ -283,7 +283,9 @@ test('a live date shrink removes hidden slots and preserves valid selections for
   await expect(page.getByTestId('availability-save-error')).toBeVisible()
   await page.getByTestId('mode-heatmap').click()
   await page.getByTestId('slot-2026-10-31T11:00').click()
-  await expect(page.getByTestId('confirm-time')).toBeEnabled()
+  await page.getByTestId('slot-2026-10-31T11:30').click()
+  await expect(page.getByTestId('confirm-time')).toBeDisabled()
+  await expect(page.getByTestId('availability-action')).toContainText('Not confirmed yet')
   state.group.end_date = '2026-10-30'
   realtime.emit(topic, 'groups', 'UPDATE', { id: groupId })
   await expect(page.getByTestId('slot-2026-10-31T10:00')).toHaveCount(0)
@@ -564,4 +566,25 @@ test('joining by code handles a wrong code and opens the matching group without 
   await expect(page.getByTestId('group-header')).toContainText('Weekend group')
   expect(calls(state, 'wad2do_join_group')[1].body).toEqual({ p_invite_code: 'ABC234' })
   expect(calls(state, 'groups')).toHaveLength(0)
+})
+
+test('pending and failed personal saves block planning until the queue has saved', async ({ page }) => {
+  const state = await mockGroups(page)
+  state.holdSave = true
+  await page.goto(`/groups/${groupId}/availability`)
+  await slot(page, '10:00').click()
+  await expect(page.getByTestId('availability-next')).toBeDisabled()
+  await slot(page, '10:30').click()
+  await page.getByTestId('mode-heatmap').click()
+  await slot(page, '10:00').click()
+  await slot(page, '11:30').click()
+  await expect(page.getByTestId('confirm-time')).toBeDisabled()
+  state.fail = 'replace_group_availability'
+  state.releaseSave()
+  await expect(page.getByTestId('availability-save-error')).toBeVisible()
+  await expect(page.getByTestId('confirm-time')).toBeDisabled()
+  state.fail = ''
+  await page.getByTestId('availability-save-error').getByRole('button').click()
+  await expect(page.getByTestId('confirm-time')).toBeEnabled()
+  expect(state.availability).toHaveLength(2)
 })
