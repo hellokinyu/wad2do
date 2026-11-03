@@ -78,7 +78,7 @@ async function selectFilter(page, name, value) {
   await page.getByTestId('filter-confirm').click()
 }
 
-// Clears the filter panel's own filters (area, price, indoor/outdoor), not the search, category or sort
+// Clears source, area, price and indoor/outdoor, keeping search, category and sort
 async function clearFilters(page) {
   const dialog = page.getByRole('dialog', { name: 'Filter activities' })
   if (!(await dialog.isVisible())) await page.getByTestId('filters-toggle').click()
@@ -125,6 +125,106 @@ async function openActivityAndRememberPosition(page, link) {
   await link.click()
   return page.evaluate(() => window.activityDeparture)
 }
+
+for (const width of [375, 1280]) {
+  test(`source pills combine with filters and survive reload at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 })
+    const records = activities.map((activity, index) => ({
+      ...activity,
+      source: ['community', 'google', 'curated', 'stb'][index],
+    }))
+    records.push({ ...activities[1], id: 'community-kayak', source: 'community' })
+    await mockActivities(page, records)
+    await page.goto('/activities')
+
+    const sources = page.getByRole('group', { name: 'Sources', exact: true })
+    const cards = page.getByTestId('activity-card')
+    const community = sources.getByRole('button', { name: 'Community', exact: true })
+    await expect(sources.getByRole('button')).toHaveText([
+      'All sources',
+      'Community',
+      'Curated',
+      'Google Places',
+      'STB',
+    ])
+    for (const [label, name] of [
+      ['Curated', 'Picnic at Marina Barrage'],
+      ['Google Places', 'Sunset Kayaking'],
+      ['STB', 'Pottery Workshop'],
+    ]) {
+      await sources.getByRole('button', { name: label, exact: true }).click()
+      await expect(cards).toHaveCount(1)
+      await expect(cards).toContainText(name)
+    }
+    await community.focus()
+    await community.press('Space')
+    await expect(community).toHaveAttribute('aria-pressed', 'true')
+    await expect(cards).toHaveCount(2)
+    await pickCategory(page, 'Outdoor')
+    await expect(cards).toHaveCount(1)
+    await page.reload()
+    await expect(community).toHaveAttribute('aria-pressed', 'true')
+    await expect(categoryChip(page, 'Outdoor')).toHaveAttribute('aria-pressed', 'true')
+    await expect(cards).toHaveCount(1)
+
+    await selectFilter(page, 'price-filter', 'free')
+    await expect(cards).toHaveCount(0)
+    await page.getByTestId('empty-suggestion').filter({ hasText: 'Remove Community' }).click()
+    await expect(cards).toHaveCount(1)
+    await expect(cards).toContainText('Picnic at Marina Barrage')
+    await expect(sources.getByRole('button', { name: 'All sources' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await clearFilters(page)
+    await pickCategory(page, '')
+
+    await community.click()
+    await page.getByTestId('activity-search').fill('pottery')
+    await expect(page.getByTestId('activities-no-results')).toContainText('with these filters')
+    await page.getByTestId('empty-clear-filters').click()
+    await expect(cards).toHaveCount(5)
+    await expect(community).toHaveAttribute('aria-pressed', 'false')
+    await community.click()
+    await page.getByRole('button', { name: 'Remove Community filter', exact: true }).click()
+    await expect(cards).toHaveCount(5)
+    await community.click()
+    await page.getByTestId('clear-all-filters').click()
+    await expect(cards).toHaveCount(5)
+    await community.click()
+    await sources.getByRole('button', { name: 'All sources' }).click()
+    await expect(cards).toHaveCount(5)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    )
+  })
+}
+
+test('source selection resets pagination and only lists catalogue sources', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const records = Array.from({ length: 45 }, (_, index) => ({
+    ...activities[0],
+    id: `source-${index}`,
+    name: `Activity ${index}`,
+    source: index < 25 ? 'curated' : 'community',
+  }))
+  await mockActivities(page, records)
+  await page.goto('/activities')
+  const sources = page.getByRole('group', { name: 'Sources', exact: true })
+  await expect(sources.getByRole('button')).toHaveText(['All sources', 'Community', 'Curated'])
+  await page.getByRole('button', { name: 'Page 2', exact: true }).click()
+  await expect(page.getByTestId('activities-count')).toHaveText('Showing 21–40 of 45 activities')
+  await sources.getByRole('button', { name: 'Community', exact: true }).click()
+  await expect(page.getByTestId('activities-count')).toHaveText('Showing 1–20 of 20 activities')
+  await sources.getByRole('button', { name: 'Curated', exact: true }).click()
+  await page.getByRole('button', { name: 'Page 2', exact: true }).click()
+  await page.reload()
+  await expect(page.getByTestId('activities-count')).toHaveText('Showing 21–25 of 25 activities')
+  await expect(sources.getByRole('button', { name: 'Curated', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+})
 
 test('demo searches, combines filters and clears them', async ({ page }) => {
   await mockActivities(page)

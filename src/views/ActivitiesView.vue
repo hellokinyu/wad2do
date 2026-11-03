@@ -133,6 +133,7 @@ function readFilters() {
 const previousFilters = readFilters()
 const keyword = ref(String(previousFilters.keyword ?? ''))
 const selectedCategory = ref(String(previousFilters.category ?? ''))
+const selectedSource = ref(String(previousFilters.source ?? ''))
 const selectedSetting = ref(String(previousFilters.setting ?? ''))
 const selectedArea = ref(String(previousFilters.area ?? ''))
 const selectedPrice = ref(String(previousFilters.price ?? ''))
@@ -244,14 +245,27 @@ function closeFilters() {
   showFilters.value = false
 }
 
-watch([keyword, selectedCategory, selectedSetting, selectedArea, selectedPrice, sortBy], () => {
-  requestedPage.value = 1
-})
+watch(
+  [keyword, selectedCategory, selectedSource, selectedSetting, selectedArea, selectedPrice, sortBy],
+  () => {
+    requestedPage.value = 1
+  },
+)
 
 const categories = computed(() => {
   const values = activities.value.map((activity) => activity.category).filter(Boolean)
   return [...new Set(values)].sort()
 })
+
+const sourceLabels = {
+  community: 'Community',
+  curated: 'Curated',
+  google: 'Google Places',
+  stb: 'STB',
+}
+const sources = computed(() =>
+  [...new Set(activities.value.map((activity) => activity.source).filter(Boolean))].sort(),
+)
 
 // New chips arrive with the activities, so recheck which edges have more to scroll to
 watch(categories, async () => {
@@ -263,7 +277,7 @@ watch(categories, async () => {
 watch(selectedCategory, async () => {
   await nextTick()
   chipStrip.value
-    ?.querySelector('.category-chip.active')
+    ?.querySelector('[aria-label="Categories"] .category-chip.active')
     ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   updateChipEdges()
 })
@@ -311,6 +325,7 @@ function searchText(value) {
 const currentFilters = computed(() => ({
   keyword: keyword.value,
   category: selectedCategory.value,
+  source: selectedSource.value,
   area: selectedArea.value,
   price: selectedPrice.value,
   setting: selectedSetting.value,
@@ -326,6 +341,7 @@ function matchesFilters(activity, filters) {
 
   const matchesSearch = !search || text.includes(search)
   const matchesCategory = !filters.category || activity.category === filters.category
+  const matchesSource = !filters.source || activity.source === filters.source
   const matchesArea = !filters.area || activity.area?.trim() === filters.area
   const matchesPrice =
     !range ||
@@ -336,7 +352,14 @@ function matchesFilters(activity, filters) {
     (filters.setting === 'indoor' && activity.indoor === true) ||
     (filters.setting === 'outdoor' && activity.indoor === false)
 
-  return matchesSearch && matchesCategory && matchesSetting && matchesArea && matchesPrice
+  return (
+    matchesSearch &&
+    matchesCategory &&
+    matchesSource &&
+    matchesSetting &&
+    matchesArea &&
+    matchesPrice
+  )
 }
 
 const filteredActivities = computed(() => {
@@ -385,6 +408,11 @@ const narrowings = computed(() => {
       key: 'category',
       label: 'Show all categories',
       clear: () => (selectedCategory.value = ''),
+    },
+    selectedSource.value && {
+      key: 'source',
+      label: `Remove ${sourceLabels[selectedSource.value] ?? selectedSource.value}`,
+      clear: () => (selectedSource.value = ''),
     },
     selectedArea.value && {
       key: 'area',
@@ -460,7 +488,16 @@ async function changePage(page) {
 
 // Save on every change rather than on leaving, so a reload keeps the filters too
 watch(
-  [keyword, selectedCategory, selectedSetting, selectedArea, selectedPrice, sortBy, currentPage],
+  [
+    keyword,
+    selectedCategory,
+    selectedSource,
+    selectedSetting,
+    selectedArea,
+    selectedPrice,
+    sortBy,
+    currentPage,
+  ],
   () => {
     // While loading there are no results yet, so currentPage reads 1; keep the saved page until then
     if (loading.value) return
@@ -470,6 +507,7 @@ watch(
         JSON.stringify({
           keyword: keyword.value,
           category: selectedCategory.value,
+          source: selectedSource.value,
           setting: selectedSetting.value,
           area: selectedArea.value,
           price: selectedPrice.value,
@@ -483,12 +521,15 @@ watch(
   },
 )
 
-// The filter panel owns area, price and indoor/outdoor. Category has its chips, sort its own menu.
+// Category and source have their own pills; source also appears among the removable filters.
 const hasFilters = computed(() =>
-  Boolean(selectedArea.value || selectedPrice.value || selectedSetting.value),
+  Boolean(
+    selectedSource.value || selectedArea.value || selectedPrice.value || selectedSetting.value,
+  ),
 )
 
 function clearFilters() {
+  selectedSource.value = ''
   selectedArea.value = ''
   selectedPrice.value = ''
   selectedSetting.value = ''
@@ -500,6 +541,7 @@ function clearFilters() {
 async function clearSearchAndFilters() {
   keyword.value = ''
   selectedCategory.value = ''
+  selectedSource.value = ''
   selectedArea.value = ''
   selectedPrice.value = ''
   selectedSetting.value = ''
@@ -522,6 +564,11 @@ const noResultsHeading = computed(() => {
 
 const activeFilters = computed(() =>
   [
+    {
+      key: 'source',
+      label: sourceLabels[selectedSource.value] ?? selectedSource.value,
+      value: selectedSource,
+    },
     { key: 'area', label: selectedArea.value, value: selectedArea },
     {
       key: 'price',
@@ -689,40 +736,69 @@ onMounted(loadActivities)
       </button>
     </div>
 
-    <section ref="browseRow" class="browse-row" aria-label="Categories, sort and applied filters">
+    <section
+      ref="browseRow"
+      class="browse-row"
+      aria-label="Categories, sources, sort and applied filters"
+    >
       <div class="browse-controls">
         <!-- The fades and arrows only appear on a side that has more chips to scroll to -->
         <div class="chip-strip" :class="{ 'has-before': chipsBefore, 'has-after': chipsAfter }">
-          <div
-            ref="chipStrip"
-            class="category-chips"
-            role="group"
-            aria-label="Categories"
-            @scroll.passive="updateChipEdges"
-          >
-            <button
-              type="button"
-              class="category-chip"
-              :class="{ active: selectedCategory === '' }"
-              :aria-pressed="selectedCategory === ''"
-              data-testid="category-chip-all"
-              @click="selectedCategory = ''"
-            >
-              All
-            </button>
+          <div ref="chipStrip" class="category-chips" @scroll.passive="updateChipEdges">
+            <div class="filter-chip-group" role="group" aria-label="Categories">
+              <button
+                type="button"
+                class="category-chip"
+                :class="{ active: selectedCategory === '' }"
+                :aria-pressed="selectedCategory === ''"
+                data-testid="category-chip-all"
+                @click="selectedCategory = ''"
+              >
+                All
+              </button>
 
-            <button
-              v-for="category in categories"
-              :key="category"
-              type="button"
-              class="category-chip"
-              :class="{ active: selectedCategory === category }"
-              :aria-pressed="selectedCategory === category"
-              data-testid="category-chip"
-              @click="selectedCategory = category"
+              <button
+                v-for="category in categories"
+                :key="category"
+                type="button"
+                class="category-chip"
+                :class="{ active: selectedCategory === category }"
+                :aria-pressed="selectedCategory === category"
+                data-testid="category-chip"
+                @click="selectedCategory = category"
+              >
+                {{ category }}
+              </button>
+            </div>
+            <div
+              v-if="sources.length"
+              class="filter-chip-group source-chips"
+              role="group"
+              aria-label="Sources"
             >
-              {{ category }}
-            </button>
+              <button
+                type="button"
+                class="category-chip"
+                :class="{ active: selectedSource === '' }"
+                :aria-pressed="selectedSource === ''"
+                data-testid="source-chip-all"
+                @click="selectedSource = ''"
+              >
+                All sources
+              </button>
+              <button
+                v-for="source in sources"
+                :key="source"
+                type="button"
+                class="category-chip"
+                :class="{ active: selectedSource === source }"
+                :aria-pressed="selectedSource === source"
+                data-testid="source-chip"
+                @click="selectedSource = source"
+              >
+                {{ sourceLabels[source] ?? source }}
+              </button>
+            </div>
           </div>
           <!-- Mouse shortcuts only: keyboard users Tab through the chips, which scroll into view -->
           <button
@@ -1379,6 +1455,18 @@ onMounted(loadActivities)
   position: relative;
   flex: 1;
   min-width: 0;
+}
+
+.filter-chip-group {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.source-chips {
+  margin-left: 4px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
 }
 
 /* One row that scrolls sideways. No scrollbar: a fade on the edge with more chips says there's
