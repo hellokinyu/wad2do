@@ -203,6 +203,30 @@ never be run against the real project. No fault-injection tests run on the live 
 Browser tests mock Supabase and check the UI/API contract; they do not verify deployment
 or independent PostgreSQL connections running at the same time.
 
+The frontend regression checks in `e2e/group-database.spec.js` and
+`e2e/itinerary-editing.spec.js` also cover aligned availability rows, full-width day
+columns, 44px phone slots, arrow-key/Enter/Space selection, unknown-price exclusions
+(including rainy-day swaps and historical saved stops), and warnings before discarding
+unsaved itinerary changes. Run them with:
+
+```sh
+pnpm run test:e2e e2e/group-database.spec.js e2e/itinerary-editing.spec.js --project=chromium
+```
+
+These frontend fixes require no database migration. Unknown-price activities remain
+visible but cannot be added until their catalogue price is available. Existing plans
+are not rewritten automatically.
+
+Time inputs keep drafts until blur or Enter validates them, so background weather
+and routing responses cannot replace a time being typed. Unchanged focused fields
+still follow calculated times, so leaving them cannot accidentally shorten a stop.
+The itinerary hours tests hold those responses during editing and check that
+start/end changes still trim the plan correctly, save, and survive reload. Run them with:
+
+```sh
+pnpm run test:e2e e2e/itinerary-hours.spec.js --project=chromium
+```
+
 The follow-up checks passed: 199 Chromium tests, 25 unit tests, both disposable SQL
 verification scripts (including UUID-only/mismatched-code rejection), lint and production
 build. Three opt-in external-database tests were skipped; the group SQL verification

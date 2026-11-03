@@ -179,6 +179,92 @@ test('a later start fits the plan into the free time instead of refusing', async
   await expect(stops).toHaveCount(4)
 })
 
+for (const [field, value, firstRange, lastRange] of [
+  ['start', '14:00', '14:00–15:00', '18:30–19:30'],
+  ['end', '17:00', '12:00–13:00', '16:30–17:00'],
+]) {
+  test(`an uncommitted ${field} time survives a weather refresh and retimes on blur`, async ({ page }) => {
+    const state = await mockItinerary(page, {
+      hours: week({ Fri: { open24h: true } }),
+      start: '2026-10-30T04:00:00Z',
+      end: '2026-10-30T12:00:00Z',
+    })
+    for (let i = 2; i <= 5; i++) {
+      state.votes.push({
+        ...state.votes[0], activity_id: `77777777-7777-4777-8777-77777777777${i}`,
+        activities: { ...state.votes[0].activities, name: `Activity ${i}` },
+      })
+    }
+    let release
+    const ready = new Promise((resolve) => { release = resolve })
+    await page.route('https://api-open.data.gov.sg/**', async (route) => {
+      await ready
+      await route.fulfill({ json: { data: { records: [{ forecasts: [] }] } } })
+    })
+    await page.goto(`/groups/${groupId}/itinerary`)
+    await page.getByTestId('itinerary-edit').click()
+    const input = page.getByTestId(`itinerary-${field}-time`)
+    await input.fill(value)
+    release()
+    await expect(page.getByTestId('itinerary-weather-unavailable')).toBeVisible()
+    await expect(input).toHaveValue(value)
+    await input.blur()
+    const stops = page.getByTestId('itinerary-stop')
+    await expect(stops).toHaveCount(4)
+    await expect(stops.first()).toContainText(firstRange)
+    await expect(stops.last()).toContainText(lastRange)
+    await page.getByTestId('itinerary-save').click()
+    await expect(page.getByTestId('itinerary-edit')).toBeVisible()
+    await page.reload()
+    await expect(stops).toHaveCount(4)
+    await expect(stops.first()).toContainText(firstRange)
+    await expect(stops.last()).toContainText(lastRange)
+  })
+}
+
+for (const [stateName, interact, draft, stopCount, savedEnd] of [
+  ['edited', (input) => input.fill('14:30'), '14:30', 1, '13:30'],
+  ['unchanged focused', (input) => input.focus(), '15:30', 2, '15:30'],
+]) {
+  test(`a late travel calculation keeps an ${stateName} end-time field correct`, async ({ page }) => {
+    const state = await mockItinerary(page, {
+      hours: week({ Fri: { open24h: true } }),
+      start: '2026-10-30T04:00:00Z',
+      end: '2026-10-30T12:00:00Z',
+    })
+    state.votes.push({
+      ...state.votes[0], activity_id: '77777777-7777-4777-8777-777777777777',
+      activities: { ...state.votes[0].activities, name: 'Second activity' },
+    })
+    await page.goto(`/groups/${groupId}/itinerary`)
+    await page.getByTestId('itinerary-edit').click()
+    let release
+    const ready = new Promise((resolve) => { release = resolve })
+    await page.route('**/functions/v1/onemap-route', async (route) => {
+      await ready
+      await route.fulfill({ json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 60 }] } })
+    })
+    const request = page.waitForRequest('**/functions/v1/onemap-route')
+    await page.getByTestId('itinerary-start-time').fill('12:30')
+    await page.getByTestId('itinerary-start-time').blur()
+    await request
+    const end = page.getByTestId('itinerary-end-time')
+    await interact(end)
+    release()
+    await expect(page.getByTestId('itinerary-save')).toBeEnabled()
+    await expect(page.getByTestId('itinerary-stop').last()).toContainText('14:30–15:30')
+    await expect(end).toHaveValue(draft)
+    await end.blur()
+    await expect(page.getByTestId('itinerary-stop')).toHaveCount(stopCount)
+    await expect(end).toHaveValue(savedEnd)
+    await page.getByTestId('itinerary-save').click()
+    await expect(page.getByTestId('itinerary-edit')).toBeVisible()
+    await page.reload()
+    await expect(page.getByTestId('itinerary-stop')).toHaveCount(stopCount)
+    await expect(end).toHaveValue(savedEnd)
+  })
+}
+
 test('a generated plan is saved automatically and reopening it does not save again', async ({ page }) => {
   const state = await mockItinerary(page, {
     hours: week({ Fri: { open24h: true } }),

@@ -176,3 +176,74 @@ test('a saved stop the group has since voted down is left out of the plan', asyn
   await expect(stops).toContainText('Second activity')
   await expect(page.getByTestId('itinerary-not-in-plan')).toHaveCount(0)
 })
+
+test('unknown prices cannot enter a zero-budget plan or be manually added', async ({ page }) => {
+  const state = await mockItinerary(page, { hours: week({ Fri: { open24h: true } }) })
+  state.group.budget_per_person = 0
+  state.votes[0].activities.price_per_person = null
+  addVotes(state, [[secondId, 'Free activity', { price_per_person: 0 }]])
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-stop')).toHaveCount(1)
+  await expect(page.getByTestId('itinerary-stop')).toContainText('Free activity')
+  await expect(page.getByTestId('itinerary-not-in-plan')).toContainText('Night activity (Price unknown)')
+  expect(state.saved.stops.map((stop) => stop.activity_id)).toEqual([secondId])
+  await page.getByTestId('itinerary-edit').click()
+  await expect(page.getByTestId('itinerary-add-stop')).toBeDisabled()
+})
+
+test('a saved unknown-price stop is flagged without rewriting the saved plan', async ({ page }) => {
+  const state = await mockItinerary(page, { hours: week({ Fri: { open24h: true } }) })
+  state.votes[0].activities.price_per_person = null
+  state.saved = { stops: [{ activity_id: activityId, start: '20:00', end: '21:00', cost: 0 }], total_cost: 0 }
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-stop')).toContainText('Price unknown')
+  await expect(page.getByTestId('itinerary-stop')).not.toContainText('$0 per person')
+  await expect(page.getByTestId('itinerary-cost')).toContainText('incomplete')
+  await page.getByTestId('itinerary-edit').click()
+  await expect(page.getByTestId('itinerary-save')).toBeDisabled()
+  await page.getByTestId('itinerary-remove').click()
+  await expect(page.getByTestId('itinerary-save')).toBeEnabled()
+  expect(state.writes).toHaveLength(0)
+})
+
+test('unknown-price indoor activities are not offered as rainy-day swaps', async ({ page }) => {
+  const state = await mockItinerary(page, { hours: week({ Fri: { open24h: true } }), rainy: true })
+  addVotes(state, [[secondId, 'Unknown indoor activity', { price_per_person: null, indoor: true }]])
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-weather')).toBeVisible()
+  await expect(page.getByTestId('itinerary-stop')).toHaveCount(1)
+  await expect(page.getByTestId('itinerary-rainy-toggle')).toHaveCount(0)
+})
+
+test('unsaved itinerary edits warn on navigation and unload, while saved or discarded edits do not', async ({ page }) => {
+  await mockItinerary(page, { hours: week({ Fri: { open24h: true } }) })
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await page.getByTestId('itinerary-edit').click()
+  const unloadCancelled = () => page.evaluate(() =>
+    !window.dispatchEvent(new Event('beforeunload', { cancelable: true })))
+  expect(await unloadCancelled()).toBe(false)
+  await page.getByTestId('itinerary-remove').click()
+  expect(await unloadCancelled()).toBe(true)
+  const rejected = page.waitForEvent('dialog')
+  const firstNavigation = page.getByTestId('tab-activities').click()
+  const dialog = await rejected
+  expect(dialog.message()).toContain('unsaved')
+  await dialog.dismiss()
+  await firstNavigation
+  await expect(page).toHaveURL(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-stop')).toHaveCount(0)
+  await page.getByTestId('itinerary-discard').click()
+  expect(await unloadCancelled()).toBe(false)
+  await page.getByTestId('itinerary-edit').click()
+  await page.getByTestId('itinerary-remove').click()
+  await page.getByTestId('itinerary-save').click()
+  await expect(page.getByTestId('itinerary-edit')).toBeVisible()
+  expect(await unloadCancelled()).toBe(false)
+  await page.getByTestId('itinerary-edit').click()
+  await page.getByTestId('itinerary-add-stop').click()
+  const accepted = page.waitForEvent('dialog')
+  const lastNavigation = page.getByTestId('tab-activities').click()
+  await (await accepted).accept()
+  await lastNavigation
+  await expect(page).toHaveURL(`/groups/${groupId}/activities`)
+})

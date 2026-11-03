@@ -158,6 +158,61 @@ async function mockGroups(page) {
 const calls = (state, endpoint) => state.requests.filter((request) => request.endpoint === endpoint)
 const slot = (page, time) => page.getByTestId('slot-2026-10-30T' + time)
 
+for (const width of [375, 1280]) {
+  test(`availability rows align and use the full width at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 850 })
+    await mockGroups(page)
+    await page.goto(`/groups/${groupId}/availability`)
+    await expect(slot(page, '22:00')).toBeVisible()
+    const geometry = await page.getByTestId('availability-grid').evaluate((grid) => {
+      const labels = [...grid.querySelectorAll('.time-cell')]
+      const columns = [...grid.querySelectorAll('.day-col')]
+      return {
+        offsets: columns.flatMap((column) => [...column.querySelectorAll('.slot')].map((cell, i) =>
+          Math.abs(cell.getBoundingClientRect().y - labels[i].getBoundingClientRect().y))),
+        height: columns[0].querySelector('.slot').getBoundingClientRect().height,
+        unused: grid.getBoundingClientRect().right - columns.at(-1).getBoundingClientRect().right,
+      }
+    })
+    expect(Math.max(...geometry.offsets)).toBeLessThanOrEqual(1)
+    expect(geometry.unused).toBeLessThanOrEqual(2)
+    expect(geometry.height).toBeGreaterThanOrEqual(width === 375 ? 44 : 24)
+  })
+}
+
+test('keyboard marks availability and picks a heatmap range without tabbing through every slot', async ({ page }) => {
+  const state = await mockGroups(page)
+  await page.goto(`/groups/${groupId}/availability`)
+  const first = slot(page, '09:00')
+  await expect(first).toHaveAccessibleName(/Fri.*30 Oct.*9am.*Not free/)
+  await page.getByTestId('mode-heatmap').focus()
+  await page.keyboard.press('Tab')
+  await expect(first).toBeFocused()
+  await first.press('Enter')
+  await expect(first).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(() => state.availability.length).toBe(1)
+  await first.press('ArrowUp')
+  await expect(first).toBeFocused()
+  await first.press('ArrowDown')
+  await expect(slot(page, '09:30')).toBeFocused()
+  await page.keyboard.press('Space')
+  await expect.poll(() => state.availability.length).toBe(2)
+  await page.keyboard.press('ArrowRight')
+  await expect(page.getByTestId('slot-2026-10-31T09:30')).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect.poll(() => state.availability.length).toBe(3)
+  await page.getByTestId('mode-heatmap').click()
+  await first.focus()
+  await expect(first).toHaveAccessibleName(/1 of 2 free/)
+  await first.press('Enter')
+  await first.press('ArrowDown')
+  await page.keyboard.press('Enter')
+  await expect(first).toHaveAttribute('aria-pressed', 'true')
+  await expect(slot(page, '09:30')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('slot-info')).toContainText('1 of 2 free')
+  await expect(page.getByTestId('confirm-time')).toBeEnabled()
+})
+
 test('live availability, membership and time changes refresh without erasing a pending selection', async ({ page }) => {
   const state = await mockGroups(page)
   const realtime = await mockRealtime(page)

@@ -148,8 +148,12 @@
       </div>
 
       <!-- THE GRID: days across the top, 30-minute slots down the side (CSS Grid, see <style>) -->
+      <p id="availability-keyboard-help" class="small text-secondary">
+        Use arrow keys to move between slots. Press Enter or Space to mark availability or pick a group time.
+      </p>
       <div class="grid-scroll" data-testid="availability-grid">
-        <div class="avail-grid" :style="{ '--cols': daysPerPage }" @mouseleave="hoveredKey = null">
+        <div class="avail-grid" role="group" aria-label="Availability slots" aria-describedby="availability-keyboard-help"
+          :style="{ '--cols': visibleDays.length }" @mouseleave="hoveredKey = null">
           <!-- time labels column -->
           <div class="time-col">
             <div class="head-cell"></div>
@@ -165,9 +169,10 @@
             class="day-col"
           >
             <div class="head-cell">{{ formatDay(day) }}</div>
-            <div
+            <button
               v-for="t in times"
               :key="t"
+              type="button"
               class="slot"
               :class="{
                 'slot-free': mode === 'mine' && mySlots[makeKey(day, t)],
@@ -177,11 +182,17 @@
               }"
               :style="cellStyle(day, t)"
               :data-testid="'slot-' + makeKey(day, t)"
-              @mousedown.prevent="onCellDown(day, t)"
+              :tabindex="tabStop === makeKey(day, t) ? 0 : -1"
+              :aria-label="slotAccessibleLabel(day, t)"
+              :aria-pressed="mode === 'mine' ? !!mySlots[makeKey(day, t)] : isInPick(makeKey(day, t))"
+              @focus="focusedSlot = hoveredKey = makeKey(day, t)"
+              @keydown="moveSlotFocus($event, day, t)"
+              @click="activateSlot($event, day, t)"
+              @mousedown.left.prevent="onCellDown(day, t)"
               @mouseenter="onCellEnter(day, t)"
             >
               {{ slotLabel(day, t) }}
-            </div>
+            </button>
           </div>
         </div>
       </div>
@@ -303,6 +314,7 @@ const mySlots = ref({}) // my slots as an object: { "2026-10-17T14:00": true }
 
 const mode = ref('mine') // 'mine' | 'heatmap'
 const hoveredKey = ref(null) // slot being hovered/tapped in the heatmap
+const focusedSlot = ref(null)
 const pickStart = ref(null) // first slot picked on the heatmap
 const pickEnd = ref(null) // second slot picked on the heatmap
 const showPopup = ref(false) // celebration popup
@@ -395,6 +407,11 @@ const visibleDays = computed(() => {
   const start = page.value * daysPerPage.value
   return days.value.slice(start, start + daysPerPage.value)
 })
+const tabStop = computed(() =>
+  visibleDays.value.some((day) => focusedSlot.value?.startsWith(day))
+    ? focusedSlot.value
+    : makeKey(visibleDays.value[0], times.value[0]),
+)
 const pageLabel = computed(() => {
   const v = visibleDays.value
   if (!v.length) return ''
@@ -668,6 +685,31 @@ async function loadAll() {
 }
 
 // ---------- marking my availability (tap or drag) ----------
+function slotAccessibleLabel(day, t) {
+  const key = makeKey(day, t)
+  const status = mode.value === 'mine'
+    ? (mySlots.value[key] ? 'Free' : 'Not free')
+    : `${freeCount(day, t)} of ${members.value.length} free`
+  return `${formatDay(day)}, ${formatTime(t)} to ${formatTime(nextSlotKey(key).slice(11))}. ${status}`
+}
+
+function moveSlotFocus(event, day, t) {
+  if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return
+  event.preventDefault()
+  const dayIndex = visibleDays.value.indexOf(day) + (event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0)
+  const timeIndex = times.value.indexOf(t) + (event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0)
+  if (!visibleDays.value[dayIndex] || !times.value[timeIndex]) return
+  const key = makeKey(visibleDays.value[dayIndex], times.value[timeIndex])
+  event.currentTarget.closest('.avail-grid').querySelector(`[data-testid="slot-${key}"]`).focus()
+}
+
+function activateSlot(event, day, t) {
+  // Pointer clicks already paint on mousedown; keyboard and assistive clicks have no mouse press.
+  if (event.detail !== 0) return
+  onCellDown(day, t)
+  void onMouseUp()
+}
+
 function onCellDown(day, t) {
   const key = makeKey(day, t)
   if (mode.value === 'mine') {
@@ -863,14 +905,17 @@ onMounted(async () => {
 
 /* CSS Grid: one narrow time column + one column per day (--cols is set from the template) */
 .avail-grid {
+  --slot-height: 24px;
   display: grid;
   grid-template-columns: 3.5rem repeat(var(--cols), minmax(3.5rem, 1fr));
 }
 
 .time-col,
 .day-col {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: 2rem;
+  grid-auto-rows: var(--slot-height);
+  row-gap: 2px;
 }
 
 .head-cell {
@@ -881,7 +926,9 @@ onMounted(async () => {
 }
 
 .time-cell {
-  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   font-size: 0.7rem;
   text-align: right;
   padding-right: 0.3rem;
@@ -889,8 +936,8 @@ onMounted(async () => {
 
 /* Rounded, soft cells that smoothly change colour */
 .slot {
-  height: 1.5rem;
-  margin: 1px;
+  padding: 0;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-xs);
   background-color: var(--surface);
@@ -899,9 +946,16 @@ onMounted(async () => {
   justify-content: center;
   font-size: 0.72rem;
   font-weight: 600;
+  color: var(--ink);
   line-height: 1;
   cursor: pointer;
   transition: background-color 0.25s ease, transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+@media (max-width: 767.98px) {
+  .avail-grid {
+    --slot-height: 44px;
+  }
 }
 /* Hover: the slot lifts up a little */
 .slot:hover {
