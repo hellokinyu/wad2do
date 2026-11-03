@@ -5,7 +5,6 @@ import { supabase } from '@/lib/supabase'
 import { getVisitHoursWarnings } from '@/lib/openingHours'
 import { fetchTravelOptions } from '@/lib/travelOptions'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
-import { formatPart, getStageStyle } from '@/lib/groupDisplay'
 import { fetchForecasts, getSgToday } from '@/lib/weatherForecast'
 import { useAuth } from '@/composables/useAuth'
 import { getPrice } from '@/lib/activityDisplay'
@@ -414,7 +413,7 @@ const saveConflict = ref(false)
 
 // Save the plan for this group (creates the row the first time, updates it after)
 async function saveChanges() {
-  if (saving.value) return false
+  if (saving.value || saveConflict.value) return false
   if (hasUnknownPrices.value) {
     saveError.value = 'Remove stops with unknown prices before saving so the budget can be checked.'
     return false
@@ -465,7 +464,7 @@ async function saveChanges() {
     return true
   } catch (error) {
     console.log(error)
-    saveConflict.value = error?.code === '40001'
+    saveConflict.value = error?.code === 'PT409' || error?.code === '40001'
     saveError.value = saveConflict.value
       ? 'The plan or group time changed. Your edits are still here. Load the latest plan before saving.'
       : "Couldn't save the plan. Please try again."
@@ -1036,7 +1035,7 @@ onUnmounted(() => {
         <template v-else>
           <button
             class="btn btn-dark rounded-pill px-4"
-            :disabled="saving || travelLoading || travelFailed || hasUnknownPrices"
+            :disabled="saving || saveConflict || travelLoading || travelFailed || hasUnknownPrices"
             data-testid="itinerary-save"
             @click="saveChanges"
           >

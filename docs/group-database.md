@@ -35,7 +35,9 @@ change before the updated frontend has been shared. The new frontend requires th
 
 Every itinerary write (including admin edits/deletions), budget/date change, or chosen-time
 change advances the revision. A save locks the group and rejects a stale revision with
-`40001`; its draft stays visible until the member explicitly loads the latest plan.
+`PT409` (HTTP 409); its draft stays visible until the member explicitly loads the latest plan.
+Save stays disabled after a conflict until that reload, so the same stale revision cannot
+be submitted again. The frontend also recognises the earlier `40001` response during rollout.
 The database derives the author and total cost. Changing the chosen start or end removes
 the old plan in the same transaction. Reconfirming the same time preserves it. A failed
 new generation leaves no obsolete plan attached to the new time; generation with an
@@ -60,6 +62,26 @@ member itinerary writes; run those before this final permission change. Browser 
 cover conflicting editors, delayed travel, Discard, new chosen times, and real client
 WebSocket handling with intercepted events. Live multi-connection/Realtime writes remain
 outside these local checks.
+
+### CPU incident — 3 Nov 2026
+
+The earlier save function raised `40001` for a stale application revision. PostgREST 14.18
+interpreted this as a retryable serialization failure and kept retrying inside the server,
+even without new browser requests. Live logs showed 899 repeated failures in a 15-minute
+window and four affected PostgREST backends. This is the documented
+[PostgREST 14 retry bug](https://supabase.com/kb/troubleshooting/high-cpu-and-infinite-transaction-retries-when-using-custom-error-codes-in-rpc-functions).
+
+The `avoid_retrying_stale_itinerary_saves` migration replaced only that SQLSTATE with
+`PT409` in the shared project's existing function; its permissions, revision checks and
+saved plans were preserved. The source in `group_planning.sql` matches the new behavior.
+A live check deliberately supplied a missing revision and confirmed `PT409` before any
+write. The four old backends disappeared without a manual restart or termination; the
+rollback count then stayed unchanged across a 35-second observation. CPU chart recovery
+still needs to be checked over the same time range; query statistics are cumulative.
+
+For another deployment, use the updated function definition. If old retries remain,
+identify the affected backend PIDs from the repeated errors and follow Supabase's cleanup
+instructions above; do not terminate unrelated connections or reset database statistics.
 
 ## Rollout status — 28 Oct 2026
 

@@ -108,7 +108,7 @@ export async function mockItinerary(
         updated_by: body.p_expected_user_id,
       }
       if (body.p_expected_revision !== group.plan_revision)
-        return route.fulfill({ status: 409, json: { code: '40001', message: 'Plan changed' } })
+        return route.fulfill({ status: 409, json: { code: 'PT409', message: 'Plan changed' } })
       state.writes.push(plan)
       if (state.saveFailures > 0) {
         state.saveFailures--

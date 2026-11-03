@@ -743,6 +743,7 @@ test('a stale editor keeps its draft and must explicitly load the latest plan', 
   await expect(other.getByTestId('itinerary-save')).toBeEnabled()
   await other.getByTestId('itinerary-save').click()
   await expect(other.getByTestId('itinerary-save-error')).toContainText('Your edits are still here')
+  await expect(other.getByTestId('itinerary-save')).toBeDisabled()
   await expect(other.getByTestId('itinerary-stop')).toHaveCount(2)
   await expect(other.getByTestId('itinerary-start-time')).toHaveValue('20:30')
   expect(state.saved).toEqual(latest)
