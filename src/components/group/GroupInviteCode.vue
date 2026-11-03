@@ -138,9 +138,9 @@ async function shareCode() {
   width: 168px;
   height: 168px;
   padding: 8px;
-  border: 1px solid #e5e5e5;
-  border-radius: 16px;
-  background: white;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
 }
 
 figcaption,
@@ -154,7 +154,7 @@ figcaption,
 }
 
 .copied {
-  color: #111;
+  color: var(--ink);
   font-weight: 600;
 }
 
@@ -174,16 +174,16 @@ figcaption,
   content: '';
   width: 1px;
   height: 44px;
-  background: #e5e5e5;
+  background: var(--surface-3);
 }
 
 /* The 6-character code, spaced out so it's easy to read aloud or type */
 .invite-code {
   padding: 8px 10px 8px 20px;
-  border: 1px dashed #bbb;
-  border-radius: 12px;
-  background: #fafafa;
-  color: #111;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--ink);
   font-size: 1.75rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -196,17 +196,11 @@ figcaption,
 }
 
 .invite-code:hover {
-  border-color: #111;
-  background: white;
+  border-color: var(--ink);
+  background: var(--surface);
 }
 
 .invite-code:focus-visible,
-.share-button:focus-visible {
-  outline: 2px solid #111;
-  outline-offset: 3px;
-  box-shadow: none;
-}
-
 .share-button {
   display: inline-flex;
   align-items: center;

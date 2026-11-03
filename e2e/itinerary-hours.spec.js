@@ -1,132 +1,8 @@
 import { test, expect } from '@playwright/test'
-import { mockUser, signInMockUser } from './helpers/auth'
+import { mockUser } from './helpers/auth'
+import { activityId, groupId, mockItinerary, week } from './helpers/itinerary'
 
 test.use({ timezoneId: 'America/Los_Angeles' })
-const groupId = '44444444-4444-4444-8444-444444444444'
-const activityId = '55555555-5555-4555-8555-555555555555'
-const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const week = (entries) => ({
-  ...Object.fromEntries(days.map((day) => [day, { closed: true }])),
-  ...entries,
-})
-
-async function mockItinerary(
-  page,
-  { hours, start = '2026-10-30T12:00:00Z', end = '2026-10-30T15:00:00Z', rainy = false, backend },
-) {
-  await signInMockUser(page)
-  const state = backend || {
-    saved: null,
-    writes: [],
-    saveFailures: 0,
-    voteFailures: 0,
-    votes: [
-      {
-        activity_id: activityId,
-        value: 1,
-        activities: {
-          name: 'Night activity',
-          indoor: !rainy,
-          price_per_person: 10,
-          duration_min: 60,
-          opening_hours: hours,
-        },
-      },
-    ],
-  }
-  const group = state.group || {
-    id: groupId,
-    name: 'Weekend group',
-    start_date: '2026-10-30',
-    end_date: '2026-11-02',
-    budget_per_person: 50,
-    plan_revision: 0,
-    chosen_start: start,
-    chosen_end: end,
-    group_members: [{ count: 1 }],
-    is_member: true,
-  }
-  state.group = group
-  await page.route('**/rest/v1/**', (route) => {
-    const request = route.request()
-    const table = new URL(request.url()).pathname.split('/').pop()
-    if (table === 'profiles') return route.fulfill({ json: { is_admin: false } })
-    if (table === 'groups') {
-      if (request.method() === 'PATCH') {
-        const update = request.postDataJSON()
-        if (update.chosen_start !== group.chosen_start || update.chosen_end !== group.chosen_end) {
-          state.saved = null
-          group.plan_revision++
-        }
-        Object.assign(group, update)
-      }
-      return route.fulfill({ json: group })
-    }
-    if (table === 'wad2do_group_details') return route.fulfill({ json: group })
-    if (table === 'group_members') return route.fulfill({ json: { user_id: mockUser.id } })
-    if (table === 'get_group_member_names')
-      return route.fulfill({ json: [{ id: mockUser.id, display_name: 'Demo User' }] })
-    if (table === 'votes') {
-      if (state.voteFailures > 0) {
-        state.voteFailures--
-        return route.fulfill({ status: 500, json: { message: 'Votes unavailable' } })
-      }
-      return route.fulfill({ json: state.votes })
-    }
-    if (table === 'save_group_itinerary') {
-      const body = request.postDataJSON()
-      const plan = {
-        group_id: body.p_group_id, stops: body.p_stops,
-        total_cost: body.p_stops.reduce((total, stop) => total + stop.cost, 0),
-        updated_by: body.p_expected_user_id,
-      }
-      if (body.p_expected_revision !== group.plan_revision)
-        return route.fulfill({ status: 409, json: { code: '40001', message: 'Plan changed' } })
-      state.writes.push(plan)
-      if (state.saveFailures > 0) {
-        state.saveFailures--
-        return route.fulfill({ status: 500, json: { message: 'Save failed' } })
-      }
-      state.saved = plan
-      group.plan_revision++
-      return route.fulfill({ json: group.plan_revision })
-    }
-    if (table === 'itineraries') {
-      if (request.method() !== 'GET')
-        return route.fulfill({ status: 403, json: { message: 'Use the checked save function' } })
-      return route.fulfill({ json: state.saved })
-    }
-    return route.fulfill({ json: [] })
-  })
-  await page.route('**/functions/v1/onemap-route', (route) =>
-    route.fulfill({
-      json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 30 }] },
-    }),
-  )
-  await page.route('https://api-open.data.gov.sg/**', (route) =>
-    route.fulfill({
-      json: {
-        data: {
-          records: [
-            {
-              forecasts: rainy
-                ? [
-                    {
-                      timestamp: '2026-10-30T00:00:00+08:00',
-                      day: 'Friday',
-                      forecast: { text: 'Showers', summary: 'Showers' },
-                      temperature: { low: 25, high: 30 },
-                    },
-                  ]
-                : [],
-            },
-          ],
-        },
-      },
-    }),
-  )
-  return state
-}
 
 test('Plan accepts a Friday evening visit ending before an overnight closing time', async ({
   page,
@@ -144,7 +20,7 @@ test('Plan excludes a visit before opening even when its end is before closing',
   await mockItinerary(page, {
     hours: week({ Fri: { open: '10:00', close: '18:00' } }),
     start: '2026-10-30T01:00:00Z',
-    end: '2026-10-30T04:00:00Z',
+    end: '2026-10-30T11:00:00Z', // free 09:00–19:00, so both edits below are allowed
   })
   await page.goto(`/groups/${groupId}/itinerary`)
   await expect(page.getByTestId('itinerary-plan')).toBeVisible()
@@ -182,9 +58,12 @@ test('edited and reloaded plans use the same hours checks as initial planning', 
   })
   await page.goto(`/groups/${groupId}/itinerary`)
   await page.getByTestId('itinerary-edit').click()
+  // 19:00 is before the group's free time (20:00–23:00), so the start stays put
   await page.getByTestId('itinerary-start-time').fill('19:00')
   await page.getByTestId('itinerary-start-time').blur()
-  await expect(page.getByTestId('itinerary-stop-warning')).toHaveText('Opens at 20:00')
+  await expect(page.getByTestId('itinerary-time-error')).toContainText('20:00–23:00')
+  await expect(page.getByTestId('itinerary-start-time')).toHaveValue('20:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
   await page.getByTestId('itinerary-discard').click()
   await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
   await expect(page.getByTestId('itinerary-stop-warning')).toHaveCount(0)
@@ -200,6 +79,192 @@ test('edited and reloaded plans use the same hours checks as initial planning', 
   await expect(page.getByTestId('itinerary-stop')).toContainText('21:00–22:00')
   await expect(page.getByTestId('itinerary-stop-warning')).toHaveCount(0)
 })
+
+test('editing the end time changes the last stop and saves it', async ({ page }) => {
+  const state = await mockItinerary(page, {
+    hours: week({ Fri: { open: '20:00', close: '02:00' } }),
+  })
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await page.getByTestId('itinerary-edit').click()
+  const end = page.getByTestId('itinerary-end-time')
+  await expect(end).toHaveValue('21:00')
+  await end.fill('19:30') // before the last stop starts: not allowed
+  await end.blur()
+  await expect(end).toHaveValue('21:00')
+  await end.fill('23:30') // after the group's free time ends at 23:00
+  await end.blur()
+  await expect(page.getByTestId('itinerary-time-error')).toContainText('20:00–23:00')
+  await expect(end).toHaveValue('21:00')
+  await end.fill('22:30')
+  await end.blur()
+  await expect(page.getByTestId('itinerary-time-error')).toHaveCount(0)
+  await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–22:30')
+  await page.getByTestId('itinerary-save').click()
+  await expect(page.getByTestId('itinerary-edit')).toBeVisible()
+  await expect(end).toHaveValue('22:30')
+  expect(state.saved.stops[0]).toMatchObject({ start: '20:00', end: '22:30' })
+})
+
+test('an earlier end time shortens or drops the stops that no longer fit', async ({ page }) => {
+  const state = await mockItinerary(page, { hours: week({ Fri: { open24h: true } }) })
+  state.votes.push({
+    ...state.votes[0], activity_id: '77777777-7777-4777-8777-777777777777',
+    activities: { ...state.votes[0].activities, name: 'Second activity' },
+  })
+  await page.goto(`/groups/${groupId}/itinerary`)
+  const stops = page.getByTestId('itinerary-stop')
+  await expect(stops).toHaveCount(2)
+  await expect(stops.nth(1)).toContainText('21:30–22:30')
+  await page.getByTestId('itinerary-edit').click()
+  const end = page.getByTestId('itinerary-end-time')
+  // Keeps half of the second stop, so it's cut short
+  await end.fill('22:00')
+  await end.blur()
+  await expect(stops).toHaveCount(2)
+  await expect(stops.nth(1)).toContainText('21:30–22:00')
+  // Would keep only 10 of its 30 minutes, so it's removed
+  await end.fill('21:40')
+  await end.blur()
+  await expect(stops).toHaveCount(1)
+  await expect(end).toHaveValue('21:00')
+  await expect(page.getByTestId('itinerary-not-in-plan')).toContainText('Second activity')
+  // Not even half of the first stop fits
+  await end.fill('20:20')
+  await end.blur()
+  await expect(page.getByTestId('itinerary-time-error')).toContainText('too early')
+  await expect(stops).toHaveCount(1)
+  await expect(end).toHaveValue('21:00')
+  await page.getByTestId('itinerary-save').click()
+  await expect(page.getByTestId('itinerary-edit')).toBeVisible()
+  expect(state.saved.stops).toHaveLength(1)
+  expect(state.saved.stops[0]).toMatchObject({ start: '20:00', end: '21:00' })
+})
+
+test('a later start fits the plan into the free time instead of refusing', async ({ page }) => {
+  // Free 12:00–20:00; five one-hour stops 30 minutes apart fill it until 19:00
+  const state = await mockItinerary(page, {
+    hours: week({ Fri: { open24h: true } }),
+    start: '2026-10-30T04:00:00Z',
+    end: '2026-10-30T12:00:00Z',
+  })
+  for (let i = 2; i <= 5; i++) {
+    state.votes.push({
+      ...state.votes[0], activity_id: `77777777-7777-4777-8777-77777777777${i}`,
+      activities: { ...state.votes[0].activities, name: `Activity ${i}` },
+    })
+  }
+  await page.goto(`/groups/${groupId}/itinerary`)
+  const stops = page.getByTestId('itinerary-stop')
+  await expect(stops).toHaveCount(5)
+  await page.getByTestId('itinerary-edit').click()
+  const start = page.getByTestId('itinerary-start-time')
+  // The last stop keeps half its time, so it's cut short at 20:00
+  await start.fill('13:30')
+  await start.press('Enter')
+  await expect(stops).toHaveCount(5)
+  await expect(stops.first()).toContainText('13:30–14:30')
+  await expect(stops.last()).toContainText('19:30–20:00')
+  // Now the last stop would start at 20:00, so it's taken out
+  await start.fill('14:00')
+  await start.blur()
+  await expect(stops).toHaveCount(4)
+  await expect(stops.last()).toContainText('18:30–19:30')
+  await expect(page.getByTestId('itinerary-time-note')).toContainText('1 stop')
+  await expect(page.getByTestId('itinerary-time-error')).toHaveCount(0)
+  // Before the free time starts is still refused
+  await start.fill('11:00')
+  await start.blur()
+  await expect(page.getByTestId('itinerary-time-error')).toContainText('12:00–20:00')
+  await expect(start).toHaveValue('14:00')
+  await expect(stops).toHaveCount(4)
+})
+
+for (const [field, value, firstRange, lastRange] of [
+  ['start', '14:00', '14:00–15:00', '18:30–19:30'],
+  ['end', '17:00', '12:00–13:00', '16:30–17:00'],
+]) {
+  test(`an uncommitted ${field} time survives a weather refresh and retimes on blur`, async ({ page }) => {
+    const state = await mockItinerary(page, {
+      hours: week({ Fri: { open24h: true } }),
+      start: '2026-10-30T04:00:00Z',
+      end: '2026-10-30T12:00:00Z',
+    })
+    for (let i = 2; i <= 5; i++) {
+      state.votes.push({
+        ...state.votes[0], activity_id: `77777777-7777-4777-8777-77777777777${i}`,
+        activities: { ...state.votes[0].activities, name: `Activity ${i}` },
+      })
+    }
+    let release
+    const ready = new Promise((resolve) => { release = resolve })
+    await page.route('https://api-open.data.gov.sg/**', async (route) => {
+      await ready
+      await route.fulfill({ json: { data: { records: [{ forecasts: [] }] } } })
+    })
+    await page.clock.setFixedTime(new Date('2026-10-29T12:00:00+08:00'))
+    await page.goto(`/groups/${groupId}/itinerary`)
+    await page.getByTestId('itinerary-edit').click()
+    const input = page.getByTestId(`itinerary-${field}-time`)
+    await input.fill(value)
+    release()
+    await expect(page.getByTestId('itinerary-weather-unavailable')).toBeVisible()
+    await expect(input).toHaveValue(value)
+    await input.blur()
+    const stops = page.getByTestId('itinerary-stop')
+    await expect(stops).toHaveCount(4)
+    await expect(stops.first()).toContainText(firstRange)
+    await expect(stops.last()).toContainText(lastRange)
+    await page.getByTestId('itinerary-save').click()
+    await expect(page.getByTestId('itinerary-edit')).toBeVisible()
+    await page.reload()
+    await expect(stops).toHaveCount(4)
+    await expect(stops.first()).toContainText(firstRange)
+    await expect(stops.last()).toContainText(lastRange)
+  })
+}
+
+for (const [stateName, interact, draft, stopCount, savedEnd] of [
+  ['edited', (input) => input.fill('14:30'), '14:30', 1, '13:30'],
+  ['unchanged focused', (input) => input.focus(), '15:30', 2, '15:30'],
+]) {
+  test(`a late travel calculation keeps an ${stateName} end-time field correct`, async ({ page }) => {
+    const state = await mockItinerary(page, {
+      hours: week({ Fri: { open24h: true } }),
+      start: '2026-10-30T04:00:00Z',
+      end: '2026-10-30T12:00:00Z',
+    })
+    state.votes.push({
+      ...state.votes[0], activity_id: '77777777-7777-4777-8777-777777777777',
+      activities: { ...state.votes[0].activities, name: 'Second activity' },
+    })
+    await page.goto(`/groups/${groupId}/itinerary`)
+    await page.getByTestId('itinerary-edit').click()
+    let release
+    const ready = new Promise((resolve) => { release = resolve })
+    await page.route('**/functions/v1/onemap-route', async (route) => {
+      await ready
+      await route.fulfill({ json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 60 }] } })
+    })
+    const request = page.waitForRequest('**/functions/v1/onemap-route')
+    await page.getByTestId('itinerary-start-time').fill('12:30')
+    await page.getByTestId('itinerary-start-time').blur()
+    await request
+    const end = page.getByTestId('itinerary-end-time')
+    await interact(end)
+    release()
+    await expect(page.getByTestId('itinerary-save')).toBeEnabled()
+    await expect(page.getByTestId('itinerary-stop').last()).toContainText('14:30–15:30')
+    await expect(end).toHaveValue(draft)
+    await end.blur()
+    await expect(page.getByTestId('itinerary-stop')).toHaveCount(stopCount)
+    await expect(end).toHaveValue(savedEnd)
+    await page.getByTestId('itinerary-save').click()
+    await expect(page.getByTestId('itinerary-edit')).toBeVisible()
+    await page.reload()
+    await expect(page.getByTestId('itinerary-stop')).toHaveCount(stopCount)
+    await expect(end).toHaveValue(savedEnd)
+  })
+}
 
 test('a generated plan is saved automatically and reopening it does not save again', async ({ page }) => {
   const state = await mockItinerary(page, {
@@ -372,8 +437,7 @@ async function pickNewTimeAndPlan(page) {
   await page.getByTestId('slot-2026-10-31T10:00').click()
   await page.getByTestId('slot-2026-10-31T11:30').click()
   await page.getByTestId('confirm-time').click()
-  await expect(page.getByTestId('chosen-slot')).toContainText('31 Oct')
-  await page.getByTestId('plan-button').click()
+  await expect(page).toHaveURL(/\/itinerary/)
 }
 
 for (const failure of ['request', 'no routes']) {
@@ -413,7 +477,7 @@ for (const failure of ['request', 'no routes']) {
   })
 }
 
-test('Plan our day replaces the saved plan using the latest chosen time and votes', async ({ page }) => {
+test('confirm and build replaces the saved plan using the latest chosen time and votes', async ({ page }) => {
   const state = await mockItinerary(page, {
     hours: week({ Fri: { open24h: true }, Sat: { open24h: true } }),
   })
@@ -469,6 +533,55 @@ test('a failed first save shows an error and retry persists the generated plan',
   expect(state.saved.stops[0]).toMatchObject({ start: '20:00', end: '21:00' })
 })
 
+test('a plan for today shows the 24-hour forecast', async ({ page }) => {
+  await mockItinerary(page, { hours: week({ Fri: { open: '20:00', close: '02:00' } }) })
+  await page.clock.setFixedTime(new Date('2026-10-30T14:00:00+08:00'))
+  await page.route('**/twenty-four-hr-forecast', (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          records: [
+            {
+              general: {
+                validPeriod: {
+                  start: '2026-10-30T12:00:00+08:00',
+                  end: '2026-10-31T12:00:00+08:00',
+                },
+                temperature: { low: 25, high: 35 },
+                forecast: { code: 'HT', text: 'Heavy Thundery Showers' },
+              },
+            },
+          ],
+        },
+      },
+    }),
+  )
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-weather')).toHaveText(
+    'Friday: Heavy Thundery Showers, 25–35°C',
+  )
+})
+
+test('a plan for a past day says the day has passed instead of offering a forecast', async ({
+  page,
+}) => {
+  await mockItinerary(page, { hours: week({ Fri: { open: '20:00', close: '02:00' } }) })
+  await page.clock.setFixedTime(new Date('2026-10-31T00:30:00+08:00'))
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-weather-past')).toHaveText(
+    "This day has passed, so there's no forecast.",
+  )
+  await expect(page.getByTestId('itinerary-weather-unavailable')).toHaveCount(0)
+})
+
+test('a future plan with no forecast yet says to check back', async ({ page }) => {
+  await mockItinerary(page, { hours: week({ Fri: { open: '20:00', close: '02:00' } }) })
+  await page.clock.setFixedTime(new Date('2026-10-20T12:00:00+08:00'))
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-weather-unavailable')).toBeVisible()
+  await expect(page.getByTestId('itinerary-weather-past')).toHaveCount(0)
+})
+
 test('rain alternatives and swaps check the replacement venue hours', async ({ page }) => {
   const state = await mockItinerary(page, {
     hours: week({ Fri: { open: '20:00', close: '02:00' } }),
@@ -511,7 +624,7 @@ test('Save waits for edited travel times and reopening preserves the saved sched
   await page.route('**/functions/v1/onemap-route', async (route) => {
     await ready
     await route.fulfill({
-      json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 90 }] },
+      json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 60 }] },
     })
   })
   const request = page.waitForRequest('**/functions/v1/onemap-route')
@@ -521,12 +634,12 @@ test('Save waits for edited travel times and reopening preserves the saved sched
   expect(state.writes).toHaveLength(1)
   release()
   await expect(page.getByTestId('itinerary-save')).toBeEnabled()
-  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('22:30–23:30')
+  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('22:00–23:00')
   await page.getByTestId('itinerary-save').click()
   await expect(page.getByTestId('itinerary-edit')).toBeVisible()
-  expect(state.saved.stops[1]).toMatchObject({ start: '22:30', end: '23:30' })
+  expect(state.saved.stops[1]).toMatchObject({ start: '22:00', end: '23:00' })
   await page.reload()
-  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('22:30–23:30')
+  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('22:00–23:00')
   expect(state.writes).toHaveLength(2)
 })
 
@@ -548,7 +661,7 @@ test('Discard ignores a late travel response and restores the saved start time',
   })
   const request = page.waitForRequest('**/functions/v1/onemap-route')
   const response = page.waitForResponse('**/functions/v1/onemap-route')
-  await page.getByTestId('itinerary-start-time').fill('19:00')
+  await page.getByTestId('itinerary-start-time').fill('20:30')
   await page.getByTestId('itinerary-start-time').blur()
   await request
   await page.getByTestId('itinerary-discard').click()
@@ -569,10 +682,10 @@ test('Discard after completed travel allows editing and saving again', async ({ 
   })
   await page.goto(`/groups/${groupId}/itinerary`)
   await page.getByTestId('itinerary-edit').click()
-  await page.getByTestId('itinerary-start-time').fill('19:00')
+  await page.getByTestId('itinerary-start-time').fill('20:30')
   await page.getByTestId('itinerary-start-time').blur()
   await expect(page.getByTestId('itinerary-save')).toBeEnabled()
-  await expect(page.getByTestId('itinerary-stop').first()).toContainText('19:00–20:00')
+  await expect(page.getByTestId('itinerary-stop').first()).toContainText('20:30–21:30')
   await page.getByTestId('itinerary-discard').click()
   await page.getByTestId('itinerary-edit').click()
   await expect(page.getByTestId('itinerary-start-time')).toHaveValue('20:00')
@@ -619,7 +732,7 @@ test('a stale editor keeps its draft and must explicitly load the latest plan', 
   await other.goto(`/groups/${groupId}/itinerary`)
   await expect(other.getByTestId('itinerary-stop')).toHaveCount(2)
   await other.getByTestId('itinerary-edit').click()
-  await other.getByTestId('itinerary-start-time').fill('19:00')
+  await other.getByTestId('itinerary-start-time').fill('20:30')
   await other.getByTestId('itinerary-start-time').blur()
   await page.getByTestId('itinerary-edit').click()
   await page.getByTestId('itinerary-remove').last().click()
@@ -630,7 +743,7 @@ test('a stale editor keeps its draft and must explicitly load the latest plan', 
   await other.getByTestId('itinerary-save').click()
   await expect(other.getByTestId('itinerary-save-error')).toContainText('Your edits are still here')
   await expect(other.getByTestId('itinerary-stop')).toHaveCount(2)
-  await expect(other.getByTestId('itinerary-start-time')).toHaveValue('19:00')
+  await expect(other.getByTestId('itinerary-start-time')).toHaveValue('20:30')
   expect(state.saved).toEqual(latest)
   other.once('dialog', (dialog) => dialog.accept())
   await other.getByTestId('itinerary-load-latest').click()
@@ -650,9 +763,91 @@ test('confirming a new time invalidates the old plan before opening the Itinerar
   await page.getByTestId('slot-2026-10-31T15:00').click()
   await page.getByTestId('slot-2026-10-31T16:30').click()
   await page.getByTestId('confirm-time').click()
-  await expect(page.getByTestId('chosen-slot')).toContainText('31 Oct')
-  expect(state.saved).toBeNull()
-  await page.getByTestId('tab-itinerary').click()
   await expect(page.getByTestId('itinerary-summary')).toContainText('2026-10-31')
   await expect(page.getByTestId('itinerary-stop')).toContainText('15:00–16:00')
+})
+
+test('a saved stop keeps its details after every vote for it is removed', async ({ page }) => {
+  const state = await mockItinerary(page, { hours: week({ Fri: { open: '20:00', close: '02:00' } }) })
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-stop')).toContainText('Night activity')
+  state.votes = []
+  await page.reload()
+  await expect(page.getByTestId('itinerary-stop')).toContainText('Night activity')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
+  await expect(page.getByTestId('itinerary-stop-warning')).toHaveCount(0)
+})
+
+for (const failure of ['request', 'no routes']) {
+  test(`failed travel (${failure}) while editing blocks Save until Retry succeeds`, async ({ page }) => {
+    const state = await mockItinerary(page, { hours: week({ Fri: { open24h: true } }) })
+    state.votes.push({
+      ...state.votes[0], activity_id: '77777777-7777-4777-8777-777777777777',
+      activities: { ...state.votes[0].activities, name: 'Second activity' },
+    })
+    await page.goto(`/groups/${groupId}/itinerary`)
+    await expect(page.getByTestId('itinerary-stop')).toHaveCount(2)
+    await page.getByTestId('itinerary-edit').click()
+    let fail = true
+    await page.route('**/functions/v1/onemap-route', (route) => {
+      if (fail) {
+        return route.fulfill(failure === 'request'
+          ? { status: 503, json: { error: 'unavailable' } }
+          : { json: { options: [] } })
+      }
+      return route.fulfill({
+        json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 45 }] },
+      })
+    })
+    await page.getByTestId('itinerary-move-down').first().click()
+    await expect(page.getByTestId('itinerary-travel-failed')).toBeVisible()
+    await expect(page.getByTestId('itinerary-save')).toBeDisabled()
+    await expect(page.getByTestId('itinerary-stop').first()).toContainText('Second activity')
+    expect(state.writes).toHaveLength(1)
+    fail = false
+    await page.getByTestId('itinerary-travel-retry').click()
+    await expect(page.getByTestId('itinerary-travel-failed')).toHaveCount(0)
+    await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('21:45–22:45')
+    await page.getByTestId('itinerary-save').click()
+    await expect(page.getByTestId('itinerary-edit')).toBeVisible()
+    expect(state.saved.stops[1]).toMatchObject({ start: '21:45', end: '22:45' })
+  })
+}
+
+test('an indoor swap uses the replacement duration and moves the later stops', async ({ page }) => {
+  const state = await mockItinerary(page, {
+    hours: week({ Fri: { open24h: true } }),
+    rainy: true,
+    start: '2026-10-30T02:00:00Z',
+    end: '2026-10-30T10:00:00Z', // free 10:00–18:00
+  })
+  state.votes.push({
+    ...state.votes[0], activity_id: '77777777-7777-4777-8777-777777777777',
+    activities: { ...state.votes[0].activities, name: 'Second activity' },
+  })
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-stop')).toHaveCount(2)
+  // Voted for after the plan was made, so it's only a rainy-day option
+  state.votes.push({
+    activity_id: '66666666-6666-4666-8666-666666666666',
+    value: 1,
+    activities: {
+      name: 'Long indoor venue', indoor: true, price_per_person: 10, duration_min: 180,
+      opening_hours: week({ Fri: { open: '10:00', close: '12:30' } }),
+    },
+  })
+  await page.reload()
+  await page.getByTestId('itinerary-edit').click()
+  await page.getByTestId('itinerary-rainy-toggle').first().check()
+  await expect(page.getByTestId('itinerary-stop').first()).toContainText('10:00–13:00')
+  await page.getByTestId('itinerary-swap').click()
+  const stops = page.getByTestId('itinerary-stop')
+  await expect(stops.first()).toContainText('Long indoor venue')
+  await expect(stops.first()).toContainText('10:00–13:00')
+  await expect(stops.first().getByTestId('itinerary-stop-warning')).toHaveText('Closes at 12:30')
+  await expect(stops.nth(1)).toContainText('13:30–14:30')
+  await page.getByTestId('itinerary-save').click()
+  await expect(page.getByTestId('itinerary-edit')).toBeVisible()
+  expect(state.saved.stops[0]).toMatchObject({ start: '10:00', end: '13:00' })
+  expect(state.saved.stops[1]).toMatchObject({ start: '13:30', end: '14:30' })
 })

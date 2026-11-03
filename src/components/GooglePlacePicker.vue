@@ -253,7 +253,7 @@ function selectLocation(candidate) {
   height: 280px;
 }
 .google-attribution {
-  color: #5e5e5e;
+  color: var(--muted);
   font: normal 400 14px sans-serif;
   letter-spacing: normal;
   white-space: nowrap;

@@ -7,14 +7,14 @@
     <!-- Owner: Charmaine -->
     <div class="onboarding-box mx-auto">
       <div v-if="loading" class="text-center py-5">
-        <div class="spinner-border text-dark" role="status">
+        <div class="spinner-border text-body" role="status">
           <span class="visually-hidden">Loading...</span>
         </div>
       </div>
 
       <div v-else-if="loadError" class="notice" role="alert" data-testid="onboarding-load-error">
         <p>{{ loadError }}</p>
-        <button type="button" class="btn btn-line" data-testid="onboarding-load-retry" @click="loadProfile">Try again</button>
+        <button type="button" class="btn btn-outline-dark rounded-pill px-4 py-2" data-testid="onboarding-load-retry" @click="loadProfile">Try again</button>
       </div>
 
       <template v-else>
@@ -175,7 +175,7 @@
             </div>
 
             <div class="d-flex flex-wrap align-items-center gap-3">
-              <button type="button" class="btn btn-ink btn-lg" data-testid="onboarding-explore" @click="exploreActivities">
+              <button type="button" class="btn btn-dark rounded-pill px-4 btn-lg" data-testid="onboarding-explore" @click="exploreActivities">
                 Find my hangouts →
               </button>
               <span class="hint">You can change these anytime in Profile.</span>
@@ -186,13 +186,13 @@
 
         <div v-if="errorMessage" class="notice mt-4" role="alert" data-testid="onboarding-error">
           <p class="mb-3">{{ errorMessage }}</p>
-          <button type="button" class="btn btn-line btn-sm" :disabled="saving || !canNext" @click="saveProfile">Try again</button>
+          <button type="button" class="btn btn-outline-dark rounded-pill px-3 btn-sm" :disabled="saving || !canNext" @click="saveProfile">Try again</button>
         </div>
 
         <div v-if="step <= 5" class="footer-bar d-flex justify-content-between align-items-center mt-5 pt-4">
           <button
             type="button"
-            class="onboarding-back btn btn-line"
+            class="onboarding-back btn btn-outline-dark rounded-pill px-4 py-2"
             :class="{ invisible: step === 1 }"
             :disabled="saving"
             data-testid="onboarding-back"
@@ -213,7 +213,7 @@
             </button>
             <button
               type="button"
-              class="onboarding-next btn btn-ink"
+              class="onboarding-next btn btn-dark rounded-pill px-4 py-2"
               :disabled="!canNext || saving"
               data-testid="onboarding-next"
               @click="goNext"
@@ -462,14 +462,14 @@ function exploreActivities() {
 }
 
 .title {
-  color: #111;
+  color: var(--ink);
   letter-spacing: -0.03em;
   line-height: 1.1;
 }
 
 .hl {
-  background-color: #e6e6e1;
-  border-radius: 0.5rem;
+  background-color: var(--surface-3);
+  border-radius: var(--radius-sm);
   padding: 0 0.2em;
 }
 
@@ -478,20 +478,20 @@ function exploreActivities() {
   font-weight: 600;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: #6b6b6b;
+  color: var(--muted);
 }
 
 .lead-text {
   font-size: 1.1rem;
-  color: #555;
+  color: var(--muted);
 }
 
 .hint {
-  color: #6b6b6b;
+  color: var(--muted);
 }
 
 .hint.ready {
-  color: #111;
+  color: var(--ink);
   font-weight: 600;
 }
 
@@ -504,8 +504,8 @@ function exploreActivities() {
   position: relative;
   flex: 1;
   height: 6px;
-  border-radius: 999px;
-  background-color: #e6e6e1;
+  border-radius: var(--radius-pill);
+  background-color: var(--surface-3);
   overflow: hidden;
 }
 
@@ -513,7 +513,7 @@ function exploreActivities() {
   content: '';
   position: absolute;
   inset: 0;
-  background-color: #111;
+  background-color: var(--ink);
   transform: scaleX(0);
   transform-origin: left;
   transition: transform 0.4s ease;
@@ -526,10 +526,10 @@ function exploreActivities() {
 .chip {
   display: inline-block;
   padding: 0.45rem 1rem;
-  border: 1px solid #dcdcdc;
-  border-radius: 999px;
-  background-color: #fff;
-  color: #111;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background-color: var(--surface);
+  color: var(--ink);
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
@@ -541,20 +541,20 @@ function exploreActivities() {
 }
 
 .chip:hover {
-  background-color: #f2f2f0;
-  border-color: #bdbdbd;
+  background-color: var(--surface-2);
+  border-color: var(--line-strong);
 }
 
 .btn-check:checked + .chip,
 .chip.selected {
-  background-color: #111;
-  border-color: #111;
-  color: #fff;
+  background-color: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
 }
 
 .btn-check:focus-visible + .chip,
 .btn-check:focus-visible + .option-tile {
-  outline: 2px solid #111;
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -563,19 +563,19 @@ function exploreActivities() {
   display: block;
   height: 100%;
   padding: 1.25rem 1.25rem 1.1rem;
-  border: 1px solid #dcdcdc;
-  border-radius: 1rem;
-  background-color: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface);
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .option-tile:hover {
-  border-color: #111;
+  border-color: var(--ink);
 }
 
 .tile-hint {
-  color: #6b6b6b;
+  color: var(--muted);
   margin-top: 0.25rem;
 }
 
@@ -585,50 +585,50 @@ function exploreActivities() {
   right: 1rem;
   width: 20px;
   height: 20px;
-  border: 2px solid #c8c8c8;
+  border: 2px solid var(--line-strong);
   border-radius: 50%;
 }
 
 .btn-check:checked + .option-tile {
-  background-color: #111;
-  border-color: #111;
+  background-color: var(--ink);
+  border-color: var(--ink);
 }
 
 .btn-check:checked + .option-tile .title {
-  color: #fff;
+  color: var(--on-ink);
 }
 
 .btn-check:checked + .option-tile .tile-hint {
-  color: #cfcfcf;
+  color: var(--subtle);
 }
 
 .btn-check:checked + .option-tile .tick {
-  border-color: #fff;
-  background-color: #fff;
-  box-shadow: inset 0 0 0 4px #111;
+  border-color: var(--surface);
+  background-color: var(--surface);
+  box-shadow: inset 0 0 0 4px var(--ink);
 }
 
 .field {
   padding: 0.75rem 1rem;
-  border: 1px solid #dcdcdc;
-  border-radius: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
 }
 
 .field:focus {
-  border-color: #111;
+  border-color: var(--ink);
   box-shadow: none;
 }
 
 .panel {
   padding: 0.5rem 1.5rem;
-  border: 1px solid #e5e5e5;
-  border-radius: 1rem;
-  background-color: #f8f8f7;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface-2);
 }
 
 .summary-row {
   padding: 1rem 0;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--line);
 }
 
 .summary-row:last-child {
@@ -638,68 +638,34 @@ function exploreActivities() {
 .tag {
   display: inline-block;
   padding: 0.3rem 0.8rem;
-  border-radius: 999px;
-  background-color: #111;
-  color: #fff;
+  border-radius: var(--radius-pill);
+  background-color: var(--ink);
+  color: var(--on-ink);
   font-size: 0.875rem;
   font-weight: 500;
 }
 
 .notice {
   padding: 1rem 1.25rem;
-  border: 1px solid #111;
-  border-radius: 1rem;
-  background-color: #f8f8f7;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface-2);
 }
 
 .footer-bar {
-  border-top: 1px solid #e5e5e5;
+  border-top: 1px solid var(--line);
 }
 
 .skip-link {
-  color: #6b6b6b;
+  color: var(--muted);
   text-decoration: none;
 }
 
 .skip-link:hover {
-  color: #111;
+  color: var(--ink);
 }
 
-.btn-ink {
-  --bs-btn-color: #fff;
-  --bs-btn-bg: #111;
-  --bs-btn-border-color: #111;
-  --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: #333;
-  --bs-btn-hover-border-color: #333;
-  --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: #000;
-  --bs-btn-active-border-color: #000;
-  --bs-btn-disabled-color: #fff;
-  --bs-btn-disabled-bg: #111;
-  --bs-btn-disabled-border-color: #111;
-  --bs-btn-border-radius: 999px;
-  --bs-btn-padding-x: 1.4rem;
-  --bs-btn-padding-y: 0.6rem;
-  --bs-btn-font-weight: 600;
-}
-
-.btn-line {
-  --bs-btn-color: #111;
-  --bs-btn-bg: #fff;
-  --bs-btn-border-color: #111;
-  --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: #111;
-  --bs-btn-hover-border-color: #111;
-  --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: #000;
-  --bs-btn-active-border-color: #000;
-  --bs-btn-border-radius: 999px;
-  --bs-btn-padding-x: 1.2rem;
-  --bs-btn-padding-y: 0.6rem;
-  --bs-btn-font-weight: 600;
-}
-
+/* Primary action: amber, like .btn-dark in src/assets/styles.css */
 .area-group {
   margin-bottom: 1.25rem;
 }
@@ -740,20 +706,20 @@ function exploreActivities() {
     width: 100%;
     min-height: 52px;
     padding: 12px 16px;
-    border-radius: 14px;
+    border-radius: var(--radius-md);
   }
   .mobile-choice-mark {
     display: inline-grid;
     place-items: center;
     flex: 0 0 22px;
     height: 22px;
-    border: 1.5px solid #c8c8c8;
+    border: 1.5px solid var(--line-strong);
     border-radius: 50%;
   }
   .btn-check:checked + .chip .mobile-choice-mark {
-    border-color: #fff;
-    background: #fff;
-    color: #111;
+    border-color: var(--surface);
+    background: var(--surface);
+    color: var(--ink);
   }
   .btn-check:checked + .chip .mobile-choice-mark::after {
     content: '✓';
@@ -799,7 +765,7 @@ function exploreActivities() {
     gap: 8px 12px;
     margin-top: 0 !important;
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)) !important;
-    background: #fff;
+    background: var(--surface);
     box-shadow: 0 -4px 16px rgb(0 0 0 / 4%);
   }
   .footer-actions {

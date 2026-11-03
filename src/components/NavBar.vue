@@ -1,5 +1,5 @@
 <template>
-  <nav ref="navbar" class="navbar navbar-expand-md bg-white border-bottom">
+  <nav ref="navbar" class="navbar navbar-expand-md bg-body border-bottom">
     <NavBarTheme />
     <div class="container">
       <RouterLink class="navbar-brand" to="/" aria-label="WAD2Do home">
@@ -69,6 +69,29 @@
                 <path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v2" />
               </svg>
               <span class="nav-label">Groups</span>
+            </RouterLink>
+          </li>
+          <li class="nav-item nav-submit-item">
+            <RouterLink
+              class="nav-link"
+              active-class="active"
+              to="/activities/submit"
+              aria-label="Submit an activity"
+              title="Submit an activity"
+              data-testid="nav-submit-activity"
+            >
+              <svg
+                class="nav-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              <span class="nav-label">Submit an activity</span>
             </RouterLink>
           </li>
           <li v-if="user && isAdmin" class="nav-item">
@@ -216,20 +239,28 @@ onUnmounted(() => {
 .nav-login-icon {
   display: none;
 }
+.nav-submit-item {
+  display: none;
+}
 @media (max-width: 767.98px) {
+  .navbar {
+    position: fixed;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    padding-bottom: calc(var(--bs-navbar-padding-y) + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--line);
+    border-bottom: 0 !important;
+  }
   .navbar > .container {
     flex-wrap: nowrap;
     gap: 8px;
-    padding-inline: 12px;
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
   }
   .navbar-brand {
-    flex-shrink: 0;
-    margin: 0;
-    padding: 0;
-  }
-  .brand-logo {
-    width: clamp(96px, 26vw, 124px);
-    height: 44px;
+    display: none;
   }
   .navbar-toggler {
     display: none;
@@ -239,15 +270,19 @@ onUnmounted(() => {
     flex: 1;
     min-width: 0;
   }
+  /* Share the full bottom row, including room for an admin's fifth icon. */
   .navbar-nav {
     width: 100%;
     flex-direction: row;
     align-items: center;
-    justify-content: space-evenly;
-    gap: 4px;
+    justify-content: space-around;
+    gap: clamp(4px, 1.6vw, 8px);
   }
   .navbar-nav > .nav-item {
     flex-shrink: 0;
+  }
+  .nav-submit-item {
+    display: list-item;
   }
   .navbar .nav-link {
     justify-content: center;

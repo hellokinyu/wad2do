@@ -207,9 +207,9 @@ async function deleteGroup() {
 /* Same soft grey panel and inputs as the filters on the Activities page */
 .group-panel {
   padding: 20px;
-  border: 1px solid #e5e5e5;
-  border-radius: 16px;
-  background: #fafafa;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
 }
 
 .form-label {
@@ -219,7 +219,7 @@ async function deleteGroup() {
 
 .form-control {
   min-height: 44px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
 }
 
 .btn {
@@ -234,6 +234,6 @@ async function deleteGroup() {
   gap: 12px 16px;
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid #e5e5e5;
+  border-top: 1px solid var(--line);
 }
 </style>

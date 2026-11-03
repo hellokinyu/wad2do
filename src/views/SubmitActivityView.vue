@@ -344,7 +344,7 @@ async function submitActivity() {
 
 <template>
   <div class="container submission-page py-4 py-md-5" data-testid="submit-activity-page">
-    <RouterLink to="/activities" class="text-dark">← Back to Activities</RouterLink>
+    <RouterLink to="/activities" class="text-body">← Back to Activities</RouterLink>
     <header class="my-4">
       <h1 class="fw-bold">Submit an activity</h1>
       <p class="text-secondary">Know a great spot in Singapore? Share it for our team to review.</p>

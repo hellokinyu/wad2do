@@ -9,7 +9,9 @@ export function getPrice(value) {
 export function formatPrice(value) {
   const price = getPrice(value)
   if (price === null) return 'Price unavailable'
-  return price === 0 ? 'Free' : 'S$' + price.toFixed(2)
+  if (price === 0) return 'Free'
+  // Whole dollars read as "S$8", not "S$8.00"; cents still show when there are any
+  return 'S$' + (Number.isInteger(price) ? price : price.toFixed(2))
 }
 
 export function formatDuration(value) {

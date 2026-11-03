@@ -101,8 +101,8 @@ test('card favourites persist across pages, reload, details and Profile', async 
   await firstHeart.click()
   await expect(page).toHaveURL('/activities')
   await expect(firstHeart).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByTestId('activity-save-feedback')).toHaveText('Activity saved.')
-  await expect(firstHeart).toHaveCSS('color', 'rgb(220, 53, 69)')
+  await expect(page.getByTestId('activity-save-feedback')).toHaveText('Saved to your Profile.')
+  await expect(firstHeart).toHaveCSS('color', 'rgb(255, 190, 69)')
   await page.reload()
   await expect(firstHeart).toHaveAttribute('aria-pressed', 'true')
   await page.getByRole('button', { name: 'Next', exact: true }).click()
@@ -200,7 +200,7 @@ test('a concurrent duplicate save is treated as saved', async ({ page }) => {
   await page.getByTestId('activity-card').first().hover()
   await heart.click()
   await expect(heart).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByTestId('activity-save-feedback')).toHaveText('Activity saved.')
+  await expect(page.getByTestId('activity-save-feedback')).toHaveText('Saved to your Profile.')
 })
 
 for (const [view, path, buttonId, errorId] of [
@@ -258,7 +258,7 @@ test('successful read-back recovers lost Save and Remove responses', async ({ pa
   state.loseSaveResponse = true
   await heart.click()
   await expect(heart).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByTestId('activity-save-feedback')).toHaveText('Activity saved.')
+  await expect(page.getByTestId('activity-save-feedback')).toHaveText('Saved to your Profile.')
   state.loseDeleteResponse = true
   await heart.click()
   await expect(heart).toHaveAttribute('aria-pressed', 'false')
@@ -286,7 +286,7 @@ test('a stale heart repeats the intended action after changes from another tab',
   expect(state.writes).toEqual(['POST', 'DELETE'])
 })
 
-test('desktop hearts stay visible on transparent buttons and support keyboard saving', async ({
+test('desktop hearts sit on a dark disc so they stay visible, and support keyboard saving', async ({
   page,
 }, testInfo) => {
   await mockBackend(page)
@@ -295,7 +295,8 @@ test('desktop hearts stay visible on transparent buttons and support keyboard sa
   await expect(heart).toBeEnabled()
   await page.mouse.move(0, 0)
   await expect(heart).toHaveCSS('opacity', '1')
-  await expect(heart).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  // --photo-scrim: keeps the white heart 3:1 on bright photos and blank placeholders
+  await expect(heart).toHaveCSS('background-color', 'rgba(17, 18, 25, 0.5)')
   await expect(heart.locator('svg')).toHaveCSS('stroke', 'rgb(255, 255, 255)')
   await expect(heart).toHaveCSS('width', '44px')
   await expect(heart).toHaveCSS('height', '44px')
@@ -308,7 +309,7 @@ test('desktop hearts stay visible on transparent buttons and support keyboard sa
   await page.keyboard.press('Space')
   await expect(heart).toHaveAttribute('aria-pressed', 'true')
   await page.getByTestId('activity-search').focus()
-  await expect(heart.locator('svg')).toHaveCSS('fill', 'rgb(220, 53, 69)')
+  await expect(heart.locator('svg')).toHaveCSS('fill', 'rgb(255, 190, 69)')
   await page
     .getByTestId('activity-card')
     .first()

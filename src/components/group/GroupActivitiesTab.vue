@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
+import BaseDialog from '@/components/BaseDialog.vue'
 import { supabase } from '@/lib/supabase'
 import { getPrice, formatPrice } from '@/lib/activityDisplay'
 
@@ -20,7 +21,6 @@ const brokenImages = ref({}) // activity id -> true when its photo failed to loa
 const toast = ref(null) // { text, retry } for removals and saves that failed
 const announcement = ref('') // read out by screen readers
 const votersFor = ref('') // the activity whose "who voted" popup is open
-const votersDialog = ref(null)
 
 // The order the cards are shown in. It only changes when the user taps "Update rankings",
 // so cards don't jump around while people are voting.
@@ -36,7 +36,6 @@ let toastTimer
 let slideTimer
 let highlightTimer
 let leaderTimer
-let votersTrigger // the button that opened the popup, to give focus back when it closes
 let channel // the Supabase Realtime subscription
 
 // Moves keyboard focus to an element when it appears, e.g. the remove confirmation
@@ -353,22 +352,14 @@ const votersGroups = computed(() => {
   ]
 })
 
-async function openVoters(activity, event) {
-  votersTrigger = event.currentTarget
+// Safari doesn't focus buttons on click; focus it so BaseDialog can hand focus back on close
+function openVoters(activity, event) {
+  event.currentTarget.focus({ preventScroll: true })
   votersFor.value = activity.id
-  await nextTick()
-  votersDialog.value?.showModal()
 }
 
 function closeVoters() {
-  votersDialog.value?.close()
   votersFor.value = ''
-  votersTrigger?.focus()
-}
-
-// A click on the dim area around the popup lands on the <dialog> itself
-function closeVotersOnBackdrop(event) {
-  if (event.target === votersDialog.value) closeVoters()
 }
 
 // Close the popup if its activity is removed from the group while it's open
@@ -591,7 +582,7 @@ onUnmounted(() => {
     <!-- Placeholder cards while loading, shaped like the real ones -->
     <div v-if="loading" class="activity-list" data-testid="group-activities-loading">
       <span class="visually-hidden">Loading activities...</span>
-      <div v-for="n in 3" :key="n" class="vote-card skeleton placeholder-glow" aria-hidden="true">
+      <div v-for="n in 3" :key="n" class="vote-card surface-card skeleton placeholder-glow" aria-hidden="true">
         <span class="placeholder photo"></span>
         <div class="card-body">
           <span class="placeholder col-7"></span>
@@ -656,7 +647,7 @@ onUnmounted(() => {
             :data-id="activity.id"
           >
             <article
-              class="vote-card"
+              class="vote-card surface-card"
               :class="{
                 'just-moved': justMoved.includes(activity.id),
                 'new-leader': newLeaderId === activity.id,
@@ -897,57 +888,44 @@ onUnmounted(() => {
       </div>
     </template>
 
-    <!-- "Who voted" popup. A native <dialog> keeps keyboard focus inside and closes on Esc. -->
-    <dialog
-      ref="votersDialog"
+    <!-- "Who voted" popup -->
+    <BaseDialog
+      :open="Boolean(votersFor)"
       class="voters-dialog"
-      aria-labelledby="voters-title"
+      title="Who voted"
+      close-testid="close-voters"
       data-testid="voters-dialog"
-      @cancel.prevent="closeVoters"
-      @click="closeVotersOnBackdrop"
+      @close="closeVoters"
     >
-      <div v-if="votersFor" class="voters-body">
-        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-          <div>
-            <h2 id="voters-title" class="h5 fw-bold mb-1">Who voted</h2>
-            <p class="text-body-secondary mb-0">{{ activitiesById[votersFor]?.name }}</p>
-          </div>
-          <button
-            type="button"
-            class="btn-close"
-            aria-label="Close"
-            data-testid="close-voters"
-            @click="closeVoters"
-          ></button>
-        </div>
-
-        <section
-          v-for="group in votersGroups"
-          :key="group.key"
-          class="voters-group"
-          :data-testid="'voters-' + group.key"
-        >
-          <h3 class="voters-heading" :class="group.key">
-            <svg v-if="group.key === 'up'" viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"
-              />
-            </svg>
-            <svg v-else-if="group.key === 'down'" viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"
-              />
-            </svg>
-            {{ group.label }}
-            <span class="voters-count">{{ group.names.length }}</span>
-          </h3>
-          <ul v-if="group.names.length" class="voters-names">
-            <li v-for="name in group.names" :key="name">{{ name }}</li>
-          </ul>
-          <p v-else class="voters-none">Nobody</p>
-        </section>
-      </div>
-    </dialog>
+      <template #subtitle>
+        <p class="text-body-secondary mb-0 mt-1">{{ activitiesById[votersFor]?.name }}</p>
+      </template>
+      <section
+        v-for="group in votersGroups"
+        :key="group.key"
+        class="voters-group"
+        :data-testid="'voters-' + group.key"
+      >
+        <h3 class="voters-heading" :class="group.key">
+          <svg v-if="group.key === 'up'" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"
+            />
+          </svg>
+          <svg v-else-if="group.key === 'down'" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"
+            />
+          </svg>
+          {{ group.label }}
+          <span class="voters-count">{{ group.names.length }}</span>
+        </h3>
+        <ul v-if="group.names.length" class="voters-names">
+          <li v-for="name in group.names" :key="name">{{ name }}</li>
+        </ul>
+        <p v-else class="voters-none">Nobody</p>
+      </section>
+    </BaseDialog>
 
     <!-- Floating at the bottom: visible wherever you've scrolled to, in reach of a thumb,
          and never pushing the cards around -->
@@ -997,12 +975,6 @@ onUnmounted(() => {
 
 <style scoped>
 /* One visible focus ring for everything in the tab */
-.activities-tab :is(a, button):focus-visible {
-  outline: 2px solid #111;
-  outline-offset: 2px;
-  box-shadow: none;
-}
-
 /* Leaves room at the bottom so the floating button doesn't cover the last card */
 .activities-tab {
   padding-bottom: 6rem;
@@ -1038,9 +1010,9 @@ onUnmounted(() => {
 .list-count {
   margin-left: 0.35rem;
   padding: 1px 9px;
-  border-radius: 999px;
-  background: #f0f0f0;
-  color: #555;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--muted);
   font-size: 0.75rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1049,9 +1021,9 @@ onUnmounted(() => {
 
 /* Text buttons in near-black, like the links on the Activities page */
 .voters-button {
-  --bs-btn-color: #111;
-  --bs-btn-hover-color: #111;
-  --bs-btn-active-color: #111;
+  --bs-btn-color: var(--ink);
+  --bs-btn-hover-color: var(--ink);
+  --bs-btn-active-color: var(--ink);
 }
 
 .add-button {
@@ -1098,15 +1070,11 @@ onUnmounted(() => {
   grid-template-rows: auto 1fr;
   min-width: 0;
   overflow: hidden;
-  background: var(--bs-body-bg);
-  border: 1px solid var(--bs-border-color-translucent);
-  border-radius: 20px;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
   transition: box-shadow 0.2s ease;
 }
 
 .vote-card:hover {
-  box-shadow: 0 10px 28px rgb(0 0 0 / 8%);
+  box-shadow: var(--shadow-raised);
 }
 
 /* A wide, short photo, so it sets the scene without making the card tall */
@@ -1138,8 +1106,8 @@ onUnmounted(() => {
   inset: 0;
   display: grid;
   place-items: center;
-  background: #f3f3f3;
-  color: #666;
+  background: var(--surface-2);
+  color: var(--muted);
   font-size: 0.875rem;
   font-weight: 600;
 }
@@ -1152,7 +1120,7 @@ onUnmounted(() => {
   align-self: start;
   height: 1.2em;
   overflow: hidden;
-  color: #8a8a8a;
+  color: var(--subtle);
   font-size: 1.25rem;
   font-weight: 700;
   line-height: 1.2;
@@ -1170,12 +1138,12 @@ onUnmounted(() => {
   left: 14px;
   z-index: 2;
   padding: 5px 12px;
-  border-radius: 999px;
-  background: white;
-  color: #111;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
   font-size: 0.75rem;
   font-weight: 700;
-  box-shadow: 0 2px 10px rgb(0 0 0 / 18%);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Rank beside the name and its two detail lines; the tally and the footer run the full
@@ -1261,7 +1229,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.2rem;
   padding: 0.1rem 0.55rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
@@ -1283,8 +1251,8 @@ onUnmounted(() => {
 }
 
 .chip-up {
-  background: var(--bs-success-bg-subtle);
-  color: var(--bs-success-text-emphasis);
+  background: var(--keen-subtle);
+  color: var(--keen-ink);
 }
 
 .chip-down {
@@ -1297,8 +1265,8 @@ onUnmounted(() => {
   display: flex;
   height: 6px;
   overflow: hidden;
-  border-radius: 999px;
-  background: #ececec;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
 }
 
 .tally-keen,
@@ -1308,11 +1276,11 @@ onUnmounted(() => {
 }
 
 .tally-keen {
-  background: var(--bs-success);
+  background: var(--keen);
 }
 
 .tally-not-keen {
-  background: #f1aeb5;
+  background: var(--nope);
 }
 
 /* "3 of 4 voted" button that opens the popup */
@@ -1344,25 +1312,9 @@ onUnmounted(() => {
   stroke-linejoin: round;
 }
 
-/* "Who voted" popup, styled like the share dialog */
+/* "Who voted" popup: BaseDialog does the layout; this only sets the width */
 .voters-dialog {
-  width: min(400px, calc(100% - 32px));
-  max-height: calc(100dvh - 48px);
-  padding: 0;
-  overflow-y: auto;
-  border: 1px solid var(--bs-border-color-translucent);
-  border-radius: 20px;
-  background: var(--bs-body-bg);
-  color: var(--bs-body-color);
-  box-shadow: 0 16px 48px rgb(0 0 0 / 15%);
-}
-
-.voters-dialog::backdrop {
-  background: rgb(0 0 0 / 35%);
-}
-
-.voters-body {
-  padding: 24px;
+  --dialog-width: 400px;
 }
 
 .voters-group + .voters-group {
@@ -1381,17 +1333,17 @@ onUnmounted(() => {
 }
 
 .voters-heading.up {
-  color: var(--bs-success-text-emphasis);
+  color: var(--keen-ink);
 }
 
 .voters-heading.down {
-  color: var(--bs-danger-text-emphasis);
+  color: var(--nope-ink);
 }
 
 .voters-count {
   min-width: 1.5rem;
   padding: 0 0.45rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bs-secondary-bg);
   color: var(--bs-secondary-color);
   font-size: 0.75rem;
@@ -1410,7 +1362,7 @@ onUnmounted(() => {
 
 .voters-names li {
   padding: 0.2rem 0.7rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bs-tertiary-bg);
   font-size: 0.875rem;
 }
@@ -1440,7 +1392,7 @@ onUnmounted(() => {
   min-height: 44px;
   padding: 0.45rem 0.85rem;
   border: 1px solid var(--bs-border-color);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bs-body-bg);
   color: var(--bs-body-color);
   font-weight: 600;
@@ -1464,32 +1416,32 @@ onUnmounted(() => {
 }
 
 .vote-button.keen:hover {
-  border-color: var(--bs-success);
-  background: var(--bs-success-bg-subtle);
-  color: var(--bs-success-text-emphasis);
+  border-color: var(--keen);
+  background: var(--keen-subtle);
+  color: var(--keen-ink);
 }
 
 .vote-button.not-keen:hover {
-  border-color: var(--bs-danger-border-subtle);
-  background: var(--bs-danger-bg-subtle);
-  color: var(--bs-danger-text-emphasis);
+  border-color: var(--nope);
+  background: var(--nope-subtle);
+  color: var(--nope-ink);
 }
 
 .vote-button.keen.active {
-  border-color: var(--bs-success);
-  background: var(--bs-success);
-  color: white;
+  border-color: var(--keen);
+  background: var(--keen);
+  color: var(--on-keen);
 }
 
 .vote-button.keen.active svg {
-  fill: rgb(255 255 255 / 35%);
+  fill: rgb(6 34 27 / 18%);
 }
 
 /* Not keen stays quiet even when chosen, so saying no doesn't shout */
 .vote-button.not-keen.active {
-  border-color: var(--bs-danger);
-  background: var(--bs-danger-bg-subtle);
-  color: var(--bs-danger-text-emphasis);
+  border-color: var(--nope);
+  background: var(--nope-subtle);
+  color: var(--nope-ink);
 }
 
 .vote-button:active {
@@ -1504,7 +1456,7 @@ onUnmounted(() => {
 .vote-count {
   min-width: 1.6rem;
   padding: 0 0.45rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(var(--bs-emphasis-color-rgb), 0.06);
   font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
@@ -1512,7 +1464,7 @@ onUnmounted(() => {
 }
 
 .vote-button.keen.active .vote-count {
-  background: rgb(255 255 255 / 25%);
+  background: rgb(6 34 27 / 12%);
 }
 
 .remove-confirm {
@@ -1524,7 +1476,7 @@ onUnmounted(() => {
   gap: 0.5rem 1rem;
   margin: 0 1rem 1rem;
   padding: 0.75rem;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--bs-danger-bg-subtle);
   color: var(--bs-danger-text-emphasis);
 }
@@ -1542,7 +1494,7 @@ onUnmounted(() => {
   gap: 1rem;
   margin-top: 0.75rem;
   padding: 1rem 1.25rem;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--bs-tertiary-bg);
 }
 
@@ -1640,14 +1592,14 @@ onUnmounted(() => {
 
 @keyframes landed {
   from {
-    border-color: #111;
+    border-color: var(--ink);
     box-shadow:
       0 0 0 3px rgb(17 17 17 / 14%),
       0 8px 24px rgb(0 0 0 / 8%);
   }
 
   to {
-    box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
+    box-shadow: var(--shadow-card);
   }
 }
 
@@ -1683,7 +1635,7 @@ onUnmounted(() => {
 .vote-placeholder {
   display: block;
   height: 44px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 /* Empty state */
@@ -1701,12 +1653,12 @@ onUnmounted(() => {
   height: 72px;
   margin: 0 auto 1rem;
   border-radius: 50%;
-  background: #f3f3f3;
+  background: var(--surface-2);
 }
 
 .empty-icon svg {
   fill: none;
-  stroke: #111;
+  stroke: var(--ink);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -1731,8 +1683,8 @@ onUnmounted(() => {
   height: 22px;
   margin-right: 0.4rem;
   border-radius: 50%;
-  background: #111;
-  color: white;
+  background: var(--ink);
+  color: var(--on-ink);
   font-size: 0.75rem;
 }
 
@@ -1761,16 +1713,16 @@ onUnmounted(() => {
   min-height: 48px;
   padding: 0.5rem 1.25rem;
   border: 0;
-  border-radius: 999px;
-  background: #111;
-  color: white;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  color: var(--on-ink);
   font-weight: 600;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  box-shadow: var(--shadow-float);
   transition: background-color 0.15s ease;
 }
 
 .update-button:hover {
-  background: #333;
+  background: var(--ink-hover);
 }
 
 .update-button svg {
@@ -1793,10 +1745,10 @@ onUnmounted(() => {
   gap: 1rem;
   max-width: calc(100vw - 2rem);
   padding: 0.75rem 1.25rem;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--bs-dark);
-  color: white;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  color: var(--on-ink);
+  box-shadow: var(--shadow-float);
 }
 
 .toast-action {
@@ -1851,7 +1803,7 @@ onUnmounted(() => {
   }
 
   .vote-card {
-    border-radius: 18px;
+    border-radius: var(--radius-lg);
   }
 
   .photo {

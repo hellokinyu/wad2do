@@ -5,7 +5,7 @@
     </div>
     <!-- Owner: Charmaine -->
     <div v-if="loading" class="text-center py-5">
-      <div class="spinner-border text-dark" role="status">
+      <div class="spinner-border text-body" role="status">
         <span class="visually-hidden">Loading...</span>
       </div>
     </div>
@@ -15,8 +15,8 @@
       <h1 class="display-5 fw-bold title mb-3">Log in to see your <span class="hl">profile.</span></h1>
       <p class="lead-text mb-4">Your preferences, saved activities and submissions all live here.</p>
       <div class="d-flex flex-wrap gap-2">
-        <RouterLink to="/login" class="btn btn-ink">Log in →</RouterLink>
-        <RouterLink to="/signup" class="btn btn-line">Sign up</RouterLink>
+        <RouterLink to="/login" class="btn btn-dark rounded-pill px-4 py-2">Log in →</RouterLink>
+        <RouterLink to="/signup" class="btn btn-outline-dark rounded-pill px-4 py-2">Sign up</RouterLink>
       </div>
     </div>
 
@@ -27,7 +27,7 @@
 
       <div v-if="profileError" class="notice mb-4" role="alert" data-testid="profile-error">
         <p class="mb-2">{{ profileError }}</p>
-        <button type="button" class="btn btn-line btn-sm" @click="loadProfile">Try again</button>
+        <button type="button" class="btn btn-outline-dark rounded-pill px-3 btn-sm" @click="loadProfile">Try again</button>
       </div>
 
       <section class="mb-4" data-testid="profile-account">
@@ -61,14 +61,14 @@
                 />
                 <button
                   type="button"
-                  class="btn btn-ink"
+                  class="btn btn-dark rounded-pill px-4 py-2"
                   :disabled="nameDraft === '' || savingName"
                   data-testid="profile-save-name"
                   @click="saveName"
                 >
                   Save
                 </button>
-                <button type="button" class="btn btn-line" @click="editingName = false">Cancel</button>
+                <button type="button" class="btn btn-outline-dark rounded-pill px-4 py-2" @click="editingName = false">Cancel</button>
               </div>
               <p v-if="nameError" class="error-text small mt-2 mb-0">{{ nameError }}</p>
             </div>
@@ -86,7 +86,7 @@
             </button>
             <button
               type="button"
-              class="btn btn-red btn-sm"
+              class="btn btn-outline-danger rounded-pill px-3 btn-sm"
               :disabled="loggingOut"
               data-testid="profile-logout"
               @click="logOut"
@@ -98,8 +98,8 @@
         <div v-if="editingAvatar" class="panel mt-4">
           <AnimalAvatarPicker v-model="avatarDraft" :disabled="savingAvatar" />
           <div class="d-flex gap-2 mt-3">
-            <button type="button" class="btn btn-ink" :disabled="!findProfileAnimal(avatarDraft) || savingAvatar" data-testid="profile-save-avatar" @click="saveAvatar">{{ savingAvatar ? 'Saving…' : 'Save picture' }}</button>
-            <button type="button" class="btn btn-line" :disabled="savingAvatar" @click="editingAvatar = false">Cancel</button>
+            <button type="button" class="btn btn-dark rounded-pill px-4 py-2" :disabled="!findProfileAnimal(avatarDraft) || savingAvatar" data-testid="profile-save-avatar" @click="saveAvatar">{{ savingAvatar ? 'Saving…' : 'Save picture' }}</button>
+            <button type="button" class="btn btn-outline-dark rounded-pill px-4 py-2" :disabled="savingAvatar" @click="editingAvatar = false">Cancel</button>
           </div>
           <p v-if="avatarError" class="error-text mt-3 mb-0" role="alert" data-testid="profile-avatar-error">{{ avatarError }}</p>
         </div>
@@ -204,7 +204,7 @@
           <div class="d-flex flex-wrap align-items-center gap-3 mt-4 pt-4 panel-footer">
             <button
               type="button"
-              class="btn btn-ink"
+              class="btn btn-dark rounded-pill px-4 py-2"
               :disabled="!hasChanges || savingPrefs || !!profileError"
               data-testid="profile-save-prefs"
               @click="savePreferences"
@@ -240,13 +240,13 @@
 
         <div v-if="savedError" class="notice" role="alert">
           <p class="mb-2">{{ savedError }}</p>
-          <button type="button" class="btn btn-line btn-sm" @click="loadSaved">Try again</button>
+          <button type="button" class="btn btn-outline-dark rounded-pill px-3 btn-sm" @click="loadSaved">Try again</button>
         </div>
 
         <div v-else-if="savedActivities.length === 0" class="empty-state" data-testid="saved-empty">
           <p class="fs-5 fw-bold title mb-1">No saved activities yet</p>
           <p class="muted mb-3">Tap the heart on any activity to keep it here.</p>
-          <RouterLink to="/activities" class="btn btn-ink">Browse activities →</RouterLink>
+          <RouterLink to="/activities" class="btn btn-dark rounded-pill px-4 py-2">Browse activities →</RouterLink>
         </div>
 
         <div v-else class="row g-3" data-testid="saved-list">
@@ -268,7 +268,7 @@
                 <div v-else class="mb-3"></div>
                 <button
                   type="button"
-                  class="btn btn-line btn-sm mt-auto align-self-start unsave-btn"
+                  class="btn btn-outline-dark rounded-pill px-3 btn-sm mt-auto align-self-start unsave-btn"
                   :data-testid="'unsave-' + activity.id"
                   @click="unsave(activity.id)"
                 >
@@ -293,13 +293,13 @@
 
         <div v-if="submissionsError" class="notice" role="alert">
           <p class="mb-2">{{ submissionsError }}</p>
-          <button type="button" class="btn btn-line btn-sm" @click="loadSubmissions">Try again</button>
+          <button type="button" class="btn btn-outline-dark rounded-pill px-3 btn-sm" @click="loadSubmissions">Try again</button>
         </div>
 
         <div v-else-if="submissions.length === 0" class="empty-state" data-testid="submissions-empty">
           <p class="fs-5 fw-bold title mb-1">Know a great hangout spot?</p>
           <p class="muted mb-3">Share it and we'll add it for everyone once it's approved.</p>
-          <RouterLink to="/activities/submit" class="btn btn-ink">Submit an activity →</RouterLink>
+          <RouterLink to="/activities/submit" class="btn btn-dark rounded-pill px-4 py-2">Submit an activity →</RouterLink>
         </div>
 
         <ul v-else class="submission-list" data-testid="submissions-list">
@@ -716,14 +716,14 @@ function statusClass(status) {
 }
 
 .title {
-  color: #111;
+  color: var(--ink);
   letter-spacing: -0.03em;
   line-height: 1.1;
 }
 
 .hl {
-  background-color: #e6e6e1;
-  border-radius: 0.5rem;
+  background-color: var(--surface-3);
+  border-radius: var(--radius-sm);
   padding: 0 0.2em;
 }
 
@@ -732,20 +732,20 @@ function statusClass(status) {
   font-weight: 600;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: #6b6b6b;
+  color: var(--muted);
 }
 
 .lead-text {
   font-size: 1.1rem;
-  color: #555;
+  color: var(--muted);
 }
 
 .muted {
-  color: #6b6b6b;
+  color: var(--muted);
 }
 
 .error-text {
-  color: #b42318;
+  color: var(--bs-danger-text-emphasis);
 }
 
 .logged-out {
@@ -757,13 +757,13 @@ function statusClass(status) {
 }
 
 .stats {
-  border-top: 1px solid #e5e5e5;
-  border-bottom: 1px solid #e5e5e5;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
 .stat {
   padding: 1.25rem 1rem;
-  border-left: 1px solid #e5e5e5;
+  border-left: 1px solid var(--line);
   overflow-wrap: anywhere;
 }
 
@@ -776,7 +776,7 @@ function statusClass(status) {
   font-size: 2rem;
   font-weight: 700;
   letter-spacing: -0.03em;
-  color: #111;
+  color: var(--ink);
   line-height: 1.1;
 }
 
@@ -790,7 +790,7 @@ function statusClass(status) {
   font-weight: 600;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: #6b6b6b;
+  color: var(--muted);
 }
 
 @media (max-width: 767.98px) {
@@ -807,8 +807,8 @@ function statusClass(status) {
   display: inline-block;
   margin-left: 0.35rem;
   padding: 0.1rem 0.6rem;
-  border-radius: 999px;
-  background-color: #e6e6e1;
+  border-radius: var(--radius-pill);
+  background-color: var(--surface-3);
   font-size: 1rem;
   vertical-align: middle;
   letter-spacing: 0;
@@ -816,62 +816,62 @@ function statusClass(status) {
 
 .unsaved {
   padding: 0.3rem 0.8rem;
-  border: 1px solid #111;
-  border-radius: 999px;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-pill);
   font-size: 0.8rem;
   font-weight: 600;
 }
 
 .panel {
   padding: 1.5rem;
-  border: 1px solid #e5e5e5;
-  border-radius: 1rem;
-  background-color: #f8f8f7;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface-2);
 }
 
 .panel-footer {
-  border-top: 1px solid #e5e5e5;
+  border-top: 1px solid var(--line);
 }
 
 .group-label {
   font-weight: 700;
   margin-bottom: 0.6rem;
-  color: #111;
+  color: var(--ink);
 }
 
 .chip {
   display: inline-block;
   padding: 0.45rem 1rem;
-  border: 1px solid #dcdcdc;
-  border-radius: 999px;
-  background-color: #fff;
-  color: #111;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background-color: var(--surface);
+  color: var(--ink);
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .chip:hover {
-  background-color: #f2f2f0;
-  border-color: #bdbdbd;
+  background-color: var(--surface-2);
+  border-color: var(--line-strong);
 }
 
 .btn-check:checked + .chip {
-  background-color: #111;
-  border-color: #111;
-  color: #fff;
+  background-color: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
 }
 
 .btn-check:focus-visible + .chip {
-  outline: 2px solid #111;
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
 .field {
   padding: 0.6rem 1rem;
-  border: 1px solid #dcdcdc;
-  border-radius: 0.75rem;
-  background-color: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
 }
 
 .form-select.field {
@@ -879,12 +879,12 @@ function statusClass(status) {
 }
 
 .field:focus {
-  border-color: #111;
+  border-color: var(--ink);
   box-shadow: none;
 }
 
 .text-link {
-  color: #111;
+  color: var(--ink);
   text-decoration: none;
 }
 
@@ -894,8 +894,8 @@ function statusClass(status) {
 
 .empty-state {
   padding: 2.5rem 1.5rem;
-  border: 1.5px dashed #cfcfcf;
-  border-radius: 1rem;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
   text-align: center;
 }
 
@@ -903,16 +903,16 @@ function statusClass(status) {
   position: relative;
   display: flex;
   flex-direction: column;
-  border: 1px solid #e5e5e5;
-  border-radius: 1rem;
-  background-color: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface);
   overflow: hidden;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .saved-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-raised);
 }
 
 .saved-img-wrap {
@@ -929,8 +929,8 @@ function statusClass(status) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #f2f2f0;
-  color: #8a8a8a;
+  background-color: var(--surface-2);
+  color: var(--subtle);
 }
 
 .img-badge {
@@ -938,15 +938,15 @@ function statusClass(status) {
   left: 0.75rem;
   bottom: 0.75rem;
   padding: 0.2rem 0.65rem;
-  border-radius: 999px;
-  background-color: #fff;
-  color: #111;
+  border-radius: var(--radius-pill);
+  background-color: var(--surface);
+  color: var(--ink);
   font-size: 0.8rem;
   font-weight: 600;
 }
 
 .card-link {
-  color: #111;
+  color: var(--ink);
   text-decoration: none;
 }
 
@@ -959,15 +959,15 @@ function statusClass(status) {
   list-style: none;
   padding: 0;
   margin: 0;
-  border: 1px solid #e5e5e5;
-  border-radius: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
 .submission-row {
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid #e5e5e5;
-  background-color: #fff;
+  border-bottom: 1px solid var(--line);
+  background-color: var(--surface);
 }
 
 .submission-row:last-child {
@@ -977,113 +977,56 @@ function statusClass(status) {
 .status {
   flex-shrink: 0;
   padding: 0.25rem 0.75rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 0.8rem;
   font-weight: 600;
 }
 
 .status-pending {
-  border: 1px solid #cfcfcf;
-  color: #6b6b6b;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
 }
 
 .status-approved {
-  border: 1px solid #111;
-  background-color: #111;
-  color: #fff;
+  border: 1px solid var(--ink);
+  background-color: var(--ink);
+  color: var(--on-ink);
 }
 
 .status-rejected {
-  border: 1px solid #111;
-  color: #111;
+  border: 1px solid var(--ink);
+  color: var(--ink);
 }
 
 .reason {
-  color: #555;
+  color: var(--muted);
 }
 
 .notice {
   padding: 1rem 1.25rem;
-  border: 1px solid #111;
-  border-radius: 1rem;
-  background-color: #f8f8f7;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface-2);
 }
 
-.btn-ink {
-  --bs-btn-color: #fff;
-  --bs-btn-bg: #111;
-  --bs-btn-border-color: #111;
-  --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: #333;
-  --bs-btn-hover-border-color: #333;
-  --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: #000;
-  --bs-btn-active-border-color: #000;
-  --bs-btn-disabled-color: #fff;
-  --bs-btn-disabled-bg: #111;
-  --bs-btn-disabled-border-color: #111;
-  --bs-btn-border-radius: 999px;
-  --bs-btn-padding-x: 1.4rem;
-  --bs-btn-padding-y: 0.6rem;
-  --bs-btn-font-weight: 600;
-}
-
-.btn-line {
-  --bs-btn-color: #111;
-  --bs-btn-bg: #fff;
-  --bs-btn-border-color: #111;
-  --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: #111;
-  --bs-btn-hover-border-color: #111;
-  --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: #000;
-  --bs-btn-active-border-color: #000;
-  --bs-btn-border-radius: 999px;
-  --bs-btn-padding-x: 1.2rem;
-  --bs-btn-padding-y: 0.6rem;
-  --bs-btn-font-weight: 600;
-}
-
-.btn-line.btn-sm {
-  --bs-btn-padding-x: 0.9rem;
-  --bs-btn-padding-y: 0.35rem;
-  --bs-btn-font-size: 0.875rem;
-}
-
+/* Primary action: amber, like .btn-dark in src/assets/styles.css */
 .btn-grey {
-  --bs-btn-color: #111;
-  --bs-btn-bg: #ececea;
-  --bs-btn-border-color: #ececea;
-  --bs-btn-hover-color: #111;
-  --bs-btn-hover-bg: #dcdcd8;
-  --bs-btn-hover-border-color: #dcdcd8;
-  --bs-btn-active-color: #111;
-  --bs-btn-active-bg: #cfcfca;
-  --bs-btn-active-border-color: #cfcfca;
-  --bs-btn-border-radius: 999px;
+  --bs-btn-color: var(--ink);
+  --bs-btn-bg: var(--surface-3);
+  --bs-btn-border-color: var(--surface-3);
+  --bs-btn-hover-color: var(--ink);
+  --bs-btn-hover-bg: var(--line-strong);
+  --bs-btn-hover-border-color: var(--line-strong);
+  --bs-btn-active-color: var(--ink);
+  --bs-btn-active-bg: var(--line-strong);
+  --bs-btn-active-border-color: var(--line-strong);
+  --bs-btn-border-radius: var(--radius-pill);
   --bs-btn-padding-x: 1.2rem;
   --bs-btn-padding-y: 0.6rem;
   --bs-btn-font-weight: 600;
 }
 
-.btn-red {
-  --bs-btn-color: #b42318;
-  --bs-btn-bg: #fff;
-  --bs-btn-border-color: #b42318;
-  --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: #b42318;
-  --bs-btn-hover-border-color: #b42318;
-  --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: #8f1b12;
-  --bs-btn-active-border-color: #8f1b12;
-  --bs-btn-border-radius: 999px;
-  --bs-btn-padding-x: 1.2rem;
-  --bs-btn-padding-y: 0.6rem;
-  --bs-btn-font-weight: 600;
-}
-
-.btn-grey.btn-sm,
-.btn-red.btn-sm {
+.btn-grey.btn-sm {
   --bs-btn-padding-x: 0.9rem;
   --bs-btn-padding-y: 0.35rem;
   --bs-btn-font-size: 0.875rem;

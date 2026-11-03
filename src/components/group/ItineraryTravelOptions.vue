@@ -5,7 +5,7 @@ import TravelIcon from '@/components/group/TravelIcon.vue'
 const props = defineProps({
   leg: { type: Object, default: null }, // { loading: true }, { options: [...] } or { error: '...' }
   mode: { type: String, default: null }, // the group's choice, e.g. 'WALK'. null = use the fastest
-  editable: { type: Boolean, default: false }, // true in edit mode: the tabs can be clicked
+  editable: { type: Boolean, default: false }, // true in edit mode: shows the tabs to choose from
 })
 const emit = defineEmits(['choose'])
 
@@ -51,10 +51,6 @@ const steps = computed(() =>
     }),
 )
 
-function choose(mode) {
-  if (props.editable) emit('choose', mode)
-}
-
 // 150 -> '2 h 30 min'
 function formatMinutes(minutes) {
   return minutes >= 60
@@ -77,18 +73,18 @@ function formatDistance(meters) {
         Travel times unavailable: {{ leg.error }}
       </span>
       <template v-else>
-        <div class="d-flex flex-wrap gap-2 mb-2" role="group" aria-label="Travel mode">
+        <div v-if="editable" class="d-flex flex-wrap gap-2 mb-2" role="group" aria-label="Travel mode">
           <button
             v-for="tab in tabs"
             :key="tab.label"
             type="button"
             class="mode-tab"
-            :class="{ active: tab.active, clickable: editable }"
+            :class="{ active: tab.active }"
             :disabled="!tab.option?.available"
             :aria-pressed="tab.active"
             :title="tab.label"
             :data-testid="'travel-tab-' + tab.icon.toLowerCase()"
-            @click="choose(tab.mode)"
+            @click="emit('choose', tab.mode)"
           >
             <TravelIcon :kind="tab.icon" />
             <span class="visually-hidden">{{ tab.label }}</span>
@@ -103,7 +99,7 @@ function formatDistance(meters) {
             class="btn btn-outline-dark"
             :class="{ active: selectedMode === mode }"
             :disabled="!optionFor(mode)?.available"
-            @click="choose(mode)"
+            @click="emit('choose', mode)"
           >
             {{ mode === 'TRANSIT' ? 'Best' : mode === 'MRT' ? 'MRT only' : 'Bus only' }}
           </button>
@@ -129,10 +125,9 @@ function formatDistance(meters) {
 </template>
 
 <style scoped>
-/* The dotted line joining one stop's card to the next */
+/* Sits beside the itinerary's timeline line, between one stop's card and the next */
 .travel-line {
-  border-left: 2px dotted var(--bs-secondary-color);
-  margin: 0 1rem 0 1.5rem;
+  margin: 0 1rem 0 0.25rem;
 }
 
 /* Google Maps-style mode tabs */
@@ -142,19 +137,15 @@ function formatDistance(meters) {
   gap: 0.35rem;
   min-height: 36px;
   padding: 0.25rem 0.85rem;
-  border: 1px solid #e5e5e5;
-  border-radius: 999px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
   background: var(--bs-body-bg);
   color: var(--bs-body-color);
-  cursor: default;
-}
-.mode-tab.clickable:not(:disabled) {
-  cursor: pointer;
 }
 .mode-tab.active {
-  border-color: #111;
-  background: #111;
-  color: white;
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--on-ink);
   font-weight: 600;
 }
 .mode-tab:disabled {

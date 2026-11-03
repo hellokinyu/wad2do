@@ -1,29 +1,42 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { getVisitHoursWarnings } from '@/lib/openingHours'
 import { fetchTravelOptions } from '@/lib/travelOptions'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
+import { formatPart, getStageStyle } from '@/lib/groupDisplay'
+import { fetchForecasts, getSgToday } from '@/lib/weatherForecast'
 import { useAuth } from '@/composables/useAuth'
+import { getPrice } from '@/lib/activityDisplay'
 import ItineraryTravelOptions from '@/components/group/ItineraryTravelOptions.vue'
+import ItineraryLoadingCar from '@/components/group/ItineraryLoadingCar.vue'
 
 const TRAVEL_MINUTES = 30
+const emit = defineEmits(['plan-saved'])
 const itinerary = ref(null)
+const loadingMessage = ref('Loading itinerary…')
+const planSaved = ref(false)
 const budget = computed(() => group.value?.budget_per_person ?? 0)
 // The group's voted activities (loaded from Supabase by loadVotes)
 const votedActivities = ref([])
 // Every voted activity with its vote total, including ones with more downs than ups
 const allVotedActivities = ref([])
 
+// 20.299999999999997 -> 20.3, so adding prices can't leave stray decimals
+function toCents(amount) {
+  return Math.round(amount * 100) / 100
+}
+
 // Add up the cost of every stop
 const totalCost = computed(() => {
   let total = 0
   for (const stop of itinerary.value.stops) {
-    total += stop.cost
+    total += stop.cost ?? 0
   }
-  return total
+  return toCents(total)
 })
+const hasUnknownPrices = computed(() => itinerary.value?.stops.some((stop) => stop.cost === null))
 
 // The day starts at the first stop and ends at the last one
 const startTime = computed(() => {
@@ -40,6 +53,20 @@ const endTime = computed(() => {
 })
 
 const isOverBudget = computed(() => totalCost.value > budget.value)
+
+// '09:00' -> '9:00 am', '12:10' -> '12:10 pm'
+function formatClock(time) {
+  const [hours, minutes] = time.split(':').map(Number)
+  const suffix = hours % 24 >= 12 ? 'pm' : 'am'
+  return (hours % 12 || 12) + ':' + String(minutes).padStart(2, '0') + ' ' + suffix
+}
+
+// '10:00', '11:30' -> '1.5 hr' (or '45 min' when under an hour)
+function formatHours(start, end) {
+  const minutes = (((toMinutes(end) - toMinutes(start)) % 1440) + 1440) % 1440
+  if (minutes < 60) return minutes + ' min'
+  return Math.round((minutes / 60) * 10) / 10 + ' hr'
+}
 // Voted activities that aren't in the plan right now
 const notInPlan = computed(() => {
   if (!itinerary.value) return []
@@ -49,8 +76,9 @@ const notInPlan = computed(() => {
 
 // A short reason why an activity isn't in the plan
 function whyNotInPlan(activity) {
-  const extra = totalCost.value + activity.cost - budget.value
-  if (extra > 0) return 'Over budget by $' + extra
+  if (activity.cost === null) return 'Price unknown; cannot check the budget'
+  const extra = toCents(totalCost.value + activity.cost - budget.value)
+  if (extra > 0) return 'Over budget by $' + extra.toFixed(2)
   return "Doesn't fit the time or opening hours"
 }
 
@@ -63,20 +91,24 @@ const loadedUserId = user.value?.id
 let savedRevision
 let disposed = false
 let saveController
+let loadController
 
 const group = ref(null) // { chosen_start, chosen_end, budget_per_person }
 const loading = ref(true)
 const errorMessage = ref('')
 
-async function loadGroup() {
+async function loadGroup(signal) {
   const { data, error } = await supabase
     .from('groups')
     .select('chosen_start, chosen_end, budget_per_person, plan_revision')
     .eq('id', groupId)
     .maybeSingle()
+    .abortSignal(signal)
+  signal.throwIfAborted()
   if (error) throw error
   group.value = data
   savedRevision = data?.plan_revision
+  dayStart.value = data?.chosen_start ? toSgKey(data.chosen_start).slice(11) : '10:00'
 }
 
 // Supabase timestamp (UTC) -> '2026-10-25T10:00' in Singapore time (UTC+8)
@@ -90,19 +122,19 @@ const weatherLoading = ref(true)
 
 async function loadWeather() {
   try {
-    const response = await fetch('https://api-open.data.gov.sg/v2/real-time/api/four-day-outlook')
-    const json = await response.json()
-    const forecasts = json.data.records[0].forecasts
+    const forecasts = await fetchForecasts()
 
-    // Find the day that matches our plan. '2026-10-21T00:00:00+08:00' -> '2026-10-21'
-    weather.value =
-      forecasts.find((day) => day.timestamp.slice(0, 10) === itinerary.value.date) || null
+    // Find the day that matches our plan
+    weather.value = forecasts.find((day) => day.date === itinerary.value.date) || null
   } catch (error) {
     console.log(error)
   } finally {
     weatherLoading.value = false
   }
 }
+// True once the plan's date has gone by in Singapore
+const isPlanPast = computed(() => itinerary.value?.date < getSgToday())
+
 // True when the forecast mentions showers, rain or thunder
 const isRainy = computed(() => {
   if (!weather.value) return false
@@ -114,18 +146,26 @@ const isRainy = computed(() => {
 function getRainAlternative(stop) {
   if (stop.indoor) return null
   const usedIds = itinerary.value.stops.map((s) => s.activity_id)
-  return votedActivities.value.find((a) => a.indoor && !usedIds.includes(a.activity_id)) || null
+  return votedActivities.value.find((a) => a.indoor && a.cost !== null && !usedIds.includes(a.activity_id)) || null
 }
 
-// Replace an outdoor stop with the indoor alternative, keeping the same time slot
+// The end time when `activity` starts at `start`, using its own length
+function endAfter(start, activity) {
+  return toTime(toMinutes(start) + activity.duration_min)
+}
+
+// Replace an outdoor stop with the indoor alternative. It starts at the same time but
+// lasts as long as the alternative does, then the later stops move to fit.
 function swapStop(index, alternative) {
+  const before = [...itinerary.value.stops]
   const oldStop = itinerary.value.stops[index]
   itinerary.value.stops[index] = {
     ...alternative,
     start: oldStop.start,
-    end: oldStop.end,
+    end: endAfter(oldStop.start, alternative),
     reason: 'Indoor swap because of rain',
   }
+  forgetChangedModes(before)
   recalculateTimes()
 }
 
@@ -150,7 +190,7 @@ const displayStops = computed(() => {
       return {
         ...alternative,
         start: stop.start,
-        end: stop.end,
+        end: endAfter(stop.start, alternative),
         reason: 'Rainy-day option',
         original: stop,
         isRainyView: true,
@@ -188,6 +228,43 @@ const isEditing = ref(false)
 const replanButton = ref(null)
 let savedCopy = null // the plan as it was before editing, for Discard
 const dayStart = ref('10:00') // when the first stop begins
+const startField = ref(null)
+const endField = ref(null)
+const startDraft = ref(dayStart.value)
+const endDraft = ref('-')
+
+// Background weather/travel updates must not replace a time the user is still typing.
+watch(
+  [dayStart, () => itinerary.value ? endTime.value : '', isEditing],
+  ([start, end, editing], [previousStart, previousEnd]) => {
+    if (!editing || document.activeElement !== startField.value || startDraft.value === previousStart)
+      startDraft.value = start
+    if (!editing || document.activeElement !== endField.value || endDraft.value === previousEnd)
+      endDraft.value = end
+  },
+  { immediate: true },
+)
+
+const hasUnsavedChanges = computed(() =>
+  user.value?.id === loadedUserId && isEditing.value &&
+  (startDraft.value !== dayStart.value || endDraft.value !== endTime.value ||
+    JSON.stringify(itinerary.value?.stops) !== JSON.stringify(savedCopy?.stops)),
+)
+
+onBeforeRouteLeave(() => {
+  if (hasUnsavedChanges.value && !window.confirm('Leave and discard your unsaved itinerary changes?'))
+    return false
+  loadController?.abort()
+})
+
+function warnBeforeUnload(event) {
+  if (!hasUnsavedChanges.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+onMounted(() => window.addEventListener('beforeunload', warnBeforeUnload))
+onUnmounted(() => window.removeEventListener('beforeunload', warnBeforeUnload))
 
 // Give every stop a new start and end, in order, keeping each one's duration.
 // The gap after each stop is the real travel time of the chosen (or fastest) mode.
@@ -201,15 +278,128 @@ function recalculateTimes() {
   })
 }
 
+// The group's chosen free time, e.g. { start: '15:00', end: '19:00' }, or null before one is picked
+const freeTime = computed(() => {
+  if (!group.value?.chosen_start || !group.value?.chosen_end) return null
+  return {
+    start: toSgKey(group.value.chosen_start).slice(11),
+    end: toSgKey(group.value.chosen_end).slice(11),
+  }
+})
+const timeError = ref('')
+const timeNote = ref('') // says when a time change took stops out of the plan
+
+// '01:00' -> minutes on the plan's day. When the free time runs past midnight,
+// a time before it starts is the next morning, so it counts after 24:00.
+function planMinutes(time) {
+  const minutes = toMinutes(time)
+  if (!freeTime.value) return minutes
+  const from = toMinutes(freeTime.value.start)
+  const overnight = toMinutes(freeTime.value.end) <= from
+  return overnight && minutes < from ? minutes + 24 * 60 : minutes
+}
+
+// True when the day from `start` to `end` fits inside the group's free time
+function fitsFreeTime(start, end) {
+  if (!freeTime.value) return true
+  let to = toMinutes(freeTime.value.end)
+  if (to <= toMinutes(freeTime.value.start)) to += 24 * 60 // free time runs past midnight
+  return planMinutes(start) >= toMinutes(freeTime.value.start) && planMinutes(end) <= to
+}
+
+function outsideFreeTimeMessage() {
+  return `Pick a time within the group's free time (${freeTime.value.start}–${freeTime.value.end}).`
+}
+
+// The stops that still fit when the day ends at `end`. A stop that runs past it
+// is cut short if it keeps at least half its time, otherwise it's left out too.
+function stopsUntil(end) {
+  const endMinutes = planMinutes(end)
+  const kept = []
+  for (const stop of itinerary.value.stops) {
+    const start = planMinutes(stop.start)
+    const finish = planMinutes(stop.end)
+    if (finish <= endMinutes) {
+      kept.push(stop)
+    } else {
+      if (endMinutes - start >= (finish - start) / 2) kept.push({ ...stop, end }) // shortened
+      break // every later stop starts after this one, so it's past the end too
+    }
+  }
+  return kept
+}
+
+// Keep only the stops that fit, and say how many were taken out
+function useStops(kept) {
+  const removed = itinerary.value.stops.length - kept.length
+  itinerary.value.stops = kept
+  endDraft.value = endTime.value
+  timeError.value = ''
+  timeNote.value = removed
+    ? `${removed} ${removed === 1 ? "stop doesn't" : "stops don't"} fit any more, so ${removed === 1 ? 'it was' : 'they were'} moved to "Also voted for".`
+    : ''
+}
+
+// A new start time moves every stop. A later start can push the last stops past the
+// group's free time, so those are cut short or taken out, like an earlier end time.
+function changeDayStart(event) {
+  const start = event.target.value
+  if (start === dayStart.value) return
+  const before ={ dayStart: dayStart.value, stops: itinerary.value.stops.map((s) => ({ ...s })) }
+  const putBack = (message) => {
+    dayStart.value = before.dayStart
+    itinerary.value.stops = before.stops
+    event.target.value = startDraft.value = before.dayStart
+    timeError.value = message
+  }
+  if (!start) return putBack('')
+  if (!fitsFreeTime(start, start)) return putBack(outsideFreeTimeMessage())
+  dayStart.value = start
+  recalculateTimes()
+  if (!freeTime.value || !itinerary.value.stops.length) return useStops(itinerary.value.stops)
+  const kept = stopsUntil(freeTime.value.end)
+  if (!kept.length) {
+    return putBack(`That's too late to fit the first stop before the group's free time ends at ${freeTime.value.end}.`)
+  }
+  useStops(kept)
+}
+
+// A later end time makes the last stop longer, but not past the group's free time.
+// An earlier one cuts short or takes out the stops that no longer fit.
+function changeDayEnd(event) {
+  const stops = itinerary.value.stops
+  const end = event.target.value
+  if (end === endTime.value) return
+  const putBack = (message) => {
+    event.target.value = endDraft.value = endTime.value
+    timeError.value = message
+  }
+  if (!stops.length || !end) return putBack('')
+  if (!fitsFreeTime(startTime.value, end)) return putBack(outsideFreeTimeMessage())
+  if (planMinutes(end) >= planMinutes(stops.at(-1).end)) {
+    stops.at(-1).end = end
+    return useStops(stops)
+  }
+  const kept = stopsUntil(end)
+  if (!kept.length) {
+    return putBack(`That's too early to fit the first stop, which starts at ${stops[0].start}.`)
+  }
+  useStops(kept)
+}
+
 function startEditing() {
   savedCopy = JSON.parse(JSON.stringify(itinerary.value))
-  dayStart.value = itinerary.value.stops[0]?.start || '10:00'
+  dayStart.value = itinerary.value.stops[0]?.start || freeTime.value?.start || '10:00'
+  timeError.value = ''
+  timeNote.value = ''
   isEditing.value = true
 }
 
 function discardChanges() {
   isEditing.value = false
-  dayStart.value = savedCopy.stops[0]?.start || '10:00'
+  timeError.value = ''
+  timeNote.value = ''
+  dayStart.value = savedCopy.stops[0]?.start || freeTime.value?.start || '10:00'
   itinerary.value = savedCopy
 }
 
@@ -220,6 +410,10 @@ const saveConflict = ref(false)
 // Save the plan for this group (creates the row the first time, updates it after)
 async function saveChanges() {
   if (saving.value) return false
+  if (hasUnknownPrices.value) {
+    saveError.value = 'Remove stops with unknown prices before saving so the budget can be checked.'
+    return false
+  }
   saving.value = true
   saveError.value = ''
   saveConflict.value = false
@@ -231,6 +425,14 @@ async function saveChanges() {
       await pending
     } while (pending !== travelPromise)
     if (disposed || user.value?.id !== loadedUserId) throw new Error('Your account changed.')
+    if (travelFailed.value) {
+      saveError.value = "Some travel times couldn't be checked. Retry them before saving."
+      return false
+    }
+    if (itinerary.value.stops.some((stop) => !fitsFreeTime(stop.start, stop.end))) {
+      saveError.value = outsideFreeTimeMessage()
+      return false
+    }
     // Only save the fields from the brief. Name, photo etc. come from the activity.
     const stopsToSave = itinerary.value.stops.map((s) => ({
       activity_id: s.activity_id,
@@ -253,6 +455,8 @@ async function saveChanges() {
     if (error) throw error
     savedRevision = data
     isEditing.value = false // only leave edit mode if it worked
+    planSaved.value = itinerary.value.stops.length > 0
+    emit('plan-saved')
     return true
   } catch (error) {
     console.log(error)
@@ -275,8 +479,21 @@ async function reloadLatestPlan() {
   await loadPage()
 }
 
+// A stop's travel_mode is for the journey to the stop after it. When that next stop
+// changes, forget the choice so the new journey uses its own fastest mode.
+function forgetChangedModes(before) {
+  const nextOf = {}
+  before.forEach((stop, i) => (nextOf[stop.activity_id] = before[i + 1]?.activity_id))
+  const stops = itinerary.value.stops
+  stops.forEach((stop, i) => {
+    if (nextOf[stop.activity_id] !== stops[i + 1]?.activity_id) delete stop.travel_mode
+  })
+}
+
 function removeStop(index) {
+  const before = [...itinerary.value.stops]
   itinerary.value.stops.splice(index, 1) // remove 1 item at this position
+  forgetChangedModes(before)
   recalculateTimes()
 }
 
@@ -285,14 +502,18 @@ function moveStop(index, direction) {
   const stops = itinerary.value.stops
   const other = index + direction
   if (other < 0 || other >= stops.length) return // already at the top or bottom
+  const before = [...stops]
   const temp = stops[index]
   stops[index] = stops[other]
   stops[other] = temp
+  forgetChangedModes(before)
   recalculateTimes()
 }
 
 // Add a voted activity to the end of the plan, even if it goes over budget
 function addStop(activity) {
+  if (activity.cost === null) return
+  const before = [...itinerary.value.stops]
   itinerary.value.stops.push({
     activity_id: activity.activity_id,
     name: activity.name,
@@ -307,14 +528,19 @@ function addStop(activity) {
     lat: activity.lat,
     lng: activity.lng,
   })
+  forgetChangedModes(before)
   recalculateTimes()
 }
 
 // Throw away the current plan and build a new one from the chosen time.
-// It starts edit mode first, so Discard can still bring back the saved plan.
+// Re-plan is pressed in edit mode, and savedCopy still holds the plan from before
+// editing, so Discard brings back the saved plan rather than the edits.
 async function replan() {
-  startEditing()
+  if (!isEditing.value) startEditing()
+  timeError.value = ''
+  timeNote.value = ''
   loading.value = true
+  loadingMessage.value = 'Building your itinerary…'
   travelRequest += 1
   travelLoading.value = false
   travelPromise = Promise.resolve()
@@ -331,58 +557,84 @@ async function replan() {
 }
 
 // Load this group's saved plan, or null if nobody has saved one yet
-async function loadSavedPlan() {
+async function loadSavedPlan(signal) {
   const { data, error } = await supabase
     .from('itineraries')
     .select('stops, total_cost')
     .eq('group_id', groupId)
     .maybeSingle()
+    .abortSignal(signal)
+  signal.throwIfAborted()
   if (error) throw error
   return data
 }
 
+const ACTIVITY_FIELDS =
+  'name, image_url, price_per_person, indoor, opening_hours, duration_min, address, lat, lng'
+
+// A row from the activities table -> what a stop or "Also voted for" item needs
+function toPlanActivity(id, a) {
+  return {
+    activity_id: id,
+    name: a.name,
+    image_url: a.image_url || '',
+    cost: getPrice(a.price_per_person),
+    indoor: a.indoor,
+    opening_hours: a.opening_hours,
+    address: a.address || '',
+    lat: a.lat,
+    lng: a.lng,
+    duration_min: a.duration_min || 60,
+  }
+}
+
+// Load the activities in a saved plan by their ids, not through votes,
+// so a stop keeps its name, address and hours even when nobody votes for it any more
+async function loadPlanActivities(stops, signal) {
+  const ids = [...new Set(stops.map((s) => s.activity_id))]
+  if (!ids.length) return []
+  const { data, error } = await supabase
+    .from('activities')
+    .select('id, ' + ACTIVITY_FIELDS)
+    .in('id', ids)
+    .abortSignal(signal)
+  signal.throwIfAborted()
+  if (error) throw error
+  return data.map((a) => toPlanActivity(a.id, a))
+}
+
 // Turn saved stops back into full stops by adding each activity's details (name, photo...).
 // Stops the group has since voted down (more downs than ups) are left out.
-function useSavedPlan(saved) {
+function useSavedPlan(saved, activities) {
   const stops = saved.stops
     .map((s) => {
-      const activity = allVotedActivities.value.find((a) => a.activity_id === s.activity_id) || {}
-      return { ...activity, ...s }
+      const activity = activities.find((a) => a.activity_id === s.activity_id) || {}
+      return { ...activity, ...s, cost: activity.activity_id && activity.cost === null ? null : getPrice(s.cost) }
     })
-    .filter((stop) => !(stop.votes < 0))
+    .filter((stop) => {
+      const voted = allVotedActivities.value.find((a) => a.activity_id === stop.activity_id)
+      return !(voted?.votes < 0)
+    })
   const date = group.value?.chosen_start ? toSgKey(group.value.chosen_start).slice(0, 10) : ''
   itinerary.value = { date, total_cost: saved.total_cost, stops }
   dayStart.value = stops[0]?.start || dayStart.value
 }
 
 // Load this group's votes, add them up per activity, and keep the ones with more ups than downs
-async function loadVotes() {
+async function loadVotes(signal) {
   const { data, error } = await supabase
     .from('votes')
-    .select(
-      'activity_id, value, activities(name, image_url, price_per_person, indoor, opening_hours, duration_min, address, lat, lng)',
-    )
+    .select('activity_id, value, activities(' + ACTIVITY_FIELDS + ')')
     .eq('group_id', groupId)
+    .abortSignal(signal)
+  signal.throwIfAborted()
   if (error) throw error
 
   const byActivity = {} // activity_id -> the activity, with its vote total
   for (const vote of data) {
     if (!byActivity[vote.activity_id]) {
-      const a = vote.activities
-      if (!a) continue
-      byActivity[vote.activity_id] = {
-        activity_id: vote.activity_id,
-        name: a.name,
-        image_url: a.image_url || '',
-        cost: a.price_per_person ?? 0,
-        indoor: a.indoor,
-        opening_hours: a.opening_hours,
-        address: a.address || '',
-        lat: a.lat,
-        lng: a.lng,
-        duration_min: a.duration_min || 60,
-        votes: 0,
-      }
+      if (!vote.activities) continue
+      byActivity[vote.activity_id] = { ...toPlanActivity(vote.activity_id, vote.activities), votes: 0 }
     }
     byActivity[vote.activity_id].votes += vote.value
   }
@@ -408,7 +660,7 @@ async function buildPlan() {
   let spent = 0
 
   for (const activity of sorted) {
-    if (current + activity.duration_min > endMinutes || spent + activity.cost > budget.value)
+    if (activity.cost === null || current + activity.duration_min > endMinutes || spent + activity.cost > budget.value)
       continue
     const previous = stops.at(-1)
     let arrival = current
@@ -455,7 +707,14 @@ async function buildPlan() {
 
 // Load an existing plan, or build and save one before showing it.
 async function loadPage() {
+  loadController?.abort()
+  const controller = new AbortController()
+  loadController = controller
+  const currentLoad = () => !disposed && loadController === controller &&
+    !controller.signal.aborted && user.value?.id === loadedUserId
   loading.value = true
+  loadingMessage.value = 'Loading itinerary…'
+  planSaved.value = false
   travelRequest += 1
   travelLoading.value = false
   travelPromise = Promise.resolve()
@@ -463,20 +722,31 @@ async function loadPage() {
   saveError.value = ''
   saveConflict.value = false
   try {
-    await loadGroup()
-    await loadVotes()
-    const saved = await loadSavedPlan()
     const rebuild = route.query.replan === '1'
+    const { saved, activities } = await requestWithTimeout(async (signal) => {
+      await loadGroup(signal)
+      await loadVotes(signal)
+      const saved = await loadSavedPlan(signal)
+      const activities = saved && !rebuild ? await loadPlanActivities(saved.stops, signal) : []
+      return { saved, activities }
+    }, controller)
+    if (!currentLoad()) return
+    planSaved.value = !!saved?.stops.length
     if (saved && !rebuild) {
-      useSavedPlan(saved) // the group already has a plan: show it
+      useSavedPlan(saved, activities) // the group already has a plan: show it
       await loadTravel()
     } else {
+      loadingMessage.value = 'Building your itinerary…'
       await buildPlan()
+      planSaved.value = false
     }
+    if (!currentLoad()) return
     if (itinerary.value) {
-      if ((!saved || rebuild) && !(await saveChanges())) {
-        throw new Error('Generated plan could not be saved.')
+      if ((!saved || rebuild) && itinerary.value.stops.length) {
+        loadingMessage.value = 'Saving itinerary…'
+        if (!(await saveChanges())) throw new Error('Generated plan could not be saved.')
       }
+      if (!currentLoad()) return
       if (rebuild) {
         const query = { ...route.query }
         delete query.replan
@@ -485,10 +755,11 @@ async function loadPage() {
       loadWeather()
     }
   } catch (error) {
+    if (disposed || loadController !== controller) return
     console.log(error)
     errorMessage.value = saveError.value || "Couldn't load the plan. Please try again."
   } finally {
-    loading.value = false
+    if (!disposed && loadController === controller) loading.value = false
   }
 }
 
@@ -528,6 +799,16 @@ function travelMinutes(options, mode) {
   )
   return (chosen || fastest).durationMinutes
 }
+
+// True when a journey between two stops has no real travel time (the request failed or
+// found no route). The times after it are only a 30-minute guess, so the plan can't be saved.
+const travelFailed = computed(() => {
+  const stops = itinerary.value?.stops || []
+  return stops.slice(1).some((stop, i) => {
+    const leg = travelByLeg.value[legKey(stops[i], stop)]
+    return leg && !leg.loading && !leg.options?.some((option) => option.available)
+  })
+})
 
 // A tab was clicked in edit mode: remember the choice and move the later stops
 function chooseTravelMode(index, mode) {
@@ -600,6 +881,7 @@ onUnmounted(() => {
   disposed = true
   travelRequest += 1
   saveController?.abort()
+  loadController?.abort()
 })
 </script>
 
@@ -610,12 +892,10 @@ onUnmounted(() => {
       <h2 class="h5 fw-bold mb-1">Itinerary</h2>
       <p class="text-secondary mb-0">Your day, planned from the group's votes and free time.</p>
     </div>
-    <p v-if="loading" class="text-center text-secondary py-5">
-      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-      Loading plan...
-    </p>
+    <ItineraryLoadingCar v-if="loading" :message="loadingMessage" />
     <div v-else-if="errorMessage" class="alert alert-danger" role="alert" data-testid="itinerary-error">
       <p>{{ errorMessage }}</p>
+      <p v-if="group?.chosen_start" class="small">Your group time is saved. Retry building the itinerary or choose another time.</p>
       <button
         class="btn btn-outline-danger rounded-pill px-4"
         data-testid="itinerary-retry"
@@ -623,6 +903,7 @@ onUnmounted(() => {
       >
         {{ saveConflict ? 'Load latest plan' : 'Try again' }}
       </button>
+      <RouterLink :to="{ name: 'group-availability' }" class="btn btn-link text-body">Change group time</RouterLink>
     </div>
 
     <!-- No plan yet -->
@@ -632,7 +913,7 @@ onUnmounted(() => {
           <path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4zM8 2v16M16 6v16" />
         </svg>
       </div>
-      <p class="mb-3">No plan yet. Pick a time on the Availability tab, then press Plan.</p>
+      <p class="mb-3">No plan yet. Add your availability, then choose a group time to build your itinerary.</p>
       <RouterLink :to="{ name: 'group-availability' }" class="btn btn-dark rounded-pill px-4">
         Go to Availability
       </RouterLink>
@@ -640,7 +921,20 @@ onUnmounted(() => {
 
     <!-- There is a plan -->
     <fieldset v-else class="border-0 p-0 m-0 w-100" :disabled="saving" data-testid="itinerary-plan">
-      <p v-if="weatherLoading" class="text-secondary small">Checking the weather...</p>
+      <div v-if="!itinerary.stops.length" class="alert alert-warning" role="status" data-testid="itinerary-no-fit">
+        <p class="fw-semibold mb-1">No activities fit this time and budget.</p>
+        <p class="small mb-2">Choose a longer time, adjust the group budget, or vote for other activities.</p>
+        <RouterLink :to="{ name: 'group-availability' }" class="btn btn-outline-dark rounded-pill me-2">Change time</RouterLink>
+        <RouterLink :to="{ name: 'group-activities' }" class="btn btn-link text-body">Back to voting</RouterLink>
+      </div>
+      <p v-else-if="planSaved && !isEditing" class="text-success-emphasis small" role="status" data-testid="itinerary-saved-status">✓ Itinerary saved for your group.</p>
+      <div v-if="isPlanPast" class="info-banner muted" data-testid="itinerary-weather-past">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+        </svg>
+        <span>This day has passed, so there's no forecast.</span>
+      </div>
+      <p v-else-if="weatherLoading" class="text-secondary small">Checking the weather...</p>
       <div v-else-if="weather" class="info-banner" data-testid="itinerary-weather">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
@@ -664,12 +958,49 @@ onUnmounted(() => {
         </div>
         <div>
           <dt>Time</dt>
-          <dd>{{ startTime }} – {{ endTime }}</dd>
+          <!-- Read-only text until Edit is pressed, so the panel doesn't change shape -->
+          <dd class="d-flex align-items-center gap-1">
+            <input
+              ref="startField"
+              v-model="startDraft"
+              type="time"
+              class="time-input"
+              :class="isEditing ? 'form-control' : 'form-control-plaintext'"
+              :readonly="!isEditing"
+              :min="freeTime?.start"
+              :max="freeTime?.end"
+              aria-label="Start time"
+              aria-describedby="itinerary-time-error"
+              data-testid="itinerary-start-time"
+              @blur="changeDayStart"
+              @keydown.enter="changeDayStart"
+            />
+            –
+            <input
+              ref="endField"
+              v-model="endDraft"
+              type="time"
+              class="time-input"
+              :class="isEditing ? 'form-control' : 'form-control-plaintext'"
+              :readonly="!isEditing"
+              :disabled="!itinerary.stops.length"
+              :min="freeTime?.start"
+              :max="freeTime?.end"
+              aria-label="End time"
+              aria-describedby="itinerary-time-error"
+              data-testid="itinerary-end-time"
+              @blur="changeDayEnd"
+              @keydown.enter="changeDayEnd"
+            />
+          </dd>
         </div>
         <div data-testid="itinerary-cost">
           <dt>Cost per person</dt>
           <dd>
             <span :class="{ 'text-danger': isOverBudget }">${{ totalCost }}</span> of ${{ budget }}
+            <span v-if="hasUnknownPrices" class="d-block text-warning-emphasis small">
+              Known subtotal only; total incomplete because a stop's price is unknown. Remove unknown-price stops before saving.
+            </span>
             <span
               v-if="isOverBudget"
               class="badge rounded-pill text-bg-warning ms-1"
@@ -684,6 +1015,10 @@ onUnmounted(() => {
           <dd>{{ itinerary.stops.length }}</dd>
         </div>
       </dl>
+      <p v-if="isEditing && timeError" id="itinerary-time-error" class="text-danger small"
+        role="alert" data-testid="itinerary-time-error">{{ timeError }}</p>
+      <p v-else-if="isEditing && timeNote" class="text-secondary small" role="status"
+        data-testid="itinerary-time-note">{{ timeNote }}</p>
       <div class="edit-bar">
         <button
           v-if="!isEditing"
@@ -696,7 +1031,7 @@ onUnmounted(() => {
         <template v-else>
           <button
             class="btn btn-dark rounded-pill px-4"
-            :disabled="saving || travelLoading"
+            :disabled="saving || travelLoading || travelFailed || hasUnknownPrices"
             data-testid="itinerary-save"
             @click="saveChanges"
           >
@@ -718,45 +1053,58 @@ onUnmounted(() => {
             Re-plan
           </button>
         </template>
-        <div v-if="isEditing" class="d-flex align-items-center gap-2 ms-sm-auto">
-          <label for="day-start" class="form-label small fw-semibold mb-0">Start at</label>
-          <input
-            id="day-start"
-            v-model="dayStart"
-            type="time"
-            class="form-control time-input"
-            data-testid="itinerary-start-time"
-            @change="recalculateTimes"
-          />
-        </div>
       </div>
       <p v-if="isEditing && travelLoading" role="status" class="text-secondary small">
         Checking travel times before saving…
       </p>
-      <p v-if="saveError" class="text-danger" data-testid="itinerary-save-error">{{ saveError }}</p>
+      <div v-else-if="travelFailed" role="alert" class="d-flex flex-wrap align-items-center gap-2 mb-3"
+        data-testid="itinerary-travel-failed">
+        <span class="text-danger small">
+          Some travel times couldn't be checked{{ isEditing ? ", so the plan can't be saved yet" : '' }}.
+        </span>
+        <button type="button" class="btn btn-sm btn-outline-dark rounded-pill px-3"
+          data-testid="itinerary-travel-retry" @click="loadTravel">Retry</button>
+      </div>
+      <p v-if="saveError" class="text-danger" role="alert" data-testid="itinerary-save-error">{{ saveError }}</p>
       <button v-if="saveConflict" type="button" class="btn btn-outline-dark rounded-pill mb-3"
         data-testid="itinerary-load-latest" @click="reloadLatestPlan">Load latest plan</button>
 
-      <ol class="list-unstyled mb-0" data-testid="itinerary-timeline">
+      <ol class="timeline list-unstyled mb-0" data-testid="itinerary-timeline">
         <template v-for="(stop, index) in displayStops" :key="stop.original.activity_id">
-          <li
-            class="stop-card"
-            :class="{ rainy: stop.isRainyView }"
-            data-testid="itinerary-stop"
-          >
+          <li class="timeline-row" data-testid="itinerary-stop">
+            <div class="timeline-time">
+              <span class="clock">{{ formatClock(stop.start) }}</span>
+              <span class="length">{{ formatHours(stop.start, stop.end) }}</span>
+            </div>
+            <div class="timeline-rail" aria-hidden="true"><span class="timeline-dot"></span></div>
+            <div class="stop-card surface-card" :class="{ rainy: stop.isRainyView }">
             <div class="stop-body">
-              <div class="stop-time-row"><span class="stop-time">{{ stop.start }}–{{ stop.end }}</span></div>
-              <img
+              <!-- Opens the activity's details, like the Activities tab. Not while editing,
+                   so leaving the page can't throw away unsaved changes. -->
+              <component
+                :is="isEditing ? 'div' : 'RouterLink'"
                 v-if="stop.image_url"
-                :src="stop.image_url"
-                :alt="stop.name"
-                class="stop-photo"
-                width="80"
-                height="80"
-              />
+                :to="isEditing ? undefined : { name: 'activity-detail', params: { id: stop.activity_id } }"
+                class="stop-photo-link"
+                tabindex="-1"
+                aria-hidden="true"
+              >
+                <img :src="stop.image_url" alt="" class="stop-photo" width="80" height="80" />
+              </component>
               <div class="stop-main">
-                <h3 class="stop-name">{{ index + 1 }}. {{ stop.name }}</h3>
-                <p class="mb-1 small fw-semibold">${{ stop.cost }} per person</p>
+                <h3 class="stop-name">
+                  {{ index + 1 }}.
+                  <span v-if="isEditing">{{ stop.name }}</span>
+                  <RouterLink
+                    v-else
+                    :to="{ name: 'activity-detail', params: { id: stop.activity_id } }"
+                    data-testid="itinerary-stop-link"
+                  >
+                    {{ stop.name }}
+                  </RouterLink>
+                </h3>
+                <p class="stop-range small text-secondary mb-1">{{ stop.start }}–{{ stop.end }}</p>
+                <p class="mb-1 small fw-semibold">{{ stop.cost === null ? 'Price unknown' : '$' + stop.cost + ' per person' }}</p>
                 <p class="text-secondary small mb-1">{{ stop.reason }}</p>
                 <span
                   v-for="warning in getStopWarnings(stop)"
@@ -832,8 +1180,10 @@ onUnmounted(() => {
                 </button>
               </div>
             </div>
+            </div>
           </li>
-          <li v-if="index < displayStops.length - 1">
+          <li v-if="index < displayStops.length - 1" class="timeline-row travel-row">
+            <div class="timeline-rail" aria-hidden="true"></div>
             <ItineraryTravelOptions
               :leg="legAfter(index)"
               :mode="itinerary.stops[index].travel_mode"
@@ -851,12 +1201,13 @@ onUnmounted(() => {
             :key="activity.activity_id"
             class="d-flex flex-wrap align-items-center gap-2"
           >
-            <span class="flex-grow-1">{{ activity.name }} (${{ activity.cost }})</span>
+            <span class="flex-grow-1">{{ activity.name }} ({{ activity.cost === null ? 'Price unknown' : '$' + activity.cost }})</span>
             <span class="reason-chip">{{ whyNotInPlan(activity) }}</span>
             <button
               v-if="isEditing"
               class="btn btn-sm btn-outline-dark rounded-pill px-3"
               data-testid="itinerary-add-stop"
+              :disabled="activity.cost === null"
               @click="addStop(activity)"
             >
               Add anyway
@@ -886,18 +1237,12 @@ onUnmounted(() => {
   stroke-linejoin: round;
 }
 
-.itinerary-tab :is(a, button):focus-visible {
-  outline: 2px solid #111;
-  outline-offset: 2px;
-  box-shadow: none;
-}
-
 /* No plan yet */
 .empty-plan {
   padding: 2.5rem 1rem;
-  border: 1px solid #e5e5e5;
-  border-radius: 18px;
-  background: #fafafa;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
   text-align: center;
 }
 
@@ -908,13 +1253,13 @@ onUnmounted(() => {
   height: 64px;
   margin: 0 auto 1rem;
   border-radius: 50%;
-  background: #f0f0f0;
+  background: var(--surface-2);
 }
 
 .empty-icon svg {
   width: 28px;
   height: 28px;
-  color: #111;
+  color: var(--ink);
 }
 
 /* Weather line */
@@ -925,27 +1270,40 @@ onUnmounted(() => {
   margin-bottom: 1rem;
   padding: 12px 16px;
   border: 1px solid var(--bs-info-border-subtle);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--bs-info-bg-subtle);
   color: var(--bs-info-text-emphasis);
 }
 
 .info-banner.muted {
-  border-color: #e5e5e5;
-  background: #fafafa;
+  border-color: var(--line);
+  background: var(--surface-2);
   color: var(--bs-secondary-color);
 }
 
 /* Date, time, cost and stops */
 .summary-panel {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem 1.5rem;
   margin-bottom: 1rem;
   padding: 16px 20px;
-  border: 1px solid #e5e5e5;
-  border-radius: 16px;
-  background: #fafafa;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+
+/* Leave room for both time inputs, including their controls while editing. */
+@media (min-width: 576px) {
+  .summary-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 1fr);
+  }
+}
+
+@media (min-width: 992px) {
+  .summary-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 1.6fr) minmax(0, 1fr) minmax(0, 0.5fr);
+  }
 }
 
 .summary-panel dt {
@@ -973,19 +1331,100 @@ onUnmounted(() => {
   min-height: 44px;
 }
 
+/* Sized to the summary text so the panel doesn't jump when editing starts */
 .time-input {
   width: auto;
-  min-height: 44px;
-  border-radius: 12px;
+  height: 1.75rem;
+  padding: 0 4px;
+  color: inherit;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+}
+
+.time-input.form-control-plaintext {
+  padding: 0;
+}
+
+/* No clock icon while the time is read-only */
+.time-input.form-control-plaintext::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+/* Timeline: start time and length on the left, a dot on a thin line, then the stop card */
+.timeline-row {
+  display: grid;
+  grid-template-columns: 4.75rem 20px minmax(0, 1fr);
+  column-gap: 12px;
+}
+
+.timeline-time {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding-top: 14px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.timeline-time .clock {
+  color: var(--bs-emphasis-color);
+  font-size: 0.9rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-time .length {
+  color: var(--bs-secondary-color);
+  font-size: 0.8rem;
+}
+
+/* The line runs the full height of every row, so it joins up between stops */
+.timeline-rail {
+  position: relative;
+  grid-column: 2;
+}
+
+.timeline-rail::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--line);
+}
+
+/* Start the line at the first dot and stop it at the last one */
+.timeline-row:first-child .timeline-rail::before {
+  top: 20px;
+}
+
+.timeline-row:last-child .timeline-rail::before {
+  bottom: auto;
+  height: 20px;
+}
+
+.timeline-dot {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateX(-50%);
+  border: 3px solid var(--bs-success);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.travel-row > :last-child {
+  grid-column: 3;
 }
 
 /* One stop on the timeline, styled like the activity cards */
 .stop-card {
+  grid-column: 3;
   padding: 16px;
-  border: 1px solid #eee;
-  border-radius: 18px;
-  background: white;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
 }
 
 .stop-card.rainy {
@@ -999,21 +1438,13 @@ onUnmounted(() => {
   gap: 12px 16px;
 }
 
-.stop-time {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: #111;
-  color: white;
-  font-size: 0.85rem;
-  font-weight: 700;
+.stop-range {
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .stop-photo {
   flex-shrink: 0;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   object-fit: cover;
 }
 
@@ -1030,13 +1461,23 @@ onUnmounted(() => {
   overflow-wrap: anywhere;
 }
 
+.stop-name a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.stop-photo-link {
+  display: block;
+  flex-shrink: 0;
+}
+
 .rain-note {
   color: var(--bs-info-text-emphasis);
 }
 
 .rainy-toggle .form-check-input:checked {
-  border-color: #111;
-  background-color: #111;
+  border-color: var(--ink);
+  background-color: var(--ink);
 }
 
 /* Move up, remove and move down while editing */
@@ -1051,14 +1492,14 @@ onUnmounted(() => {
   place-items: center;
   width: 40px;
   height: 40px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 50%;
-  background: white;
-  color: #111;
+  background: var(--surface);
+  color: var(--ink);
 }
 
 .icon-button:hover:not(:disabled) {
-  background: #f3f3f3;
+  background: var(--surface-2);
 }
 
 .icon-button.danger {
@@ -1075,9 +1516,9 @@ onUnmounted(() => {
   padding: 0;
   overflow: hidden;
   list-style: none;
-  border: 1px solid #e5e5e5;
-  border-radius: 12px;
-  background: white;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
 }
 
 .not-in-plan li {
@@ -1086,22 +1527,26 @@ onUnmounted(() => {
 }
 
 .not-in-plan li + li {
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--line);
 }
 
 .reason-chip {
   padding: 2px 10px;
-  border-radius: 999px;
-  background: #f3f3f3;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
   color: var(--bs-secondary-color);
   font-size: 0.8rem;
 }
 
-/* Phones: the time sits on its own line above the photo and details,
-   and the edit buttons go in a row */
+/* Phones: a narrower time column, and the edit buttons go in a row */
 @media (max-width: 575.98px) {
-  .stop-time-row {
-    flex-basis: 100%;
+  .timeline-row {
+    grid-template-columns: 4rem 16px minmax(0, 1fr);
+    column-gap: 8px;
+  }
+
+  .timeline-time .clock {
+    font-size: 0.8rem;
   }
 
   .stop-controls {

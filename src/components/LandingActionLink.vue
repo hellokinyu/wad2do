@@ -32,9 +32,9 @@ const isHovered = ref(false)
   min-width: 180px;
   min-height: 60px;
   padding: 16px 32px;
-  border: 1px solid #222;
-  border-radius: 100px;
-  color: #111;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-pill);
+  color: var(--ink);
   font-size: 17px;
   font-weight: 600;
   text-decoration: none;
@@ -44,19 +44,21 @@ const isHovered = ref(false)
 }
 
 .pill.primary {
-  color: #fff;
-  background: #111;
-  box-shadow: 0 6px 16px #00000018;
+  border-color: var(--accent-edge, var(--accent));
+  color: var(--on-accent);
+  background: var(--accent);
+  box-shadow: var(--shadow-raised);
 }
 
 .pill.is-active {
-  color: #111;
-  background: #ececeb;
+  color: var(--ink);
+  background: var(--surface-3);
 }
 
 .pill.primary.is-active {
-  color: #fff;
-  background: #363636;
+  border-color: var(--accent-edge, var(--accent-hover));
+  color: var(--on-accent);
+  background: var(--accent-hover);
 }
 
 .action-arrow {
@@ -67,11 +69,6 @@ const isHovered = ref(false)
   transform: translateX(4px);
 }
 
-.pill:focus-visible {
-  outline: 3px solid #8b7151;
-  outline-offset: 5px;
-}
-
 .action-spark {
   position: absolute;
   top: -18px;
@@ -79,7 +76,7 @@ const isHovered = ref(false)
   width: 22px;
   height: 22px;
   opacity: 0;
-  color: #363636;
+  color: var(--ink);
   pointer-events: none;
   transform: translateY(3px);
   transition:

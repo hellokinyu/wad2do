@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
 import {
@@ -19,6 +19,7 @@ import GroupInviteCode from '@/components/group/GroupInviteCode.vue'
 import GroupTicketStub from '@/components/group/GroupTicketStub.vue'
 
 const router = useRouter()
+const route = useRoute()
 
 const groups = ref([]) // array of the user's groups
 const loading = ref(true)
@@ -38,6 +39,11 @@ const createError = ref('') // for when saving fails, not for form mistakes
 const newGroup = ref(null) // the group we just made, so we can show its invite code
 const creating = ref(false)
 let newGroupId = crypto.randomUUID()
+
+// "Create a new group" in an activity's share menu sends ?share=<activity id>. That activity is
+// shared to the group as soon as it's made, so the user doesn't have to find it again.
+const pendingShare = ref(null) // { id, name }
+const shareOutcome = ref(null) // { status: 'shared' | 'failed', name }, shown with the invite code
 
 // Join group form
 const showJoinForm = ref(false)
@@ -96,6 +102,48 @@ async function loadGroups() {
 }
 
 onMounted(loadGroups)
+
+async function loadPendingShare() {
+  const activityId = typeof route.query.share === 'string' ? route.query.share : ''
+  if (!activityId) return
+  // Tidy the address bar; the note in the form shows what will be shared
+  router.replace({ query: {} })
+  try {
+    const { data, error } = await supabase
+      .from('activities')
+      .select('id, name')
+      .eq('id', activityId)
+      .maybeSingle()
+    if (error) throw error
+    if (!data) return
+    pendingShare.value = data
+    openCreateForm()
+  } catch (error) {
+    // Without the activity the page still works; the user can share it from its card later
+    console.log(error)
+  }
+}
+
+onMounted(loadPendingShare)
+
+async function sharePendingActivity(groupId) {
+  const activity = pendingShare.value
+  pendingShare.value = null
+  try {
+    const user = await getUser()
+    const { error } = await requestWithTimeout((signal) =>
+      supabase
+        .from('group_activities')
+        .insert({ group_id: groupId, activity_id: activity.id, shared_by: user.id })
+        .abortSignal(signal),
+    )
+    if (error) throw error
+    shareOutcome.value = { status: 'shared', name: activity.name }
+  } catch (error) {
+    console.log(error)
+    shareOutcome.value = { status: 'failed', name: activity.name }
+  }
+}
 
 // The members' avatars for one card. If this fails the card just shows the member count.
 // { get: true } because it only reads, and get_group_member_names is a "stable" function.
@@ -213,6 +261,7 @@ async function openCreateForm() {
     budget.value = ''
     newGroup.value = null
     newGroupId = crypto.randomUUID()
+    shareOutcome.value = null
   }
   fieldErrors.value = {}
   createError.value = ''
@@ -281,6 +330,7 @@ async function createGroup() {
 
     if (error) throw error
 
+    if (pendingShare.value) await sharePendingActivity(data.id)
     newGroup.value = data // shows the invite panel
     freshGroupId.value = data.id
     loadGroups()
@@ -419,6 +469,23 @@ async function joinGroup() {
               </div>
             </div>
 
+            <p
+              v-if="shareOutcome"
+              class="share-note"
+              :class="{ 'is-failed': shareOutcome.status === 'failed' }"
+              role="status"
+              data-testid="pending-share-result"
+            >
+              <template v-if="shareOutcome.status === 'shared'">
+                <strong>{{ shareOutcome.name }}</strong> is in this group's Activities, ready for
+                votes.
+              </template>
+              <template v-else>
+                Couldn't share <strong>{{ shareOutcome.name }}</strong
+                >. Share it again from its card on Activities.
+              </template>
+            </p>
+
             <GroupInviteCode
               :group-id="newGroup.id"
               :group-name="newGroup.name"
@@ -446,6 +513,21 @@ async function joinGroup() {
                   </p>
                 </div>
               </div>
+
+              <p v-if="pendingShare" class="share-note" data-testid="pending-share">
+                <span>
+                  <strong>{{ pendingShare.name }}</strong> will be shared to this group once it's
+                  made.
+                </span>
+                <button
+                  type="button"
+                  class="btn btn-link p-0 text-body"
+                  data-testid="pending-share-cancel"
+                  @click="pendingShare = null"
+                >
+                  Don't share it
+                </button>
+              </p>
 
               <div class="row g-3">
                 <div class="col-12">
@@ -639,7 +721,7 @@ async function joinGroup() {
     <!-- List of groups -->
     <div v-if="loading" class="ticket-grid" role="status">
       <span class="visually-hidden">Loading your groups…</span>
-      <div v-for="n in 3" :key="n" class="ticket ticket-skeleton" aria-hidden="true">
+      <div v-for="n in 3" :key="n" class="ticket surface-card ticket-skeleton" aria-hidden="true">
         <div class="skeleton-stub"></div>
         <div class="ticket-body">
           <span class="skeleton-line w-75"></span>
@@ -720,7 +802,7 @@ async function joinGroup() {
           <li v-for="group in section.list" :key="group.id">
             <RouterLink
               :to="getGroupLink(group)"
-              class="ticket"
+              class="ticket surface-card"
               :class="{ past: isPast(group) }"
               :style="getStageStyle(group, today)"
               :aria-labelledby="'group-' + group.id + '-name'"
@@ -811,23 +893,15 @@ async function joinGroup() {
 </template>
 
 <style scoped>
-/* Matches the Activities page: near-black ink, pill buttons, soft grey hairlines */
+/* Ink, lines and surfaces come from the theme in src/assets/styles.css */
 .groups-page {
-  --ink: #111;
-  --line: #e5e5e5;
-  --panel: #fafafa;
+  --panel: var(--surface-2);
   --stub-width: 92px;
 }
 
 .groups-page ::selection {
   background: var(--ink);
-  color: white;
-}
-
-.groups-page :is(a, button):focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 3px;
-  box-shadow: none;
+  color: var(--on-ink);
 }
 
 /* Line icons. Not the animal avatars: they're SVGs too, and this stroke would outline every
@@ -873,8 +947,8 @@ svg:not(.animal-avatar) {
   min-height: 48px;
   padding: 10px 24px;
   border: 1px solid var(--ink);
-  border-radius: 999px;
-  background: white;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
   color: var(--ink);
   font-size: 1rem;
   font-weight: 600;
@@ -895,13 +969,13 @@ svg:not(.animal-avatar) {
 
 .group-action.active {
   background: var(--ink);
-  color: white;
+  color: var(--on-ink);
 }
 
 .group-action:hover {
   background: var(--ink);
-  color: white;
-  box-shadow: 0 6px 16px rgb(0 0 0 / 14%);
+  color: var(--on-ink);
+  box-shadow: var(--shadow-raised);
   transform: translateY(-2px);
 }
 
@@ -914,7 +988,7 @@ svg:not(.animal-avatar) {
 .group-action[aria-expanded='true'],
 .group-action[aria-expanded='true']:hover {
   box-shadow:
-    0 0 0 3px white,
+    0 0 0 3px var(--surface),
     0 0 0 5px var(--ink);
   transform: none;
 }
@@ -924,9 +998,9 @@ svg:not(.animal-avatar) {
   margin-bottom: 2rem;
   padding: 24px;
   border: 1px solid var(--line);
-  border-radius: 18px;
-  background: white;
-  box-shadow: 0 10px 32px rgb(0 0 0 / 7%);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
 }
 
 .join-panel {
@@ -962,7 +1036,7 @@ svg:not(.animal-avatar) {
   height: 40px;
   border-radius: 50%;
   background: var(--ink);
-  color: white;
+  color: var(--on-ink);
 }
 
 .done-mark svg {
@@ -979,14 +1053,14 @@ svg:not(.animal-avatar) {
 .panel .form-control,
 .panel .input-group-text {
   min-height: 48px;
-  border-color: #d9d9d9;
-  border-radius: 12px;
+  border-color: var(--line);
+  border-radius: var(--radius-md);
   caret-color: var(--ink);
 }
 
 .panel .input-group-text {
   background: var(--panel);
-  color: #555;
+  color: var(--muted);
   font-weight: 600;
 }
 
@@ -1002,7 +1076,7 @@ svg:not(.animal-avatar) {
 
 .panel .form-control:focus {
   border-color: var(--ink);
-  box-shadow: 0 0 0 3px rgb(17 17 17 / 12%);
+  box-shadow: 0 0 0 3px var(--bs-focus-ring-color);
 }
 
 .panel .btn {
@@ -1018,7 +1092,7 @@ svg:not(.animal-avatar) {
 /* Mistakes show under their field; Bootstrap's warning icon would cover the date picker */
 .panel .form-control.is-invalid {
   padding-right: 0.75rem;
-  border-color: #b02a37;
+  border-color: var(--bs-danger-text-emphasis);
   background-image: none;
 }
 
@@ -1028,7 +1102,7 @@ svg:not(.animal-avatar) {
 
 .form-error,
 .field-error {
-  color: #b02a37;
+  color: var(--bs-danger-text-emphasis);
   font-weight: 600;
 }
 
@@ -1055,6 +1129,25 @@ svg:not(.animal-avatar) {
   background-size: 14px;
 }
 
+/* The activity a "Create a new group" link brought along, before and after the group is made */
+.share-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-bottom: 1.25rem;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+/* Errors use Bootstrap's danger colours (DESIGN.md); coral means "not keen", not "failed" */
+.share-note.is-failed {
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
+}
+
 .panel-footer {
   display: flex;
   flex-wrap: wrap;
@@ -1063,7 +1156,7 @@ svg:not(.animal-avatar) {
   gap: 8px;
   margin-top: 1.5rem;
   padding-top: 1.25rem;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--line);
 }
 
 .panel-footer .btn-link {
@@ -1091,7 +1184,7 @@ svg:not(.animal-avatar) {
 }
 
 .code-input::placeholder {
-  color: #949494;
+  color: var(--subtle);
   font-weight: 500;
 }
 
@@ -1158,8 +1251,8 @@ svg:not(.animal-avatar) {
   min-height: 44px;
   padding: 8px 16px;
   border: 1px solid var(--line);
-  border-radius: 999px;
-  background: white;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
   color: var(--ink);
   font-size: 0.9rem;
   font-weight: 600;
@@ -1167,7 +1260,7 @@ svg:not(.animal-avatar) {
 }
 
 .past-toggle:hover {
-  background: #f3f3f3;
+  background: var(--surface-2);
 }
 
 .past-toggle svg {
@@ -1183,17 +1276,17 @@ svg:not(.animal-avatar) {
 .nothing-next {
   margin: 0;
   padding: 20px;
-  border: 1px dashed #d4d4d4;
-  border-radius: 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
   background: var(--panel);
   color: var(--bs-secondary-color);
 }
 
 .section-count {
   padding: 1px 9px;
-  border-radius: 999px;
-  background: #f0f0f0;
-  color: #555;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--muted);
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
 }
@@ -1214,12 +1307,8 @@ svg:not(.animal-avatar) {
   height: 100%;
   min-height: 168px;
   overflow: hidden;
-  border: 1px solid #eee;
-  border-radius: 18px;
-  background: white;
   color: var(--ink);
   text-decoration: none;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
   transition:
     transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -1234,9 +1323,9 @@ svg:not(.animal-avatar) {
   z-index: 1;
   width: 20px;
   height: 20px;
-  border: 1px solid #eee;
+  border: 1px solid var(--line);
   border-radius: 50%;
-  background: white;
+  background: var(--surface);
 }
 
 .ticket::before {
@@ -1249,7 +1338,7 @@ svg:not(.animal-avatar) {
 
 a.ticket:hover {
   color: var(--ink);
-  box-shadow: 0 14px 32px rgb(0 0 0 / 10%);
+  box-shadow: var(--shadow-raised);
   transform: translateY(-3px);
 }
 
@@ -1291,7 +1380,7 @@ a.ticket:hover {
   width: 20px;
   height: 20px;
   margin-top: 3px;
-  color: #999;
+  color: var(--subtle);
   transition:
     transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
     color 220ms ease;
@@ -1306,9 +1395,9 @@ a.ticket:hover .ticket-arrow {
   flex-shrink: 0;
   margin-top: 2px;
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--ink);
-  color: white;
+  color: var(--on-ink);
   font-size: 0.75rem;
   font-weight: 700;
 }
@@ -1325,7 +1414,7 @@ a.ticket:hover .ticket-arrow {
   height: 24px;
   margin-left: -6px;
   border-radius: 50%;
-  box-shadow: 0 0 0 2px white;
+  box-shadow: 0 0 0 2px var(--surface);
 }
 
 .faces > :first-child {
@@ -1335,15 +1424,15 @@ a.ticket:hover .ticket-arrow {
 .face-initial {
   display: inline-grid;
   place-items: center;
-  background: #ececec;
-  color: #444;
+  background: var(--surface-3);
+  color: var(--muted);
   font-size: 0.7rem;
   font-weight: 700;
 }
 
 .face-more {
   background: var(--ink);
-  color: white;
+  color: var(--on-ink);
 }
 
 .ticket-meta {
@@ -1365,7 +1454,7 @@ a.ticket:hover .ticket-arrow {
   width: 16px;
   height: 16px;
   margin-top: 2px;
-  color: #777;
+  color: var(--muted);
 }
 
 /* Voting -> Time picked -> Planned, as three bars that fill in */
@@ -1382,8 +1471,8 @@ a.ticket:hover .ticket-arrow {
 
 .stage-track span {
   height: 6px;
-  border-radius: 999px;
-  background: #ececec;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
 }
 
 .stage-track span.done {
@@ -1426,7 +1515,7 @@ a.ticket:hover .ticket-arrow {
   flex-shrink: 0;
   width: var(--stub-width);
   border-right: 2px dashed rgb(0 0 0 / 8%);
-  background: #ececec;
+  background: var(--surface-3);
 }
 
 .ticket-skeleton .ticket-body {
@@ -1436,8 +1525,8 @@ a.ticket:hover .ticket-arrow {
 .skeleton-line {
   display: block;
   height: 12px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #efefef 0%, #f7f7f7 50%, #efefef 100%);
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-2) 50%, var(--surface-2) 100%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
 }
@@ -1458,8 +1547,8 @@ a.ticket:hover .ticket-arrow {
 /* ----- Empty ----- */
 .empty-groups {
   padding: 48px 24px;
-  border: 1px dashed #d4d4d4;
-  border-radius: 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
   background: var(--panel);
   text-align: center;
 }

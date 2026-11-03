@@ -138,6 +138,43 @@
           <stop offset="0" stop-color="#e2c29c" />
           <stop offset="1" stop-color="#9c6b3c" />
         </linearGradient>
+        <radialGradient id="nt-g-mane" cx="35%" cy="30%" r="75%">
+          <stop offset="0" stop-color="#fffaf0" />
+          <stop offset="0.55" stop-color="#efe1c2" />
+          <stop offset="1" stop-color="#c4ab7c" />
+        </radialGradient>
+        <linearGradient id="nt-g-water" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#a8e3ff" />
+          <stop offset="1" stop-color="#2f8fd8" />
+        </linearGradient>
+        <linearGradient id="nt-g-glass" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#e3f6ff" />
+          <stop offset="0.5" stop-color="#7cc4f2" />
+          <stop offset="1" stop-color="#2a6fb0" />
+        </linearGradient>
+        <!-- Light and shadow folds across the waving flag -->
+        <linearGradient id="nt-g-ripple" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#000" stop-opacity="0.12" />
+          <stop offset="0.25" stop-color="#fff" stop-opacity="0.18" />
+          <stop offset="0.5" stop-color="#000" stop-opacity="0.12" />
+          <stop offset="0.75" stop-color="#fff" stop-opacity="0.18" />
+          <stop offset="1" stop-color="#000" stop-opacity="0.12" />
+        </linearGradient>
+        <linearGradient id="nt-g-bottle" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#6fcf97" />
+          <stop offset="0.45" stop-color="#1e7a4a" />
+          <stop offset="1" stop-color="#0b3a22" />
+        </linearGradient>
+        <radialGradient id="nt-g-violet" cx="35%" cy="30%" r="75%">
+          <stop offset="0" stop-color="#e2ccff" />
+          <stop offset="0.5" stop-color="#8b5cf6" />
+          <stop offset="1" stop-color="#3b1f7a" />
+        </radialGradient>
+        <!-- Five-pointed star, radius 1, for the Singapore flag and bottle label -->
+        <path
+          id="nt-star5"
+          d="M0-1L.225-.309H.951L.363.118.588.809 0 .382-.588.809-.363.118-.951-.309H-.225z"
+        />
       </defs>
     </svg>
 
@@ -155,6 +192,54 @@
           animationDelay: flake.delay,
         }"
       ></span>
+    </template>
+
+    <!-- Red, white and gold confetti across the whole bar on National Day -->
+    <template v-else-if="theme === 'nationalday'">
+      <span
+        v-for="(piece, i) in CONFETTI"
+        :key="i"
+        class="nt-confetti"
+        :style="{
+          left: piece.x,
+          background: piece.color,
+          animationDuration: piece.duration,
+          animationDelay: piece.delay,
+        }"
+      ></span>
+    </template>
+
+    <!-- Fireworks popping across the whole bar at New Year -->
+    <template v-else-if="theme === 'newyear'">
+      <svg
+        v-for="(burst, i) in FIREWORKS"
+        :key="i"
+        class="nt-firework"
+        viewBox="-10 -10 20 20"
+        :style="{
+          left: burst.x,
+          top: burst.y,
+          width: burst.size,
+          height: burst.size,
+          color: burst.color,
+          animationDuration: burst.duration,
+          animationDelay: burst.delay,
+        }"
+      >
+        <path
+          d="M0-3V-8M0 3V8M-3 0H-8M3 0H8M2.1-2.1L5.7-5.7M-2.1-2.1L-5.7-5.7M2.1 2.1L5.7 5.7M-2.1 2.1L-5.7 5.7"
+          stroke="currentColor"
+          stroke-width="1.2"
+          stroke-linecap="round"
+        />
+        <g fill="currentColor">
+          <circle cy="-9.2" r="0.8" />
+          <circle cy="9.2" r="0.8" />
+          <circle cx="-9.2" r="0.8" />
+          <circle cx="9.2" r="0.8" />
+          <circle r="1.2" />
+        </g>
+      </svg>
     </template>
 
     <div class="container nt-inner">
@@ -440,6 +525,340 @@
               <circle cx="48.5" cy="15.2" r="2.4" fill="url(#nt-g-red)" />
               <circle cx="47.9" cy="14.5" r="0.7" fill="#fff" opacity="0.8" />
             </g>
+          </svg>
+        </div>
+      </template>
+
+      <!-- National Day: Merlion spouting water, waving Singapore flag, jet flypast carrying the flag -->
+      <template v-else-if="theme === 'nationalday'">
+        <svg class="nt-item nt-item--1 nt-merlion" viewBox="0 0 44 44">
+          <path d="M18 39C8 40 4 33 7 26c2 4 5 6 9 6z" fill="url(#nt-g-white)" />
+          <path d="M7.5 27l-5-4.5 4.6.6.4-5 2.4 6z" fill="url(#nt-g-white)" />
+          <path d="M14 40c-1-10 2-16 10-16s8 8 6 16z" fill="url(#nt-g-white)" />
+          <path
+            d="M17 31q2 2 4 0M21 31q2 2 4 0M25 31q2 2 4 0M15 35q2 2 4 0M19 35q2 2 4 0M23 35q2 2 4 0"
+            stroke="#b9c0ca"
+            stroke-width="0.7"
+            fill="none"
+          />
+          <g fill="url(#nt-g-mane)">
+            <circle cx="22.5" cy="23" r="3.4" />
+            <circle cx="17.2" cy="20.8" r="3.4" />
+            <circle cx="15" cy="15.5" r="3.4" />
+            <circle cx="17.2" cy="10.2" r="3.4" />
+            <circle cx="22.5" cy="8" r="3.4" />
+            <circle cx="27.8" cy="10.2" r="3.4" />
+          </g>
+          <circle cx="24" cy="16" r="7.5" fill="url(#nt-g-white)" />
+          <ellipse cx="29.5" cy="18" rx="3.2" ry="2.3" fill="#f3ead9" />
+          <ellipse cx="31.6" cy="16.9" rx="1.1" ry="0.8" fill="#352b2b" />
+          <circle cx="31" cy="19.6" r="1.3" fill="#7a2e2e" />
+          <g class="nt-blink">
+            <circle cx="23.5" cy="14" r="1.3" fill="#352b2b" />
+            <circle cx="27.6" cy="13.8" r="1.3" fill="#352b2b" />
+            <circle cx="23.1" cy="13.6" r="0.4" fill="#fff" />
+            <circle cx="27.2" cy="13.4" r="0.4" fill="#fff" />
+          </g>
+          <circle cx="22" cy="18" r="1.6" fill="#f4a3a3" opacity="0.8" />
+          <ellipse
+            cx="21"
+            cy="11.5"
+            rx="2.6"
+            ry="1.2"
+            transform="rotate(-30 21 11.5)"
+            fill="#fff"
+            opacity="0.6"
+          />
+          <path
+            class="nt-spout"
+            d="M31.5 19.4Q42 13 43 37"
+            stroke="#c9eeff"
+            stroke-width="2"
+            stroke-dasharray="2.5 2.5"
+            stroke-linecap="round"
+            fill="none"
+          />
+          <circle class="nt-splash" cx="40.5" cy="36.5" r="1" fill="#c9eeff" />
+          <circle class="nt-splash" cx="45" cy="35.5" r="0.8" fill="#c9eeff" />
+          <path d="M0 40q5.5-3 11 0t11 0 11 0 11 0v4H0z" fill="url(#nt-g-water)" />
+        </svg>
+
+        <!-- Fireworks: three colourful bursts opening and closing in turn -->
+        <svg class="nt-item nt-item--2 nt-fireworks" viewBox="0 0 44 44">
+          <g transform="translate(9 10) scale(0.8)" stroke-width="1.4" stroke-linecap="round">
+            <g class="nt-bloom nt-bloom--2">
+              <path
+                d="M0-3V-8M0 3V8M-3 0H-8M3 0H8M2.1-2.1L5.7-5.7M-2.1-2.1L-5.7-5.7M2.1 2.1L5.7 5.7M-2.1 2.1L-5.7 5.7"
+                stroke="#4ade80"
+              />
+              <g fill="#facc15">
+                <circle cy="-9.5" r="1" />
+                <circle cx="9.5" r="1" />
+                <circle cy="9.5" r="1" />
+                <circle cx="-9.5" r="1" />
+              </g>
+            </g>
+          </g>
+          <g transform="translate(36 11) scale(0.9)" stroke-width="1.4" stroke-linecap="round">
+            <g class="nt-bloom nt-bloom--3">
+              <path
+                d="M0-3V-8M0 3V8M-3 0H-8M3 0H8M2.1-2.1L5.7-5.7M-2.1-2.1L-5.7-5.7M2.1 2.1L5.7 5.7M-2.1 2.1L-5.7 5.7"
+                stroke="#38bdf8"
+              />
+              <g fill="#f472b6">
+                <circle cy="-9.5" r="1" />
+                <circle cx="9.5" r="1" />
+                <circle cy="9.5" r="1" />
+                <circle cx="-9.5" r="1" />
+              </g>
+            </g>
+          </g>
+          <g transform="translate(22 25) scale(1.4)" stroke-width="1.4" stroke-linecap="round">
+            <g class="nt-bloom">
+              <path d="M0-3V-8M0 3V8M-3 0H-8M3 0H8" stroke="#facc15" />
+              <path
+                d="M2.1-2.1L5.7-5.7M-2.1-2.1L-5.7-5.7M2.1 2.1L5.7 5.7M-2.1 2.1L-5.7 5.7"
+                stroke="#c084fc"
+              />
+              <g fill="#ff7ab6">
+                <use href="#nt-star5" transform="translate(0 -10.5) scale(1.4)" />
+                <use href="#nt-star5" transform="translate(10.5 0) scale(1.4)" />
+                <use href="#nt-star5" transform="translate(0 10.5) scale(1.4)" />
+                <use href="#nt-star5" transform="translate(-10.5 0) scale(1.4)" />
+              </g>
+              <circle r="2" fill="url(#nt-g-gold)" />
+            </g>
+          </g>
+        </svg>
+
+        <div class="nt-item nt-item--3 nt-jet-path">
+          <svg class="nt-jet" viewBox="0 0 54 46">
+            <circle class="nt-puff" cx="4" cy="16" r="3" fill="#fff" />
+            <circle class="nt-puff" cx="-2" cy="16" r="3.4" fill="#ff8a94" />
+            <circle class="nt-puff" cx="-8" cy="16" r="3" fill="#fff" />
+            <!-- Flag carried on two cables under the plane. It flips back when the plane
+                 turns around so the crescent always stays on the left. -->
+            <g class="nt-flag-unflip">
+              <g class="nt-flag-swing">
+                <path
+                  d="M27 19.5L18 31M27 19.5L36 31"
+                  stroke="#f3e9d2"
+                  stroke-width="0.6"
+                  fill="none"
+                />
+                <g class="nt-flag-flutter">
+                  <path
+                    d="M18 31Q22.5 30 27 31T36 31V37Q31.5 38 27 37Q22.5 36 18 37z"
+                    fill="#ef3340"
+                  />
+                  <path
+                    d="M18 37Q22.5 36 27 37T36 37V43Q31.5 44 27 43Q22.5 42 18 43z"
+                    fill="#fff"
+                  />
+                  <circle cx="21.5" cy="34" r="2.2" fill="#fff" />
+                  <circle cx="22.3" cy="34" r="1.95" fill="#ef3340" />
+                  <g fill="#fff">
+                    <use href="#nt-star5" transform="translate(24 32.7) scale(0.5)" />
+                    <use href="#nt-star5" transform="translate(25.24 33.6) scale(0.5)" />
+                    <use href="#nt-star5" transform="translate(24.76 35.05) scale(0.5)" />
+                    <use href="#nt-star5" transform="translate(23.24 35.05) scale(0.5)" />
+                    <use href="#nt-star5" transform="translate(22.76 33.6) scale(0.5)" />
+                  </g>
+                  <path
+                    d="M18 31Q22.5 30 27 31T36 31V43Q31.5 44 27 43Q22.5 42 18 43z"
+                    fill="url(#nt-g-ripple)"
+                  />
+                </g>
+              </g>
+            </g>
+            <path d="M9 13L6 4h4l7 9z" fill="url(#nt-g-red)" />
+            <path d="M26 13l6-6h3l-3 6z" fill="#9aa3ae" />
+            <path
+              d="M7 16c0-3 3-4 7-4h21c9 0 14 2 16 4-2 2-7 4-16 4H14c-4 0-7-1-7-4z"
+              fill="url(#nt-g-white)"
+            />
+            <path d="M12 16.6h28" stroke="#ef3340" stroke-width="1.6" stroke-linecap="round" />
+            <path d="M32 12.4c1-3 5-4 9-2.6 2 .8 3 1.8 3.6 2.6z" fill="url(#nt-g-glass)" />
+            <ellipse cx="20" cy="13.4" rx="6" ry="0.8" fill="#fff" opacity="0.8" />
+            <path
+              d="M22 18h11l-8 9h-4z"
+              fill="url(#nt-g-white)"
+              stroke="#b9c0ca"
+              stroke-width="0.5"
+            />
+            <g class="nt-blink">
+              <circle cx="45.6" cy="14.6" r="1" fill="#352b2b" />
+              <circle cx="45.3" cy="14.3" r="0.35" fill="#fff" />
+            </g>
+            <path
+              d="M46.4 17.2q1.5 1 3 0"
+              stroke="#352b2b"
+              stroke-width="0.8"
+              fill="none"
+              stroke-linecap="round"
+            />
+            <circle cx="43.6" cy="17" r="1.2" fill="#f4a3a3" opacity="0.8" />
+          </svg>
+        </div>
+      </template>
+
+      <!-- New Year: champagne bottle popping its cork, ringing alarm clock, balloons drifting across -->
+      <template v-else-if="theme === 'newyear'">
+        <svg class="nt-item nt-item--1 nt-champagne" viewBox="0 0 44 44">
+          <g transform="rotate(-14 22 43)">
+            <g fill="#fff6c9">
+              <circle class="nt-fizz" cx="22" cy="7" r="1.4" />
+              <circle class="nt-fizz" cx="18.5" cy="6" r="1" />
+              <circle class="nt-fizz" cx="25.5" cy="5.5" r="1.1" />
+              <circle class="nt-fizz" cx="21" cy="2.5" r="0.9" />
+            </g>
+            <g class="nt-cork">
+              <path d="M19.8 4.5h4.4l-.4 5.5h-3.6z" fill="#d9a45b" />
+              <rect x="19.3" y="3.2" width="5.4" height="2.2" rx="1.1" fill="#b98340" />
+            </g>
+            <path
+              d="M15 41V27c0-5 2.5-8 5-9.5V10h4v7.5c2.5 1.5 5 4.5 5 9.5v14c0 1.5-1 2.5-2.5 2.5h-9C16 43.5 15 42.5 15 41z"
+              fill="url(#nt-g-bottle)"
+            />
+            <path d="M19.6 9.5h4.8v8.5c-1.6.8-3.2.8-4.8 0z" fill="url(#nt-g-gold)" />
+            <rect x="16.5" y="27" width="11" height="9" rx="1.5" fill="url(#nt-g-gold)" />
+            <g class="nt-blink">
+              <circle cx="20" cy="30.5" r="1" fill="#2b1a0e" />
+              <circle cx="24" cy="30.5" r="1" fill="#2b1a0e" />
+              <circle cx="19.7" cy="30.2" r="0.35" fill="#fff" />
+              <circle cx="23.7" cy="30.2" r="0.35" fill="#fff" />
+            </g>
+            <path
+              d="M20.4 32.6q1.6 1.4 3.2 0"
+              stroke="#2b1a0e"
+              stroke-width="0.8"
+              fill="none"
+              stroke-linecap="round"
+            />
+            <circle cx="18.3" cy="32.6" r="0.9" fill="#f4a3a3" opacity="0.8" />
+            <circle cx="25.7" cy="32.6" r="0.9" fill="#f4a3a3" opacity="0.8" />
+            <rect x="17" y="20" width="1.6" height="19" rx="0.8" fill="#fff" opacity="0.35" />
+          </g>
+        </svg>
+
+        <svg class="nt-item nt-item--2 nt-clock" viewBox="0 0 44 44">
+          <path
+            d="M13 37l-3 5M31 37l3 5"
+            stroke="#a87b00"
+            stroke-width="2.4"
+            stroke-linecap="round"
+          />
+          <g class="nt-hammer">
+            <path d="M22 12V5.5" stroke="#a87b00" stroke-width="1.6" />
+            <circle cx="22" cy="5" r="1.8" fill="url(#nt-g-gold)" />
+          </g>
+          <ellipse
+            cx="11"
+            cy="11"
+            rx="6"
+            ry="4"
+            transform="rotate(-40 11 11)"
+            fill="url(#nt-g-gold)"
+          />
+          <ellipse
+            cx="33"
+            cy="11"
+            rx="6"
+            ry="4"
+            transform="rotate(40 33 11)"
+            fill="url(#nt-g-gold)"
+          />
+          <circle cx="22" cy="25" r="13.5" fill="url(#nt-g-gold)" />
+          <circle cx="22" cy="25" r="11" fill="url(#nt-g-white)" />
+          <path
+            d="M22 15.5v2M22 32.5v2M12.5 25h2M29.5 25h2"
+            stroke="#8a93a0"
+            stroke-width="1.2"
+            stroke-linecap="round"
+          />
+          <g class="nt-blink">
+            <circle cx="17.5" cy="28" r="1.3" fill="#2b2b2b" />
+            <circle cx="26.5" cy="28" r="1.3" fill="#2b2b2b" />
+            <circle cx="17.1" cy="27.6" r="0.4" fill="#fff" />
+            <circle cx="26.1" cy="27.6" r="0.4" fill="#fff" />
+          </g>
+          <path
+            d="M19.8 30.6q2.2 1.8 4.4 0"
+            stroke="#2b2b2b"
+            stroke-width="0.9"
+            fill="none"
+            stroke-linecap="round"
+          />
+          <circle cx="15" cy="30.4" r="1.4" fill="#f4a3a3" opacity="0.8" />
+          <circle cx="29" cy="30.4" r="1.4" fill="#f4a3a3" opacity="0.8" />
+          <path
+            class="nt-hour"
+            d="M22 25V19"
+            stroke="#2b2b2b"
+            stroke-width="1.8"
+            stroke-linecap="round"
+          />
+          <path
+            class="nt-minute"
+            d="M22 25V16.5"
+            stroke="#c8102e"
+            stroke-width="1.2"
+            stroke-linecap="round"
+          />
+          <circle cx="22" cy="25" r="1.3" fill="#2b2b2b" />
+          <ellipse
+            cx="14"
+            cy="16"
+            rx="3.4"
+            ry="1.4"
+            transform="rotate(-40 14 16)"
+            fill="#fff"
+            opacity="0.5"
+          />
+        </svg>
+
+        <div class="nt-item nt-item--3 nt-balloons-path">
+          <svg class="nt-balloons" viewBox="0 0 40 50">
+            <path
+              d="M10 20q2 14 10 28M20 17q-2 16 0 31M30 20q-2 14-10 28"
+              stroke="rgba(255,255,255,0.6)"
+              stroke-width="0.7"
+              fill="none"
+            />
+            <ellipse cx="10" cy="12" rx="6.5" ry="8" fill="url(#nt-g-violet)" />
+            <path d="M10 19.5l-1.5 2h3z" fill="#5a2fa8" />
+            <ellipse
+              cx="7.6"
+              cy="8.5"
+              rx="1.6"
+              ry="2.6"
+              transform="rotate(20 7.6 8.5)"
+              fill="#fff"
+              opacity="0.55"
+            />
+            <ellipse cx="30" cy="12" rx="6.5" ry="8" fill="url(#nt-g-gold)" />
+            <path d="M30 19.5l-1.5 2h3z" fill="#a87b00" />
+            <ellipse
+              cx="27.6"
+              cy="8.5"
+              rx="1.6"
+              ry="2.6"
+              transform="rotate(20 27.6 8.5)"
+              fill="#fff"
+              opacity="0.6"
+            />
+            <ellipse cx="20" cy="9" rx="7" ry="8.5" fill="url(#nt-g-white)" />
+            <path d="M20 17l-1.5 2h3z" fill="#9aa3ae" />
+            <ellipse
+              cx="17.4"
+              cy="5.4"
+              rx="1.7"
+              ry="2.8"
+              transform="rotate(20 17.4 5.4)"
+              fill="#fff"
+              opacity="0.9"
+            />
+            <path d="M20 47.5l-3-2v4zM20 47.5l3-2v4z" fill="#f5c542" />
           </svg>
         </div>
       </template>
@@ -838,12 +1257,22 @@
 
 <script>
 import { ref } from 'vue'
+import { seasonalTheme, setColorMode } from '@/lib/colorMode'
 
-const THEMES = ['halloween', 'christmas', 'light', 'dark']
-const THEME_SYMBOLS = { halloween: '🎃', christmas: '🎄', light: '☀', dark: '☾' }
+const THEMES = ['newyear', 'nationalday', 'halloween', 'christmas', 'light', 'dark']
+const THEME_SYMBOLS = {
+  newyear: '🎆',
+  nationalday: '🇸🇬',
+  halloween: '🎃',
+  christmas: '🎄',
+  light: '☀',
+  dark: '☾',
+}
 const PREVIEW_KEY = 'wad2do-nav-theme'
 const PICKER_OPTIONS = [
   { value: 'auto', label: 'Auto (by date)' },
+  { value: 'newyear', label: 'New Year' },
+  { value: 'nationalday', label: 'National Day' },
   { value: 'halloween', label: 'Halloween' },
   { value: 'christmas', label: 'Christmas' },
   { value: 'light', label: 'Light' },
@@ -858,15 +1287,25 @@ const SNOWFLAKES = Array.from({ length: 18 }, (_, i) => ({
   delay: `-${(i * 0.9).toFixed(1)}s`,
 }))
 
-// Picks the theme from today's date:
-// Halloween all of October, Christmas 1–26 Dec, otherwise the light theme.
-function seasonalTheme(date = new Date()) {
-  const month = date.getMonth() + 1
-  const day = date.getDate()
-  if (month === 10) return 'halloween'
-  if (month === 12 && day <= 26) return 'christmas'
-  return 'light'
-}
+// Tumbling confetti in white, pink and gold, spread the same way as the snow.
+const CONFETTI_COLORS = ['#ffffff', '#ffd6db', '#ffffff', '#f5c542']
+const CONFETTI = Array.from({ length: 20 }, (_, i) => ({
+  x: `${(i * 41 + 5) % 100}%`,
+  color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+  duration: `${5 + (i % 4)}s`,
+  delay: `-${(i * 0.7).toFixed(1)}s`,
+}))
+
+// Firework bursts at scattered spots and sizes, each popping on its own beat.
+const FIREWORK_COLORS = ['#f5c542', '#ff7ab6', '#7fe3ff', '#ffffff']
+const FIREWORKS = Array.from({ length: 9 }, (_, i) => ({
+  x: `${(i * 23 + 7) % 100}%`,
+  y: `${2 + ((i * 7) % 14)}px`,
+  size: `${22 + (i % 3) * 8}px`,
+  color: FIREWORK_COLORS[i % FIREWORK_COLORS.length],
+  duration: `${2.6 + (i % 3) * 0.5}s`,
+  delay: `-${(i * 0.7).toFixed(1)}s`,
+}))
 
 function readPreview() {
   try {
@@ -882,6 +1321,8 @@ const preview = ref(readPreview())
 
 function setPreview(value) {
   preview.value = value
+  // Every theme also recolours the pages, not just the navbar
+  setColorMode(value)
   try {
     if (value === 'auto') sessionStorage.removeItem(PREVIEW_KEY)
     else sessionStorage.setItem(PREVIEW_KEY, value)
@@ -935,7 +1376,7 @@ function onToggleClick(event) {
   open.value = props.placement !== 'profile' && event.pointerType === 'mouse' ? true : !open.value
 }
 
-// You can also preview with ?navTheme=halloween|christmas|light|dark|auto in the URL.
+// You can also preview with ?navTheme=newyear|nationalday|halloween|christmas|light|dark|auto in the URL.
 watch(
   () => route.query.navTheme,
   (requested) => {
@@ -1045,7 +1486,8 @@ onUnmounted(() => {
 }
 .navbar:has(> .nav-theme[data-nav-theme='halloween']),
 .navbar:has(> .nav-theme[data-nav-theme='christmas']),
-.navbar:has(> .nav-theme[data-nav-theme='dark']) {
+.navbar:has(> .nav-theme[data-nav-theme='nationalday']),
+.navbar:has(> .nav-theme[data-nav-theme='newyear']) {
   --bs-navbar-toggler-border-color: rgba(255, 255, 255, 0.35);
   --bs-navbar-toggler-icon-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.9%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
 }
@@ -1080,37 +1522,61 @@ onUnmounted(() => {
   background: #c8102e;
 }
 
-/* ---------- Light: the original white bar with a black logo ---------- */
-.nav-theme[data-nav-theme='light'] {
-  background: #fff;
+/* ---------- National Day: Singapore red + white ---------- */
+.nav-theme[data-nav-theme='nationalday'] {
+  background: linear-gradient(180deg, #a50e1a 0%, #c8102e 100%);
 }
-.navbar:has(> .nav-theme[data-nav-theme='light']) {
-  --nt-logo-color: #111;
+.navbar:has(> .nav-theme[data-nav-theme='nationalday']) {
+  --nt-logo-color: #ffffff;
+  --bs-border-color: #ffffff;
+  --bs-navbar-color: #ffffff;
+  --bs-navbar-hover-color: #ffe1e5;
+  --bs-navbar-active-color: #c8102e;
 }
-.navbar:has(> .nav-theme[data-nav-theme='light']) .navbar-brand {
+.navbar:has(> .nav-theme[data-nav-theme='nationalday']) .nav-link.active {
+  background: #ffffff;
+}
+
+/* ---------- New Year: midnight navy + champagne gold ---------- */
+.nav-theme[data-nav-theme='newyear'] {
+  background: linear-gradient(180deg, #0b1533 0%, #1b2a5a 100%);
+}
+.navbar:has(> .nav-theme[data-nav-theme='newyear']) {
+  --nt-logo-color: #f5c542;
+  --bs-border-color: #f5c542;
+  --bs-navbar-color: #f4f1ff;
+  --bs-navbar-hover-color: #f5c542;
+  --bs-navbar-active-color: #0b1533;
+}
+.navbar:has(> .nav-theme[data-nav-theme='newyear']) .nav-link.active {
+  background: #f5c542;
+}
+
+/* ---------- Light & Dark: the plain bar in the app's own colours ----------
+   Light and Dark also switch the whole app's colour mode (src/lib/colorMode.js),
+   so the same theme colours from src/assets/styles.css work for both. */
+.nav-theme[data-nav-theme='light'],
+.nav-theme[data-nav-theme='dark'] {
+  background: var(--bg);
+}
+.navbar:has(> .nav-theme[data-nav-theme='light']),
+.navbar:has(> .nav-theme[data-nav-theme='dark']) {
+  --nt-logo-color: var(--ink);
+  --bs-navbar-color: var(--muted);
+  --bs-navbar-hover-color: var(--ink);
+  --bs-navbar-active-color: var(--on-accent);
+}
+.navbar:has(> .nav-theme[data-nav-theme='light']) .navbar-brand,
+.navbar:has(> .nav-theme[data-nav-theme='dark']) .navbar-brand {
   filter: none;
 }
-.navbar:has(> .nav-theme[data-nav-theme='light']) .nav-link.active {
-  background: #f1f1ef;
+.navbar:has(> .nav-theme[data-nav-theme='light']) .nav-link.active,
+.navbar:has(> .nav-theme[data-nav-theme='dark']) .nav-link.active {
+  background: var(--accent);
 }
 .nav-theme[data-nav-theme='light'] .nt-item,
 .nav-theme[data-nav-theme='light'] .nt-walker {
   filter: drop-shadow(0 2px 1.5px rgba(0, 0, 0, 0.2));
-}
-
-/* ---------- Dark: charcoal with soft light text ---------- */
-.nav-theme[data-nav-theme='dark'] {
-  background: linear-gradient(180deg, #111827 0%, #1f2937 100%);
-}
-.navbar:has(> .nav-theme[data-nav-theme='dark']) {
-  --nt-logo-color: #f3f4f6;
-  --bs-border-color: #374151;
-  --bs-navbar-color: #d1d5db;
-  --bs-navbar-hover-color: #ffffff;
-  --bs-navbar-active-color: #ffffff;
-}
-.navbar:has(> .nav-theme[data-nav-theme='dark']) .nav-link.active {
-  background: #374151;
 }
 
 /* ---------- Light & Dark: walking profile animal + its favourite thing ---------- */
@@ -1341,6 +1807,142 @@ onUnmounted(() => {
   animation: nt-glow 1.2s ease-in-out infinite alternate;
 }
 
+/* ---------- National Day animations ---------- */
+.nt-confetti {
+  position: absolute;
+  top: 0;
+  width: 3px;
+  height: 6px;
+  border-radius: 1px;
+  opacity: 0;
+  animation: nt-confetti linear infinite;
+}
+.nt-merlion {
+  overflow: visible;
+  transform-origin: 50% 100%;
+  animation: nt-sway 3.5s ease-in-out infinite;
+}
+.nt-spout {
+  animation: nt-flow 0.5s linear infinite;
+}
+.nt-splash {
+  animation: nt-crumb 0.8s ease-in-out infinite;
+}
+.nt-splash:nth-of-type(2n) {
+  animation-delay: 0.4s;
+}
+.nt-fireworks {
+  overflow: visible;
+}
+.nt-bloom {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: nt-bloom 2.4s ease-in-out infinite;
+}
+.nt-bloom--2 {
+  animation-delay: -0.8s;
+}
+.nt-bloom--3 {
+  animation-delay: -1.6s;
+}
+.nt-jet-path {
+  width: 54px;
+  height: 46px;
+  top: 8px;
+  animation: nt-fly-turn 8s linear infinite;
+}
+/* Same timing as nt-fly-turn, flipping the flag back the other way. */
+.nt-flag-unflip {
+  transform-origin: 27px 37px;
+  animation: nt-unflip 8s linear infinite;
+}
+.nt-flag-swing {
+  transform-origin: 27px 19.5px;
+  animation: nt-swing 1.6s ease-in-out infinite alternate;
+}
+.nt-flag-flutter {
+  transform-origin: 27px 31px;
+  animation: nt-flag-flutter 0.6s ease-in-out infinite alternate;
+}
+.nt-jet {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  animation: nt-bob 1s ease-in-out infinite alternate;
+}
+.nt-puff {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: nt-puff 0.9s ease-out infinite;
+}
+.nt-puff:nth-of-type(2) {
+  animation-delay: 0.3s;
+}
+.nt-puff:nth-of-type(3) {
+  animation-delay: 0.6s;
+}
+
+/* ---------- New Year animations ---------- */
+.nt-firework {
+  position: absolute;
+  opacity: 0;
+  filter: drop-shadow(0 0 3px currentColor);
+  animation: nt-burst ease-out infinite;
+}
+.nt-champagne {
+  overflow: visible;
+  transform-origin: 50% 100%;
+  animation: nt-shake 3s ease-in-out infinite;
+}
+.nt-cork {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: nt-cork 3s ease-out infinite;
+}
+.nt-fizz {
+  opacity: 0;
+  animation: nt-fizz 3s ease-out infinite;
+}
+.nt-fizz:nth-of-type(2) {
+  animation-delay: 0.08s;
+}
+.nt-fizz:nth-of-type(3) {
+  animation-delay: 0.16s;
+}
+.nt-fizz:nth-of-type(4) {
+  animation-delay: 0.24s;
+}
+/* The hands sweep from 11pm to midnight, then the clock rings while they rest on 12. */
+.nt-clock {
+  transform-origin: 50% 100%;
+  animation: nt-ring 4s ease-in-out infinite;
+}
+.nt-hammer {
+  transform-origin: 22px 12px;
+  animation: nt-ring 4s ease-in-out infinite;
+  animation-delay: 0.05s;
+}
+.nt-minute {
+  transform-origin: 22px 25px;
+  animation: nt-minute 4s linear infinite;
+}
+.nt-hour {
+  transform-origin: 22px 25px;
+  animation: nt-hour 4s linear infinite;
+}
+.nt-balloons-path {
+  width: 40px;
+  height: 50px;
+  top: 14px;
+  animation: nt-fly 7s ease-in-out infinite alternate;
+}
+.nt-balloons {
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 100%;
+  animation: nt-sway 2.4s ease-in-out infinite;
+}
+
 /* ---------- Keyframes ---------- */
 @keyframes nt-wobble {
   0%,
@@ -1518,6 +2120,16 @@ onUnmounted(() => {
   --option-background: linear-gradient(180deg, #1b4332, #24573f);
   --option-accent: #c8102e;
   --option-foreground: #fff;
+}
+.nt-picker .nt-theme-option[data-theme='nationalday'] {
+  --option-background: linear-gradient(180deg, #a50e1a, #c8102e);
+  --option-accent: #fff;
+  --option-foreground: #fff;
+}
+.nt-picker .nt-theme-option[data-theme='newyear'] {
+  --option-background: linear-gradient(180deg, #0b1533, #1b2a5a);
+  --option-accent: #f5c542;
+  --option-foreground: #f4f1ff;
 }
 .nt-picker .nt-theme-option[data-theme='dark'] {
   --option-background: linear-gradient(180deg, #111827, #1f2937);
@@ -1774,6 +2386,190 @@ onUnmounted(() => {
   }
   25% {
     transform: translateY(-4px);
+  }
+}
+
+@keyframes nt-confetti {
+  0% {
+    transform: translate(0, -8px) rotate(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.95;
+  }
+  50% {
+    transform: translate(-6px, 40px) rotate(200deg);
+  }
+  90% {
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(4px, 86px) rotate(420deg);
+    opacity: 0;
+  }
+}
+@keyframes nt-flow {
+  to {
+    stroke-dashoffset: -5;
+  }
+}
+@keyframes nt-puff {
+  from {
+    transform: translateX(0) scale(0.4);
+    opacity: 0.9;
+  }
+  to {
+    transform: translateX(-8px) scale(1.4);
+    opacity: 0;
+  }
+}
+@keyframes nt-burst {
+  0% {
+    transform: scale(0.1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  45% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  70%,
+  100% {
+    transform: scale(1.1);
+    opacity: 0;
+  }
+}
+/* Builds up a shake, then pops the cork. */
+@keyframes nt-shake {
+  0%,
+  30%,
+  52%,
+  100% {
+    transform: rotate(0);
+  }
+  34%,
+  42% {
+    transform: rotate(-6deg);
+  }
+  38%,
+  46% {
+    transform: rotate(6deg);
+  }
+  50% {
+    transform: rotate(-3deg);
+  }
+}
+@keyframes nt-cork {
+  0%,
+  52% {
+    transform: translate(0, 0) rotate(0);
+    opacity: 1;
+  }
+  70% {
+    transform: translate(6px, -24px) rotate(220deg);
+    opacity: 1;
+  }
+  76% {
+    transform: translate(7px, -26px) rotate(250deg);
+    opacity: 0;
+  }
+  77%,
+  95% {
+    transform: translate(0, 0) rotate(0);
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes nt-fizz {
+  0%,
+  52% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  58% {
+    opacity: 1;
+  }
+  85%,
+  100% {
+    transform: translateY(-12px);
+    opacity: 0;
+  }
+}
+/* Rests until the hands reach 12 (70%), then rings. */
+@keyframes nt-ring {
+  0%,
+  70%,
+  98%,
+  100% {
+    transform: rotate(0);
+  }
+  73%,
+  79%,
+  85% {
+    transform: rotate(-10deg);
+  }
+  76%,
+  82%,
+  88% {
+    transform: rotate(10deg);
+  }
+  93% {
+    transform: rotate(-4deg);
+  }
+}
+@keyframes nt-minute {
+  0% {
+    transform: rotate(0);
+  }
+  70%,
+  100% {
+    transform: rotate(360deg);
+  }
+}
+@keyframes nt-hour {
+  0% {
+    transform: rotate(-30deg);
+  }
+  70%,
+  100% {
+    transform: rotate(0);
+  }
+}
+@keyframes nt-unflip {
+  0%,
+  45% {
+    transform: scaleX(1);
+  }
+  50%,
+  95% {
+    transform: scaleX(-1);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+@keyframes nt-flag-flutter {
+  from {
+    transform: skewX(-6deg) scaleY(0.94);
+  }
+  to {
+    transform: skewX(5deg) scaleY(1);
+  }
+}
+/* Opens into a full burst, then shrinks back. */
+@keyframes nt-bloom {
+  0%,
+  100% {
+    transform: scale(0.15) rotate(0);
+    opacity: 0.2;
+  }
+  50% {
+    transform: scale(1) rotate(20deg);
+    opacity: 1;
   }
 }
 

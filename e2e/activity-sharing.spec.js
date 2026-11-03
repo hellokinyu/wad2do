@@ -28,6 +28,7 @@ async function mockBackend(page) {
     lostResponses: {},
     groupFailures: 0,
     readFailures: 0,
+    existingShareReads: 0,
     favouriteFailure: false,
     membershipGate: null,
     writeGate: null,
@@ -62,6 +63,15 @@ async function mockBackend(page) {
       return route.fulfill({ json: state.groups })
     }
     if (table === 'group_activities') {
+      // The share menu first asks which of the user's groups already have the activity
+      if (request.method() === 'GET' && url.searchParams.get('group_id')?.startsWith('in.')) {
+        state.existingShareReads += 1
+        const activityId = url.searchParams.get('activity_id')?.slice(3)
+        const rows = [...state.shares.values()]
+          .filter((row) => row.activity_id === activityId)
+          .map((row) => ({ group_id: row.group_id }))
+        return route.fulfill({ json: rows })
+      }
       if (request.method() === 'GET') {
         if (state.readFailures-- > 0) return fail()
         const key = [
@@ -119,6 +129,15 @@ test('grid shares the correct paginated activity without resetting browsing stat
   await expect(page.getByTestId('activity-save-feedback')).toHaveText(
     'Shared to Saturday Squad, Date Ideas.',
   )
+  // The message stays until closed and links straight to voting in each group
+  await expect(page.getByTestId('share-go-vote')).toHaveText([
+    'Go vote in Saturday Squad',
+    'Go vote in Date Ideas',
+  ])
+  await expect(page.getByTestId('share-go-vote').first()).toHaveAttribute(
+    'href',
+    `/groups/${groups[0].id}/activities`,
+  )
   expect(state.writes).toEqual(
     [0, 2].map((index) => ({
       group_id: groups[index].id,
@@ -129,6 +148,10 @@ test('grid shares the correct paginated activity without resetting browsing stat
   await expect(page).toHaveURL('/activities')
   await expect(page.getByTestId('activities-count')).toContainText('21–23 of 23')
   await expect(share).toBeFocused()
+  // Closing the message puts focus on the results instead of losing it
+  await page.getByTestId('activity-toast-close').click()
+  await expect(page.getByTestId('activity-save-feedback')).toHaveCount(0)
+  await expect(page.getByTestId('activities-count')).toBeFocused()
   expect(state.membershipReads).toBe(1)
   await page.getByTestId('activity-search').fill('Activity 22')
   await page.getByTestId('activity-share').click()
@@ -173,9 +196,7 @@ test('multi-group partial failure keeps successful groups locked and retries onl
   )
 })
 
-test('duplicate sharing preserves the original sharer and reports mixed outcomes', async ({
-  page,
-}) => {
+test('an existing share shows before choosing and keeps the original sharer', async ({ page }) => {
   const state = await mockBackend(page)
   const original = {
     group_id: groups[0].id,
@@ -185,13 +206,15 @@ test('duplicate sharing preserves the original sharer and reports mixed outcomes
   state.shares.set([original.group_id, original.activity_id].join(':'), original)
   await page.goto('/activities')
   await page.getByTestId('activity-share').first().click()
-  await checkbox(page, 0).check()
+  // The existing share shows before choosing, so it can't be picked again
+  await expect(checkbox(page, 0)).toBeDisabled()
+  await expect(page.getByTestId('share-status-' + groups[0].id)).toHaveText('Already shared')
+  expect(state.existingShareReads).toBe(1)
   await checkbox(page, 1).check()
+  await expect(page.getByTestId('share-confirm')).toHaveText('Share to 1 group')
   await page.getByTestId('share-confirm').click()
   await expect(page.getByTestId('activity-share-dialog')).toBeHidden()
-  await expect(page.getByTestId('activity-save-feedback')).toHaveText(
-    'Shared to Family Day. Already shared to Saturday Squad.',
-  )
+  await expect(page.getByTestId('activity-save-feedback')).toHaveText('Shared to Family Day.')
   expect(state.shares.get([original.group_id, original.activity_id].join(':'))).toEqual(original)
 })
 
@@ -233,6 +256,66 @@ test('loading can be retried, and empty memberships offer the existing Groups pa
   await expect(page.getByTestId('share-confirm')).toHaveCount(0)
   await page.getByRole('link', { name: 'Create a new group' }).click()
   await expect(page).toHaveURL('/groups')
+  // The create form opens with the activity attached, ready to share once the group exists
+  await expect(page.getByTestId('pending-share')).toContainText('Activity 1')
+  expect(state.writes).toHaveLength(0)
+})
+
+test('Create a new group shares the activity to the group once it is made', async ({ page }) => {
+  const state = await mockBackend(page)
+  state.groups = []
+  let created
+  await page.route('**/rest/v1/rpc/create_group', (route) => {
+    const body = route.request().postDataJSON()
+    created = {
+      id: body.p_group_id,
+      name: body.p_name,
+      start_date: body.p_start_date,
+      end_date: body.p_end_date,
+      budget_per_person: body.p_budget_per_person,
+      invite_code: body.p_invite_code,
+    }
+    return route.fulfill({ json: created })
+  })
+  await page.goto('/activities')
+  await page.getByTestId('activity-share').first().click()
+  await expect(page.getByTestId('share-no-groups')).toBeVisible()
+  await page.getByRole('link', { name: 'Create a new group' }).click()
+  await expect(page.getByTestId('pending-share')).toContainText('Activity 1')
+  await expect(page.getByTestId('group-name-input')).toBeFocused()
+  await page.getByTestId('group-name-input').fill('New outing')
+  await page.getByTestId('group-start-input').fill('2026-12-05')
+  await page.getByTestId('group-end-input').fill('2026-12-06')
+  await page.getByTestId('group-budget-input').fill('40')
+  await page.getByTestId('create-group-submit').click()
+  await expect(page.getByTestId('pending-share-result')).toContainText(
+    "Activity 1 is in this group's Activities",
+  )
+  expect(state.writes).toEqual([
+    { group_id: created.id, activity_id: activities[0].id, shared_by: mockUser.id },
+  ])
+})
+
+test('the activity can be left out before the group is made', async ({ page }) => {
+  const state = await mockBackend(page)
+  state.groups = []
+  await page.route('**/rest/v1/rpc/create_group', (route) => {
+    const body = route.request().postDataJSON()
+    return route.fulfill({
+      json: { id: body.p_group_id, name: body.p_name, invite_code: body.p_invite_code },
+    })
+  })
+  await page.goto('/groups?share=' + activities[0].id)
+  await expect(page).toHaveURL('/groups')
+  await page.getByTestId('pending-share-cancel').click()
+  await expect(page.getByTestId('pending-share')).toHaveCount(0)
+  await page.getByTestId('group-name-input').fill('New outing')
+  await page.getByTestId('group-start-input').fill('2026-12-05')
+  await page.getByTestId('group-end-input').fill('2026-12-06')
+  await page.getByTestId('group-budget-input').fill('40')
+  await page.getByTestId('create-group-submit').click()
+  await expect(page.getByTestId('invite-panel')).toContainText('New outing')
+  await expect(page.getByTestId('pending-share-result')).toHaveCount(0)
   expect(state.writes).toHaveLength(0)
 })
 

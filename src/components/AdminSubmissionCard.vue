@@ -1,10 +1,11 @@
 <script setup>
-import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/composables/useAuth'
 import { requestWithTimeout as timedRequest } from '@/lib/requestWithTimeout'
 import GooglePlacePicker from '@/components/GooglePlacePicker.vue'
 import AdminActionButton from '@/components/AdminActionButton.vue'
+import BaseDialog from '@/components/BaseDialog.vue'
 import { hasCompleteOpeningHours } from '@/lib/openingHours'
 import {
   formatPrice,
@@ -24,39 +25,13 @@ const errorMessage = ref('')
 const savedMessage = ref('')
 const rejectReason = ref('')
 const imageFailed = ref(false)
-const dialog = ref(null)
 const detailsOpen = ref(false)
-let detailsTrigger
-let previousBodyOverflow
 
-async function openDetails(event) {
-  detailsTrigger = event.currentTarget
-  detailsTrigger.focus({ preventScroll: true })
+// Safari doesn't focus buttons on click; focus it so BaseDialog can hand focus back on close
+function openDetails(event) {
+  event.currentTarget.focus({ preventScroll: true })
   detailsOpen.value = true
-  await nextTick()
-  previousBodyOverflow = document.body.style.overflow
-  document.body.style.overflow = 'hidden'
-  dialog.value.showModal()
 }
-
-function closeDetails() {
-  if (busy.value) return
-  dialog.value.close()
-}
-
-function onDetailsClosed() {
-  detailsOpen.value = false
-  restoreBodyScroll()
-  detailsTrigger?.focus({ preventScroll: true })
-}
-
-function restoreBodyScroll() {
-  if (previousBodyOverflow === undefined) return
-  document.body.style.overflow = previousBodyOverflow
-  previousBodyOverflow = undefined
-}
-
-onUnmounted(restoreBodyScroll)
 const form = reactive({})
 const hours = reactive({})
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -345,7 +320,7 @@ async function reject() {
 </script>
 
 <template>
-  <article class="card submission-preview h-100" :data-testid="`admin-submission-${submission.id}`">
+  <article class="card submission-preview surface-card h-100" :data-testid="`admin-submission-${submission.id}`">
     <div class="preview-photo-panel">
       <img
         v-if="submission.image_url && !imageFailed"
@@ -359,7 +334,7 @@ async function reject() {
         {{ submission.image_url ? 'Photo unavailable' : 'No photo submitted' }}
       </div>
       <div class="preview-badges">
-        <span class="badge rounded-pill text-bg-light">{{ getSetting(submission.indoor) }}</span>
+        <span class="badge rounded-pill bg-body-secondary text-body">{{ getSetting(submission.indoor) }}</span>
         <span
           class="badge rounded-pill text-capitalize"
           :class="{
@@ -396,28 +371,18 @@ async function reject() {
       <span class="small fw-semibold mt-auto" aria-hidden="true">View details &rarr;</span>
     </div>
 
-    <dialog
-      ref="dialog"
+    <BaseDialog
+      v-model:open="detailsOpen"
       class="submission-dialog"
-      :aria-labelledby="`review-title-${submission.id}`"
+      title="Review submission"
+      close-label="Close submission details"
+      :closable="!busy"
+      flush
       data-testid="admin-details-dialog"
-      @cancel.prevent="closeDetails"
-      @close="onDetailsClosed"
     >
-      <header class="dialog-header d-flex align-items-center justify-content-between gap-3">
-        <h2 :id="`review-title-${submission.id}`" class="h5 fw-bold mb-0">Review submission</h2>
-        <button
-          type="button"
-          class="btn-close"
-          aria-label="Close submission details"
-          :disabled="busy"
-          autofocus
-          @click="closeDetails"
-        ></button>
-      </header>
       <div
         v-if="detailsOpen"
-        class="dialog-body card border-0 rounded-0"
+        class="review-details card border-0 rounded-0"
         data-testid="admin-review-details"
         :aria-busy="busy"
       >
@@ -436,7 +401,7 @@ async function reject() {
             </div>
           </div>
           <div class="col-12 p-4">
-            <span class="badge rounded-pill text-bg-light mb-2 text-capitalize">{{
+            <span class="badge rounded-pill bg-body-secondary text-body mb-2 text-capitalize">{{
               submission.status
             }}</span>
             <h2 class="h4 fw-bold">{{ submission.name }}</h2>
@@ -804,7 +769,7 @@ async function reject() {
           </fieldset>
         </form>
       </div>
-    </dialog>
+    </BaseDialog>
   </article>
 </template>
 
@@ -813,21 +778,18 @@ async function reject() {
   position: relative;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid #eee;
-  border-radius: 18px;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 4%);
   transition: box-shadow 0.2s ease;
 }
 .submission-preview:hover {
-  box-shadow: 0 6px 20px rgb(0 0 0 / 10%);
+  box-shadow: var(--shadow-raised);
 }
 .submission-preview:focus-within {
-  outline: 2px solid #212529;
+  outline: var(--focus-ring);
   outline-offset: 3px;
 }
 .preview-photo-panel {
   position: relative;
-  background: #f3f3f3;
+  background: var(--surface-2);
 }
 .preview-photo,
 .preview-placeholder {
@@ -864,7 +826,7 @@ async function reject() {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #111;
+  color: var(--ink);
   font: inherit;
   text-align: left;
 }
@@ -877,41 +839,16 @@ async function reject() {
   -webkit-line-clamp: 3;
   overflow: hidden;
 }
+/* BaseDialog does the layout; this only sets the width */
 .submission-dialog {
-  width: min(900px, calc(100% - 24px));
-  max-height: calc(100dvh - 32px);
-  overflow: hidden;
-  padding: 0;
-  border: 1px solid #e5e5e5;
-  border-radius: 18px;
-  box-shadow: 0 16px 48px rgb(0 0 0 / 20%);
-  color: #212529;
+  --dialog-width: 900px;
 }
-.submission-dialog[open] {
-  display: flex;
-  flex-direction: column;
-}
-.submission-dialog::backdrop {
-  background: rgb(0 0 0 / 45%);
-}
-.dialog-header {
-  flex-shrink: 0;
-  padding: 20px 24px;
-  border-bottom: 1px solid #eee;
-  background: white;
-}
-.dialog-body {
+
+/* Bootstrap's .card is a flex column; the review content lays itself out */
+.review-details {
   display: block;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
-.dialog-header .btn-close {
-  flex-shrink: 0;
-  min-width: 24px;
-  min-height: 24px;
-}
+
 .submission-photo {
   display: block;
   width: 100%;
@@ -919,7 +856,7 @@ async function reject() {
 }
 .photo-panel,
 .photo-placeholder {
-  background: #f3f3f3;
+  background: var(--surface-2);
 }
 .photo-placeholder {
   min-height: 200px;

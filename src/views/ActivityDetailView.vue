@@ -487,7 +487,7 @@ onUnmounted(() => {
 
 <style scoped>
 .google-attribution {
-  color: #5e5e5e;
+  color: var(--muted);
   font-size: 12px;
   font-style: normal;
   font-weight: 400;
@@ -500,7 +500,7 @@ onUnmounted(() => {
 }
 .detail-photo-container {
   overflow: hidden;
-  border-radius: 24px;
+  border-radius: var(--radius-xl);
 }
 .detail-photo,
 .detail-placeholder {
@@ -515,8 +515,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f3f3f3;
-  color: #666;
+  background: var(--surface-2);
+  color: var(--muted);
   font-size: 1.75rem;
 }
 .detail-title {
@@ -527,18 +527,18 @@ onUnmounted(() => {
 .detail-badge {
   display: inline-block;
   padding: 6px 12px;
-  border: 1px solid #e5e5e5;
-  border-radius: 999px;
-  background: #fafafa;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
   font-size: 0.875rem;
 }
 .community-badge {
-  background: #111;
-  color: white;
-  border-color: #111;
+  background: var(--ink);
+  color: var(--on-ink);
+  border-color: var(--ink);
 }
 .rating-badge {
-  color: #946200;
+  color: var(--accent-ink);
   font-weight: 600;
   white-space: nowrap;
   padding-top: 8px;
@@ -546,8 +546,8 @@ onUnmounted(() => {
 .detail-section,
 .facts-card {
   padding: 24px;
-  border: 1px solid #e5e5e5;
-  border-radius: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
 }
 .description {
   white-space: pre-line;
@@ -559,23 +559,23 @@ onUnmounted(() => {
   align-items: baseline;
   gap: 16px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   font-size: 0.9rem;
 }
 .hours-row > span:last-child {
   text-align: right;
 }
 .hours-row.is-today {
-  background: #f3f3f3;
+  background: var(--surface-2);
   font-weight: 600;
 }
 .today-label {
   margin-left: 6px;
   font-size: 0.7rem;
-  color: #666;
+  color: var(--muted);
 }
 .facts-card {
-  background: #fafafa;
+  background: var(--surface-2);
 }
 .price-label {
   font-size: 2rem;
@@ -583,10 +583,10 @@ onUnmounted(() => {
 }
 .facts-list > div {
   padding: 12px 0;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--line);
 }
 .facts-list dt {
-  color: #666;
+  color: var(--muted);
   font-size: 0.875rem;
   font-weight: 400;
 }
@@ -602,7 +602,7 @@ onUnmounted(() => {
   gap: 8px;
 }
 .is-saved {
-  color: #dc3545;
+  color: var(--accent-ink);
 }
 .action-toast {
   position: fixed;
@@ -612,9 +612,9 @@ onUnmounted(() => {
   max-width: min(360px, calc(100% - 32px));
   overflow-wrap: anywhere;
   padding: 14px 20px;
-  border-radius: 14px;
-  background: #111;
-  color: white;
+  border-radius: var(--radius-md);
+  background: var(--ink);
+  color: var(--on-ink);
 }
 @media (min-width: 992px) {
   .facts-card {
@@ -628,7 +628,7 @@ onUnmounted(() => {
     height: 240px;
   }
   .detail-photo-container {
-    border-radius: 18px;
+    border-radius: var(--radius-lg);
   }
   .detail-section,
   .facts-card {

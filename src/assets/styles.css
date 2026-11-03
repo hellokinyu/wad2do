@@ -1,1 +1,435 @@
 /* Global WAD2Do styles. Design UI final boss emmanuel owns this */
+
+/* Theme: Brunch Club (light, default) and Supper Club (dark).
+   Every page takes its colours from these names, so changing a value here changes the whole app.
+   Dark mode is on when <html> has data-bs-theme="dark" (set in src/lib/colorMode.js).
+   See DESIGN.md for what each colour is for. */
+
+:root {
+  /* Surfaces, from the page background up to raised panels */
+  --bg: #f5f6fa;
+  --surface: #ffffff; /* cards, dialogs, inputs */
+  --surface-2: #eceef4; /* soft panels, chips, hover */
+  --surface-3: #e1e4ec; /* pressed or stronger grey fills */
+
+  /* Text and lines */
+  --ink: #111219; /* main text, selected chips and tabs */
+  --ink-hover: #2a2d3a;
+  --on-ink: #ffffff; /* text on top of --ink */
+  --muted: #5f6273; /* secondary text */
+  --subtle: #686b7d; /* hints, placeholders: still 4.5:1 on cards, page and chips */
+  --line: #dfe1e9; /* hairlines and card borders */
+  --line-strong: #b9bdcb; /* input and dashed borders */
+
+  /* Amber: primary actions only. Too pale for text on light backgrounds, so text uses --accent-ink */
+  --accent: #ffbe45;
+  --accent-hover: #ffb020;
+  --accent-active: #f0a20c;
+  --on-accent: #1a1206;
+  --accent-ink: #8f5b00;
+  --accent-subtle: #fff1d3;
+
+  /* Teal means keen, coral means not keen */
+  --keen: #3fd9b5;
+  --on-keen: #06221b;
+  --keen-ink: #0b7a62;
+  --keen-subtle: #d9f7ef;
+  --nope: #ff6b7f;
+  --nope-ink: #b42335;
+  --nope-subtle: #ffe3e7;
+
+  --overlay: rgb(17 18 25 / 45%); /* behind dialogs */
+
+  /* Dark disc behind white icons on photos, so they stay 3:1 on bright photos and blank placeholders.
+     Photos look the same in both modes, so this doesn't change in dark mode. */
+  --photo-scrim: rgb(17 18 25 / 50%);
+  --photo-scrim-strong: rgb(17 18 25 / 66%); /* hover */
+
+  /* Corners: pick one of these instead of typing pixel values */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px; /* cards */
+  --radius-xl: 22px; /* page heroes */
+  --radius-pill: 999px; /* buttons, chips, tags */
+
+  /* Shadows, from small labels up to dialogs */
+  --shadow-sm: 0 2px 8px rgb(0 0 0 / 16%); /* labels on photos, small popovers */
+  --shadow-card: 0 4px 16px rgb(0 0 0 / 4%); /* resting cards */
+  --shadow-raised: 0 10px 28px rgb(0 0 0 / 8%); /* hovered or lifted cards */
+  --shadow-float: 0 8px 24px rgb(0 0 0 / 18%); /* floating buttons and toasts */
+  --shadow-dialog: 0 16px 48px rgb(0 0 0 / 18%);
+
+  /* Keyboard focus is ink: amber is too faint against the light page */
+  --focus-ring: 2px solid var(--ink);
+
+  /* Fonts */
+  --font-display: 'Bricolage Grotesque', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Bootstrap reads these, so its buttons, forms, cards and text follow the theme */
+  --bs-body-font-family: var(--font-body);
+  --bs-body-bg: var(--bg);
+  --bs-body-bg-rgb: 245, 246, 250;
+  --bs-body-color: var(--ink);
+  --bs-body-color-rgb: 17, 18, 25;
+  --bs-emphasis-color: var(--ink);
+  --bs-emphasis-color-rgb: 17, 18, 25;
+  --bs-heading-color: var(--ink);
+  --bs-secondary-color: var(--muted);
+  --bs-secondary-color-rgb: 95, 98, 115;
+  --bs-secondary-rgb: 95, 98, 115;
+  --bs-tertiary-color: var(--subtle);
+  --bs-secondary-bg: var(--surface-2);
+  --bs-tertiary-bg: var(--surface-2);
+  --bs-tertiary-bg-rgb: 236, 238, 244;
+  --bs-border-color: var(--line);
+  --bs-border-color-translucent: var(--line);
+  --bs-link-color: var(--ink);
+  --bs-link-color-rgb: 17, 18, 25;
+  --bs-link-hover-color: var(--ink-hover);
+  --bs-link-hover-color-rgb: 42, 45, 58;
+  --bs-focus-ring-color: rgba(var(--bs-emphasis-color-rgb), 0.25);
+}
+
+[data-bs-theme='dark'] {
+  --bg: #111219;
+  --surface: #1c1e28;
+  --surface-2: #262935;
+  --surface-3: #31354a;
+
+  --ink: #f2f2f5;
+  --ink-hover: #d8d9e0;
+  --on-ink: #111219;
+  --muted: #a3a6b4;
+  --subtle: #8d91a3;
+  --line: #2e3140;
+  --line-strong: #4a4e60;
+
+  --accent-ink: #ffbe45;
+  --accent-subtle: #3a2e14;
+
+  --keen-ink: #3fd9b5;
+  --keen-subtle: #12352e;
+  --nope-ink: #ff8a99;
+  --nope-subtle: #3a1a22;
+
+  --overlay: rgb(0 0 0 / 60%);
+
+  /* Faint shadows vanish on a dark page, so these are stronger */
+  --shadow-card: 0 4px 16px rgb(0 0 0 / 30%);
+  --shadow-raised: 0 10px 28px rgb(0 0 0 / 45%);
+  --shadow-float: 0 8px 24px rgb(0 0 0 / 50%);
+  --shadow-dialog: 0 16px 48px rgb(0 0 0 / 55%);
+
+  --bs-body-bg-rgb: 17, 18, 25;
+  --bs-body-color-rgb: 242, 242, 245;
+  --bs-emphasis-color-rgb: 242, 242, 245;
+  --bs-secondary-color-rgb: 163, 166, 180;
+  --bs-secondary-rgb: 163, 166, 180;
+  --bs-tertiary-bg-rgb: 38, 41, 53;
+  --bs-link-color-rgb: 242, 242, 245;
+  --bs-link-hover-color-rgb: 216, 217, 224;
+  color-scheme: dark;
+}
+
+/* Festive themes: the dark palette above, tinted with the navbar's colours (NavBarTheme.vue).
+   <html> gets data-app-theme from src/lib/colorMode.js. Every text colour here is at least
+   4.5:1 on --bg, --surface and --surface-2, so check that again if you change one.
+   Buttons and box borders use the navbar's second colour (its logo and active-link colour).
+   --accent-edge outlines filled buttons: Christmas red is as dark as the green page,
+   so its buttons get a light pink edge to stand out. */
+[data-app-theme='halloween'] {
+  --bg: #2b1b3d;
+  --surface: #3a2452;
+  --surface-2: #47305f;
+  --surface-3: #553a70;
+  --ink-hover: #e4d9f2;
+  --on-ink: #2b1b3d;
+  --muted: #c9b8dd;
+  --subtle: #b4a2ca;
+  --line: #9c4c35;
+  --line-strong: #ff7518;
+  --accent: #ff7518;
+  --accent-hover: #ff8a3d;
+  --accent-active: #e8650c;
+  --accent-edge: #ff7518;
+  --on-accent: #1a1206;
+  --accent-ink: #ff9a52;
+  --accent-subtle: #4a2f3a;
+  --keen-subtle: #1f3a45;
+  --nope-subtle: #4a2440;
+  --bs-body-bg-rgb: 43, 27, 61;
+  --bs-secondary-color-rgb: 201, 184, 221;
+  --bs-secondary-rgb: 201, 184, 221;
+  --bs-tertiary-bg-rgb: 71, 48, 95;
+}
+
+[data-app-theme='christmas'] {
+  --bg: #1b4332;
+  --surface: #205038;
+  --surface-2: #285a42;
+  --surface-3: #31664d;
+  --ink-hover: #dcefe4;
+  --on-ink: #1b4332;
+  --muted: #c6e0d2;
+  --subtle: #b2d1c1;
+  --line: #e0465e;
+  --line-strong: #ff7a8c;
+  --accent: #c8102e;
+  --accent-hover: #d92a45;
+  --accent-active: #a90d26;
+  --accent-edge: #ffb3bc;
+  --on-accent: #ffffff;
+  --accent-ink: #ffb3bc;
+  --keen-ink: #4fe6c2;
+  --keen-subtle: #1d5546;
+  --nope-ink: #ffb3bc;
+  --nope-subtle: #4a2a2c;
+  --accent-subtle: #4a2a2c;
+  --bs-body-bg-rgb: 27, 67, 50;
+  --bs-secondary-color-rgb: 198, 224, 210;
+  --bs-secondary-rgb: 198, 224, 210;
+  --bs-tertiary-bg-rgb: 40, 90, 66;
+}
+
+/* Singapore red is bright, so text and teal are lighter than the other themes to stay readable */
+[data-app-theme='nationalday'] {
+  --bg: #8c0c18;
+  --surface: #a50e1a;
+  --surface-2: #b31b28;
+  --surface-3: #c12a36;
+  --ink: #ffffff;
+  --ink-hover: #ffe1e5;
+  --on-ink: #8c0c18;
+  --muted: #ffd9dd;
+  --subtle: #ffc9cf;
+  --line: #d2868c;
+  --line-strong: #ffffff;
+  --accent: #ffffff;
+  --accent-hover: #ffe1e5;
+  --accent-active: #ffc9cf;
+  --accent-edge: #ffffff;
+  --on-accent: #a50e1a;
+  --accent-ink: #ffffff;
+  --accent-subtle: #9a3a14;
+  --keen-ink: #7ff0d4;
+  --keen-subtle: #6a2a2a;
+  --nope-ink: #ffd0d6;
+  --nope-subtle: #6e0a14;
+  --bs-body-bg-rgb: 140, 12, 24;
+  --bs-body-color-rgb: 255, 255, 255;
+  --bs-emphasis-color-rgb: 255, 255, 255;
+  --bs-secondary-color-rgb: 255, 217, 221;
+  --bs-secondary-rgb: 255, 217, 221;
+  --bs-tertiary-bg-rgb: 179, 27, 40;
+  --bs-link-color-rgb: 255, 255, 255;
+  --bs-link-hover-color-rgb: 255, 225, 229;
+}
+
+[data-app-theme='newyear'] {
+  --bg: #0b1533;
+  --surface: #1b2a5a;
+  --surface-2: #253667;
+  --surface-3: #304274;
+  --ink-hover: #dfe4f5;
+  --on-ink: #0b1533;
+  --muted: #b9c2e0;
+  --subtle: #a3aed3;
+  --line: #88784e;
+  --line-strong: #f5c542;
+  --accent: #f5c542;
+  --accent-hover: #f7d066;
+  --accent-active: #e0b030;
+  --accent-edge: #f5c542;
+  --on-accent: #0b1533;
+  --accent-ink: #f5c542;
+  --accent-subtle: #3a3520;
+  --bs-body-bg-rgb: 11, 21, 51;
+  --bs-secondary-color-rgb: 185, 194, 224;
+  --bs-secondary-rgb: 185, 194, 224;
+  --bs-tertiary-bg-rgb: 37, 54, 103;
+}
+
+[data-app-theme] .btn-dark {
+  --bs-btn-border-color: var(--accent-edge);
+  --bs-btn-hover-border-color: var(--accent-edge);
+  --bs-btn-active-border-color: var(--accent-edge);
+  --bs-btn-disabled-border-color: var(--accent-edge);
+}
+
+[data-app-theme] .btn-outline-dark {
+  --bs-btn-border-color: var(--line-strong);
+  --bs-btn-hover-bg: var(--accent-subtle);
+  --bs-btn-hover-border-color: var(--line-strong);
+  --bs-btn-active-color: var(--on-accent);
+  --bs-btn-active-bg: var(--accent);
+  --bs-btn-active-border-color: var(--accent-edge);
+}
+
+[data-app-theme] .form-check-input:checked {
+  border-color: var(--accent-edge);
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.h1,
+.h2,
+.h3,
+.h4,
+.h5,
+.h6,
+.display-1,
+.display-2,
+.display-3,
+.display-4,
+.display-5,
+.display-6 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+/* Buttons: semibold everywhere; add rounded-pill for the pill shape */
+.btn {
+  --bs-btn-font-weight: 600;
+}
+
+/* Primary actions are amber */
+.btn-dark {
+  --bs-btn-color: var(--on-accent);
+  --bs-btn-bg: var(--accent);
+  --bs-btn-border-color: var(--accent);
+  --bs-btn-hover-color: var(--on-accent);
+  --bs-btn-hover-bg: var(--accent-hover);
+  --bs-btn-hover-border-color: var(--accent-hover);
+  --bs-btn-active-color: var(--on-accent);
+  --bs-btn-active-bg: var(--accent-active);
+  --bs-btn-active-border-color: var(--accent-active);
+  --bs-btn-disabled-color: var(--on-accent);
+  --bs-btn-disabled-bg: var(--accent);
+  --bs-btn-disabled-border-color: var(--accent);
+  font-weight: 700;
+}
+
+/* Secondary buttons and toggles: outlined, filled with ink once selected */
+.btn-outline-dark {
+  --bs-btn-color: var(--ink);
+  --bs-btn-border-color: var(--line-strong);
+  --bs-btn-hover-color: var(--ink);
+  --bs-btn-hover-bg: var(--surface-2);
+  --bs-btn-hover-border-color: var(--ink);
+  --bs-btn-active-color: var(--on-ink);
+  --bs-btn-active-bg: var(--ink);
+  --bs-btn-active-border-color: var(--ink);
+  --bs-btn-disabled-color: var(--muted);
+  --bs-btn-disabled-border-color: var(--line);
+}
+
+/* One focus ring for everything you can tab to. :where() keeps it easy to override in a page. */
+:where(a, button, summary, [tabindex]:not([tabindex='-1'])):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.btn:focus-visible,
+.btn-check:focus-visible + .btn,
+.nav-link:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* Bootstrap's close button has a blue glow on every focus, even a tap. Use the ink ring, keyboard only */
+.btn-close {
+  --bs-btn-close-focus-shadow: none;
+}
+
+.btn-close:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Dark mode draws the × through an invert filter, which also inverts the ring, so start from the opposite */
+[data-bs-theme='dark'] .btn-close:focus-visible {
+  outline-color: var(--on-ink);
+}
+
+/* Cards: add class="surface-card" instead of re-writing the border, corners, background and shadow */
+.surface-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+/* Bootstrap's own cards, dialogs and menus sit on the card colour, not the page colour */
+.card {
+  --bs-card-bg: var(--surface);
+  --bs-card-border-color: var(--line);
+}
+
+.modal {
+  --bs-modal-bg: var(--surface);
+}
+
+.dropdown-menu {
+  --bs-dropdown-bg: var(--surface);
+}
+
+.list-group {
+  --bs-list-group-bg: var(--surface);
+}
+
+/* Inputs */
+.form-control,
+.form-select {
+  background-color: var(--surface);
+}
+
+.form-control::placeholder {
+  color: var(--subtle);
+}
+
+.form-control:focus,
+.form-select:focus,
+.form-check-input:focus {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 0.2rem var(--bs-focus-ring-color);
+}
+
+.form-check-input {
+  background-color: var(--surface);
+  border-color: var(--line-strong);
+}
+
+/* Ticked boxes, radios and switches are amber with a dark mark */
+.form-check-input:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+
+.form-check-input:checked[type='checkbox'] {
+  --bs-form-check-bg-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%231a1206' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e");
+}
+
+.form-check-input:checked[type='radio'] {
+  --bs-form-check-bg-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='2' fill='%231a1206'/%3e%3c/svg%3e");
+}
+
+.form-switch .form-check-input:checked {
+  --bs-form-switch-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%231a1206'/%3e%3c/svg%3e");
+}
+
+.modal-backdrop {
+  --bs-backdrop-bg: var(--overlay);
+  --bs-backdrop-opacity: 1;
+}
