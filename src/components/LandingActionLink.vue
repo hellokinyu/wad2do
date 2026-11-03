@@ -44,7 +44,7 @@ const isHovered = ref(false)
 }
 
 .pill.primary {
-  border-color: var(--accent);
+  border-color: var(--accent-edge, var(--accent));
   color: var(--on-accent);
   background: var(--accent);
   box-shadow: var(--shadow-raised);
@@ -56,7 +56,7 @@ const isHovered = ref(false)
 }
 
 .pill.primary.is-active {
-  border-color: var(--accent-hover);
+  border-color: var(--accent-edge, var(--accent-hover));
   color: var(--on-accent);
   background: var(--accent-hover);
 }
