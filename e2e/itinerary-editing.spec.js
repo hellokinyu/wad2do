@@ -63,9 +63,9 @@ test('a chosen travel mode moves the later stops and is kept after saving', asyn
   await page.goto(`/groups/${groupId}/itinerary`)
   const stops = page.getByTestId('itinerary-stop')
   await expect(stops.nth(1)).toContainText('11:30–12:30')
-  // Not editing: the tabs only show the times
-  await page.getByTestId('travel-tab-walk').click()
-  await expect(stops.nth(1)).toContainText('11:30–12:30')
+  await expect(page.getByTestId('travel-route').first()).toBeVisible()
+  // Not editing: the tabs are hidden
+  await expect(page.getByTestId('travel-tab-walk')).toHaveCount(0)
   await page.getByTestId('itinerary-edit').click()
   await page.getByTestId('travel-tab-walk').click()
   await expect(page.getByTestId('travel-tab-walk')).toHaveAttribute('aria-pressed', 'true')
@@ -76,6 +76,8 @@ test('a chosen travel mode moves the later stops and is kept after saving', asyn
   expect(state.saved.stops[1]).toMatchObject({ start: '12:00', end: '13:00' })
   await page.reload()
   await expect(stops.nth(1)).toContainText('12:00–13:00')
+  await expect(page.getByTestId('travel-tab-walk')).toHaveCount(0)
+  await page.getByTestId('itinerary-edit').click()
   await expect(page.getByTestId('travel-tab-walk')).toHaveAttribute('aria-pressed', 'true')
 })
 
