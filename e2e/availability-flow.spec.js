@@ -100,17 +100,45 @@ test('a one-block suggestion completes a deliberate 30-minute selection', async 
   state.availability = [{ user_id: mockUser.id, slot_start: '2026-10-30T10:00:00+08:00' }]
   await page.goto(`/groups/${groupId}/availability`)
   await page.getByTestId('availability-next').click()
+  await expect(slot(page, '10:00')).toHaveText('🎉')
+  await expect(page.getByTestId('all-free-banner').getByRole('button')).toContainText('🎉 Everyone free')
   await page.getByTestId('all-free-banner').getByRole('button').click()
   await expect(page.getByTestId('all-free-banner').getByRole('button')).toHaveAttribute(
     'aria-pressed',
     'true',
   )
-  await expect(page.getByTestId('availability-action')).toContainText('30 minutes · Everyone free')
+  await expect(page.getByTestId('availability-action')).toContainText('30 minutes · 🎉 Everyone free')
   await expect(page.getByTestId('confirm-time')).toBeEnabled()
   await page.getByTestId('confirm-time').click()
   await expect(page.getByTestId('itinerary-no-fit')).toContainText('No activities fit')
   await expect(page.getByTestId('itinerary-saved-status')).toHaveCount(0)
   expect(state.writes).toHaveLength(0)
+})
+
+test('stars mark tied best blocks and a range the same members can attend throughout', async ({ page }) => {
+  const state = await mockItinerary(page, { hours, start: null, end: null })
+  const friend = '66666666-6666-4666-8666-666666666666'
+  const other = '77777777-7777-4777-8777-777777777777'
+  state.members = [
+    { id: mockUser.id, display_name: 'Demo User' },
+    { id: friend, display_name: 'Friend' },
+    { id: other, display_name: 'Other friend' },
+  ]
+  state.availability = [
+    { user_id: mockUser.id, slot_start: '2026-10-30T10:00:00+08:00' },
+    { user_id: mockUser.id, slot_start: '2026-10-30T10:30:00+08:00' },
+    { user_id: friend, slot_start: '2026-10-30T10:00:00+08:00' },
+    { user_id: friend, slot_start: '2026-10-30T10:30:00+08:00' },
+    { user_id: other, slot_start: '2026-10-30T11:00:00+08:00' },
+  ]
+  await page.goto(`/groups/${groupId}/availability`)
+  await page.getByTestId('availability-next').click()
+  await expect(slot(page, '10:00')).toHaveText('⭐')
+  await expect(slot(page, '10:30')).toHaveText('⭐')
+  await expect(slot(page, '11:00')).toHaveText('1')
+  await slot(page, '10:00').click()
+  await slot(page, '10:30').click()
+  await expect(page.getByTestId('availability-action')).toContainText('⭐ 2 of 3 free throughout · Best available')
 })
 
 test('attendance counts members free for the entire range rather than changing people per block', async ({

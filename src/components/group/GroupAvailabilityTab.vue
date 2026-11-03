@@ -101,7 +101,7 @@
         class="suggestions"
         data-testid="all-free-banner"
       >
-        <h4 class="h6 fw-bold mb-2">Times everyone can make</h4>
+        <h4 class="h6 fw-bold mb-2"><span aria-hidden="true">🎉 </span>Times everyone can make</h4>
         <div class="d-flex flex-wrap gap-2">
           <button
             v-for="w in fullWindows"
@@ -116,7 +116,7 @@
             }}</span
             >{{ w.label }}
             <span class="d-block small"
-              >Everyone free · {{ durationLabel(w.startKey, nextSlotKey(w.endKey)) }}</span
+              >🎉 Everyone free · {{ durationLabel(w.startKey, nextSlotKey(w.endKey)) }}</span
             >
           </button>
         </div>
@@ -131,7 +131,7 @@
       >
         <strong>No time works for everyone.</strong>
         <span v-if="bestSlot">
-          Best blocks (⭐) have {{ bestSlot.count }} of {{ members.length }} people free.</span
+          ⭐ Best blocks have {{ bestSlot.count }} of {{ members.length }} people free.</span
         >
         Choose a range below, or
         <button
@@ -782,9 +782,9 @@ const rangeAttendance = computed(() => {
   const count = members.value.filter(
     (member) => keys.length && keys.every((key) => freeBySlot.value[key]?.includes(member.id)),
   ).length
-  return count === members.value.length && count > 0
-    ? 'Everyone free'
-    : count + ' of ' + members.value.length + ' free throughout'
+  if (count === members.value.length && count > 0) return '🎉 Everyone free'
+  const best = noOverlap.value && count > 0 && count === bestSlot.value?.count
+  return (best ? '⭐ ' : '') + count + ' of ' + members.value.length + ' free throughout' + (best ? ' · Best available' : '')
 })
 const budgetLabel = computed(() => 'S$' + (group.value.budget_per_person ?? 0))
 const canPlan = computed(
