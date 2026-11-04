@@ -4,6 +4,23 @@ import { activityId, groupId, mockItinerary, week } from './helpers/itinerary'
 
 test.use({ timezoneId: 'America/Los_Angeles' })
 
+for (const [label, hours] of [
+  ['missing', null],
+  ['empty', {}],
+  ['incomplete', { Fri: { open24h: true } }],
+]) {
+  test(`unavailable ${label} hours are skipped automatically and flagged on a saved plan`, async ({ page }) => {
+    const state = await mockItinerary(page, { hours })
+    await page.goto(`/groups/${groupId}/itinerary`)
+    await expect(page.getByTestId('itinerary-not-in-plan')).toContainText('Opening hours unavailable.')
+    expect(state.writes).toHaveLength(0)
+    state.saved = { stops: [{ activity_id: activityId, start: '20:00', end: '21:00', cost: 10, reason: 'Saved before hours were checked' }], total_cost: 10 }
+    await page.reload()
+    await expect(page.getByTestId('itinerary-stop-warning')).toHaveText('Opening hours unavailable.')
+    expect(state.writes).toHaveLength(0)
+  })
+}
+
 test('Plan accepts a Friday evening visit ending before an overnight closing time', async ({
   page,
 }) => {
@@ -755,7 +772,7 @@ test('a stale editor keeps its draft and must explicitly load the latest plan', 
 })
 
 test('confirming a new time invalidates the old plan before opening the Itinerary tab', async ({ page }) => {
-  const state = await mockItinerary(page, {
+  await mockItinerary(page, {
     hours: week({ Fri: { open24h: true }, Sat: { open24h: true } }),
   })
   await page.goto(`/groups/${groupId}/itinerary`)

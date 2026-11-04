@@ -42,6 +42,11 @@ listed with 1,000 no-cost monthly events. Review Google usage before treating th
 app allowance as a guarantee of no charges. See [field tiers](https://developers.google.com/maps/documentation/places/web-service/place-details)
 and [Google pricing](https://developers.google.com/maps/billing-and-pricing/pricing).
 
+Plan and reopened saved itineraries also use this function for transient structured
+opening-hours checks. See [live planning hours](live-planning-hours.md) for their
+failure handling, provisional checks and verification. These calls share the same
+allowance; no Edge Function redeployment or schema change is needed.
+
 Verification: 35 unit/backend checks, 21 Chromium detail-page tests, Deno checking,
 ESLint/Oxlint and the production build passed. Disposable PGlite/PostgreSQL checks
 confirmed shared reservations, app/user denial without incrementing, disabled

@@ -9,11 +9,58 @@ export const week = (entries) => ({
   ...entries,
 })
 
+function googleHours(hours, today) {
+  if (!hours || days.some((day) => !hours[day])) return {}
+  const clock = (value) => {
+    const [hour, minute] = value.split(':').map(Number)
+    return { hour, minute }
+  }
+  const periods = []
+  for (const [index, day] of days.entries()) {
+    const entry = hours[day]
+    if (entry.closed) continue
+    const weekday = (index + 1) % 7
+    const open = entry.open24h ? { hour: 0, minute: 0 } : clock(entry.open)
+    const close = entry.open24h ? { hour: 0, minute: 0 } : clock(entry.close)
+    const nextDay = entry.open24h || entry.close < entry.open
+    periods.push({
+      open: { day: weekday, ...open },
+      close: { day: (weekday + Number(nextDay)) % 7, ...close },
+    })
+  }
+  const base = Date.parse(today + 'T00:00:00Z')
+  const datedPoint = (offset, point) => {
+    const date = new Date(base + offset * 86400000)
+    return {
+      ...point,
+      day: date.getUTCDay(),
+      date: { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() },
+    }
+  }
+  const current = []
+  for (let offset = -1; offset < 7; offset++) {
+    const weekday = new Date(base + offset * 86400000).getUTCDay()
+    for (const period of periods.filter((period) => period.open.day === weekday)) {
+      const overnight = period.close.day !== weekday
+      if (offset === -1 && !overnight) continue
+      const open =
+        offset < 0 ? datedPoint(0, { hour: 0, minute: 0 }) : datedPoint(offset, period.open)
+      const close =
+        offset === 6 && overnight
+          ? { ...datedPoint(6, { hour: 23, minute: 59 }), truncated: true }
+          : datedPoint(offset + Number(overnight), period.close)
+      current.push({ open, close })
+    }
+  }
+  return { regularOpeningHours: { periods }, currentOpeningHours: { periods: current } }
+}
+
 export async function mockItinerary(
   page,
   { hours, start = '2026-10-30T12:00:00Z', end = '2026-10-30T15:00:00Z', rainy = false, backend },
 ) {
   await signInMockUser(page)
+  await page.clock.setFixedTime(new Date('2026-10-29T12:00:00+08:00'))
   const state = backend || {
     saved: null,
     writes: [],
@@ -54,7 +101,10 @@ export async function mockItinerary(
     const request = route.request()
     // Every activity ever voted for stays in the catalog, even after its votes are removed
     state.catalog ??= {}
-    for (const vote of state.votes) state.catalog[vote.activity_id] = vote.activities
+    for (const vote of state.votes) {
+      if (!('google_place_id' in vote.activities)) vote.activities.google_place_id = 'mock-place'
+      state.catalog[vote.activity_id] = vote.activities
+    }
     const table = new URL(request.url()).pathname.split('/').pop()
     if (table === 'profiles') return route.fulfill({ json: { is_admin: false } })
     if (table === 'groups') {
@@ -130,6 +180,19 @@ export async function mockItinerary(
       return route.fulfill({ json: state.saved })
     }
     return route.fulfill({ json: [] })
+  })
+  state.hoursLookups ??= []
+  await page.route('**/functions/v1/google-place-details', async (route) => {
+    const { activityId } = route.request().postDataJSON()
+    state.hoursLookups.push(activityId)
+    const today = await page.evaluate(() =>
+      new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10),
+    )
+    return route.fulfill({
+      json:
+        state.googleDetails?.[activityId] ??
+        googleHours(state.catalog[activityId]?.opening_hours, today),
+    })
   })
   await page.route('**/functions/v1/onemap-route', (route) =>
     route.fulfill({
