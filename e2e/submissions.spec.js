@@ -80,7 +80,7 @@ async function mockBackend(page, failures = 0) {
       })
     }
     if (table === 'profiles') {
-      return route.fulfill({ headers, json: { display_name: 'Demo', interests: [], company: [] } })
+      return route.fulfill({ headers, json: { display_name: 'Demo', interests: [] } })
     }
     if (table === 'favourites' || table === 'activities')
       return route.fulfill({ headers, json: [] })

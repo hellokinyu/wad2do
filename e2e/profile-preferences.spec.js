@@ -1,6 +1,29 @@
 import { test, expect } from '@playwright/test'
 import { mockPreferences, pickMapStation } from './helpers/preferences'
 
+test('Profile loads and saves without the removed company column', async ({ page }) => {
+  const state = await mockPreferences(page)
+  await page.route('**/rest/v1/profiles?**', async (route) => {
+    const request = route.request()
+    const columns = new URL(request.url()).searchParams.get('select')?.split(',') || []
+    if (columns.includes('company') || Object.hasOwn(request.postDataJSON() || {}, 'company')) {
+      return route.fulfill({ status: 400, json: { message: 'column profiles.company does not exist' } })
+    }
+    return route.fallback()
+  })
+  await page.goto('/profile')
+  await expect(page.getByTestId('profile-name')).toHaveText('Demo User')
+  await expect(page.getByTestId('profile-error')).toHaveCount(0)
+  await expect(page.getByText('Who you hang out with', { exact: true })).toHaveCount(0)
+  await page.getByTestId('pref-area').selectOption('Bishan')
+  await page.getByTestId('profile-save-prefs').click()
+  await expect(page.getByTestId('profile-prefs-saved')).toBeVisible()
+  expect(state.saves[0].body).not.toHaveProperty('company')
+  await page.reload()
+  await expect(page.getByTestId('pref-area')).toHaveValue('Bishan')
+  await expect(page.getByTestId('profile-error')).toHaveCount(0)
+})
+
 test('Left from Telok Blangah stays local and Up still reaches Labrador Park', async ({ page }) => {
   const state = await mockPreferences(page, { home_station_id: 'telok-blangah' })
   await page.goto('/profile')
@@ -40,7 +63,6 @@ test('station-only changes enable Save, Undo restores both fields and reload res
   expect(state.saves[0].body).toMatchObject({
     home_station_id: 'tampines-east',
     home_area: 'Tampines',
-    company: ['Friends'],
     budget: '20-50',
     interests: ['Food', 'Cafes', 'Outdoors'],
   })
@@ -154,7 +176,6 @@ test('saving disables every preference control and failed confirmation retains t
   await expect(page.getByTestId('pref-area')).toBeDisabled()
   await expect(page.getByTestId('pref-interest-food')).toBeDisabled()
   await expect(page.getByTestId('pref-budget-under-20')).toBeDisabled()
-  await expect(page.getByTestId('pref-company-friends')).toBeDisabled()
   release()
   await expect(page.getByTestId('profile-prefs-error')).toBeVisible()
   await expect(page.getByTestId('profile-prefs-saved')).toHaveCount(0)

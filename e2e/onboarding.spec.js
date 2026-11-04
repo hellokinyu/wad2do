@@ -32,7 +32,6 @@ test('map selection saves both fields and reloads without redundant station inpu
         budget: '20-50',
         home_area: 'Tampines',
         home_station_id: 'tampines-east',
-        company: ['Friends'],
       },
     },
   ])

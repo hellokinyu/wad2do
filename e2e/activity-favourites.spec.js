@@ -34,7 +34,7 @@ async function mockBackend(page, initialIds = []) {
     const table = url.pathname.split('/').pop()
     const id = url.searchParams.get('activity_id')?.replace('eq.', '')
     if (table === 'profiles')
-      return route.fulfill({ json: [{ display_name: 'Demo', interests: [], company: [] }] })
+      return route.fulfill({ json: [{ display_name: 'Demo', interests: [] }] })
     if (table === 'submissions') return route.fulfill({ json: [] })
     if (table === 'activities') {
       const activityId = url.searchParams.get('id')

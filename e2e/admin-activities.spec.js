@@ -49,7 +49,7 @@ async function mockBackend(page, { admin = true, tagsColumn = true } = {}) {
     const endpoint = url.pathname.split('/').pop()
     if (endpoint === 'profiles') {
       return route.fulfill({
-        json: { is_admin: admin, display_name: 'Demo User', interests: [], company: [] },
+        json: { is_admin: admin, display_name: 'Demo User', interests: [] },
       })
     }
     if (endpoint === 'activities') {

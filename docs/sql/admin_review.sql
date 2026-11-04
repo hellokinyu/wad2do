@@ -87,11 +87,11 @@ grant execute on function public.wad2do_valid_opening_hours(jsonb) to authentica
 alter table public.profiles enable row level security;
 revoke insert, update, delete on public.profiles from public, anon, authenticated;
 -- Remove any earlier column grants too; table grants and column grants are separate.
-revoke insert (id, display_name, interests, budget, home_area, home_station_id, company, is_admin, created_at),
-  update (id, display_name, interests, budget, home_area, home_station_id, company, is_admin, created_at)
+revoke insert (id, display_name, interests, budget, home_area, home_station_id, is_admin, created_at),
+  update (id, display_name, interests, budget, home_area, home_station_id, is_admin, created_at)
   on public.profiles from public, anon, authenticated;
 grant select on public.profiles to authenticated;
-grant update (display_name, interests, budget, home_area, home_station_id, company)
+grant update (display_name, interests, budget, home_area, home_station_id)
   on public.profiles to authenticated;
 
 drop policy if exists wad2do_read_profile on public.profiles;

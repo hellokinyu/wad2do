@@ -37,7 +37,7 @@ test(
         $$ select (current_setting('request.jwt.claims', true)::jsonb ->> 'sub')::uuid $$;
       grant usage on schema auth to authenticated;
       create table profiles (id uuid primary key, display_name text, interests text[], budget text,
-        home_area text, home_station_id text, company text[], is_admin boolean, created_at timestamptz);
+        home_area text, home_station_id text, is_admin boolean, created_at timestamptz);
       create table activities (id uuid primary key default gen_random_uuid(), name text, category text,
         price_per_person numeric check(price_per_person >= 0), duration_min integer, indoor boolean,
         address text, area text, lat numeric, lng numeric, opening_hours jsonb, description text,
