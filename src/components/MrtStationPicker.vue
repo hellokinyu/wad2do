@@ -12,6 +12,7 @@ const zoom = ref(0.25)
 const viewport = ref(null)
 const canvas = ref(null)
 const imageFailed = ref(false)
+const showInfo = ref(false)
 const selected = computed(() => findStation(props.modelValue))
 
 function selectStation(value) {
@@ -49,47 +50,67 @@ onMounted(() => {
   resizeObserver = new ResizeObserver(revealStation)
   resizeObserver.observe(viewport.value)
 })
-onUnmounted(() => resizeObserver?.disconnect())
+function closeInfoOnOutside(event) {
+  if (showInfo.value && !event.target.closest('.map-info')) showInfo.value = false
+}
+function closeInfoOnEscape(event) {
+  if (event.key === 'Escape') showInfo.value = false
+}
+onMounted(() => {
+  document.addEventListener('click', closeInfoOnOutside)
+  document.addEventListener('keydown', closeInfoOnEscape)
+})
+onUnmounted(() => {
+  resizeObserver?.disconnect()
+  document.removeEventListener('click', closeInfoOnOutside)
+  document.removeEventListener('keydown', closeInfoOnEscape)
+})
 watch([() => props.modelValue, zoom], revealStation)
 </script>
 
 <template>
   <div class="mrt-picker" data-testid="mrt-picker">
     <template v-if="!imageFailed">
-      <div class="d-flex flex-wrap align-items-center gap-2 mb-2" aria-label="Map zoom">
+      <div class="d-flex align-items-center justify-content-end gap-2 mb-2">
         <button
           type="button"
           class="btn btn-outline-secondary"
-          aria-label="Zoom out"
-          :disabled="disabled || zoom === 0.25"
-          data-testid="mrt-zoom-out"
-          @click="zoom -= 0.25"
+          aria-label="Zoom map"
+          :disabled="disabled"
+          :data-zoom="Math.round(zoom * 100)"
+          data-testid="mrt-zoom"
+          @click="zoom = zoom >= 1 ? 0.25 : zoom + 0.25"
         >
-          −
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6.5" stroke-width="2" /><path d="M7 8.5a3.5 3.5 0 0 1 3-2" stroke-width="1.5" opacity=".6" /><path d="M15 15l6 6" stroke-width="3.5" /></svg>
         </button>
-        <span data-testid="mrt-zoom-level">{{ Math.round(zoom * 100) + '%' }}</span>
-        <button
-          type="button"
-          class="btn btn-outline-secondary"
-          aria-label="Zoom in"
-          :disabled="disabled || zoom === 1"
-          data-testid="mrt-zoom-in"
-          @click="zoom += 0.25"
-        >
-          +
-        </button>
+        <div class="map-info">
+          <button
+            type="button"
+            class="btn btn-outline-secondary info-btn"
+            aria-label="How to use the map"
+            :aria-expanded="showInfo"
+            :aria-controls="id + '-help'"
+            data-testid="mrt-info"
+            @click="showInfo = !showInfo"
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v6" /><path d="M12 7.5v.01" /></svg>
+          </button>
+          <div v-if="showInfo" :id="id + '-help'" class="info-popover" role="dialog" aria-label="How to use the map" data-testid="mrt-info-popover">
+            <ul class="mb-0 ps-3">
+              <li>Scroll or swipe to move the map.</li>
+              <li>Choose an MRT station using its marker.</li>
+              <li>LRT stops are shown for reference only.</li>
+              <li>Use arrow keys to move to nearby stations in that direction, then Enter to choose.</li>
+              <li>If no station is nearby in that direction, focus stays put.</li>
+            </ul>
+          </div>
+        </div>
       </div>
-      <p :id="id + '-help'" class="small text-muted">
-        Scroll or swipe to move the map. Choose an MRT station using its marker; LRT stops
-        are shown for reference. Use arrow keys to move to nearby stations in that direction,
-        then Enter to choose. If no station is nearby in that direction, focus stays put.
-      </p>
       <div
         ref="viewport"
         class="map-viewport"
         role="region"
         aria-label="MRT station map"
-        :aria-describedby="id + '-help'"
         tabindex="0"
         data-testid="mrt-map-viewport"
         @keydown="moveStationFocus"
@@ -156,6 +177,22 @@ watch([() => props.modelValue, zoom], revealStation)
 .btn {
   min-height: 44px;
   min-width: 44px;
+}
+.map-info {
+  position: relative;
+}
+.info-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10;
+  width: min(320px, calc(100vw - 48px));
+  padding: 12px 16px;
+  font-size: 0.875rem;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
 }
 .map-viewport {
   width: 100%;

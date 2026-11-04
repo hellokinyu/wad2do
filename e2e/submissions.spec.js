@@ -91,7 +91,11 @@ async function mockBackend(page, failures = 0) {
 
 async function fillActivity(page) {
   await page.getByTestId('submission-name').fill('  Weekend art studio  ')
-  await page.getByTestId('submission-category').selectOption('Arts and culture')
+  // Several tags: Workshops is ticked second but chosen as the main tag
+  const tags = page.getByTestId('submission-tag-option')
+  await tags.and(page.getByLabel('Arts and culture', { exact: true })).check()
+  await tags.and(page.getByLabel('Workshops', { exact: true })).check()
+  await page.getByTestId('submission-tag-main').selectOption('Workshops')
   await page.getByTestId('submission-duration').selectOption('90')
   await page.getByTestId('submission-price').fill('25')
   await page.getByTestId('submission-setting').selectOption('indoor')
@@ -145,7 +149,8 @@ for (const width of [1280, 375]) {
       ),
       submitted_by: mockUser.id,
       name: 'Weekend art studio',
-      category: 'Arts and culture',
+      category: 'Workshops',
+      tags: ['Workshops', 'Arts and culture'],
       price_per_person: free ? 0 : 25,
       duration_min: 90,
       indoor: !free,

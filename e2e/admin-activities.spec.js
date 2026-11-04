@@ -106,7 +106,7 @@ test('admins give an activity several tags, choose the main one and can undo', a
   await expect(option(page, 'Workshops')).toBeChecked()
   await option(page, 'Arts and culture').check()
   await option(page, 'Family-friendly').check()
-  await dialog(page).getByTestId('admin-main-tag').selectOption('Arts and culture')
+  await dialog(page).getByTestId('admin-tag-main').selectOption('Arts and culture')
   await dialog(page).getByTestId('admin-tags-save').click()
 
   await expect(dialog(page)).toBeHidden()

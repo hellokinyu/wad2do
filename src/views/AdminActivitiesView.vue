@@ -4,7 +4,8 @@ import { RouterLink } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import AdminNav from '@/components/AdminNav.vue'
 import BaseDialog from '@/components/BaseDialog.vue'
-import { ACTIVITY_CATEGORIES, activityTags, isOfficialCategory } from '@/data/activityCategories'
+import { activityTags, isOfficialCategory } from '@/data/activityCategories'
+import TagPicker from '@/components/TagPicker.vue'
 
 const activities = ref([])
 const loading = ref(true)
@@ -121,8 +122,7 @@ function undo(activity) {
 
 // ---------- Edit tags dialog ----------
 const editing = ref(null)
-const draft = ref([]) // checked tags, in the order they were added
-const draftMain = ref('')
+const draft = ref([]) // ticked tags, main tag first
 const dialogError = ref('')
 const savingDialog = ref(false)
 
@@ -131,7 +131,6 @@ function openEditor(activity, event) {
   event.currentTarget.focus({ preventScroll: true })
   const current = activityTags(activity).filter(isOfficialCategory)
   draft.value = current
-  draftMain.value = current[0] ?? ''
   dialogError.value = ''
   editing.value = activity
 }
@@ -139,10 +138,6 @@ function openEditor(activity, event) {
 function closeEditor() {
   if (!savingDialog.value) editing.value = null
 }
-
-watch(draft, (tags) => {
-  if (!tags.includes(draftMain.value)) draftMain.value = tags[0] ?? ''
-})
 
 const leftOutTags = computed(() =>
   editing.value ? activityTags(editing.value).filter((tag) => !isOfficialCategory(tag)) : [],
@@ -153,7 +148,7 @@ async function saveEditor() {
     dialogError.value = 'Pick at least one tag.'
     return
   }
-  const tags = [draftMain.value, ...draft.value.filter((tag) => tag !== draftMain.value)]
+  const tags = [...draft.value]
   savingDialog.value = true
   dialogError.value = ''
   const activity = editing.value
@@ -320,35 +315,10 @@ async function saveEditor() {
       @close="closeEditor"
     >
       <fieldset :disabled="savingDialog">
-        <legend class="fs-6 fw-semibold">Pick every tag that fits</legend>
-        <div class="tag-options">
-          <label v-for="tag in ACTIVITY_CATEGORIES" :key="tag" class="tag-option">
-            <input
-              v-model="draft"
-              type="checkbox"
-              class="form-check-input"
-              :value="tag"
-              data-testid="admin-tag-option"
-            />
-            {{ tag }}
-          </label>
-        </div>
+        <TagPicker v-model="draft" id-prefix="admin-tags" testid-prefix="admin-tag" />
         <p v-if="leftOutTags.length" class="warning mt-3 mb-0" data-testid="admin-tags-left-out">
           Not on the list, so they'll be dropped: {{ leftOutTags.join(', ') }}.
         </p>
-
-        <label for="admin-main-tag" class="form-label mt-3">Main tag</label>
-        <select
-          id="admin-main-tag"
-          v-model="draftMain"
-          class="form-select"
-          :disabled="!draft.length"
-          data-testid="admin-main-tag"
-        >
-          <option v-if="!draft.length" value="">Pick a tag first</option>
-          <option v-for="tag in draft" :key="tag" :value="tag">{{ tag }}</option>
-        </select>
-        <p class="form-text mb-0">Shown first on the activity's card.</p>
         <p v-if="dialogError" class="error mt-2 mb-0" role="alert" data-testid="admin-tags-error">
           {{ dialogError }}
         </p>
@@ -535,24 +505,6 @@ async function saveEditor() {
   --dialog-width: 520px;
 }
 
-.tag-options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 16px;
-}
-
-.tag-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  cursor: pointer;
-}
-
-.tag-option .form-check-input {
-  margin: 0;
-}
-
 /* On phones the Edit button drops below the name */
 @media (max-width: 575.98px) {
   .row-card {
@@ -573,10 +525,6 @@ async function saveEditor() {
 
   .save-status {
     margin: 0;
-  }
-
-  .tag-options {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

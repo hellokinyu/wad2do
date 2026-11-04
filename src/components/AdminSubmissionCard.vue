@@ -7,7 +7,8 @@ import GooglePlacePicker from '@/components/GooglePlacePicker.vue'
 import AdminActionButton from '@/components/AdminActionButton.vue'
 import BaseDialog from '@/components/BaseDialog.vue'
 import { hasCompleteOpeningHours } from '@/lib/openingHours'
-import { ACTIVITY_CATEGORIES } from '@/data/activityCategories'
+import { activityTags, isOfficialCategory } from '@/data/activityCategories'
+import TagPicker from '@/components/TagPicker.vue'
 import {
   formatPrice,
   formatDuration,
@@ -36,7 +37,6 @@ function openDetails(event) {
 const form = reactive({})
 const hours = reactive({})
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const categories = ACTIVITY_CATEGORIES
 const weeklyHours = computed(() => getWeeklyHours(props.submission.opening_hours).rows)
 const websiteUrl = computed(() => getWebsiteUrl(props.submission))
 const pending = computed(() => props.submission.status === 'pending')
@@ -75,7 +75,8 @@ function startEdit() {
   const submission = props.submission
   Object.assign(form, {
     name: submission.name ?? '',
-    category: submission.category ?? '',
+    // Old submissions only have one tag in category; keep only tags still on the list
+    tags: activityTags(submission).filter(isOfficialCategory),
     price_per_person: submission.price_per_person ?? '',
     duration_min: submission.duration_min ?? '',
     indoor: submission.indoor ?? '',
@@ -133,7 +134,7 @@ async function saveEdits() {
   savedMessage.value = ''
   if (
     !form.name.trim() ||
-    !form.category.trim() ||
+    !form.tags.length ||
     !form.address.trim() ||
     !form.area.trim() ||
     typeof form.price_per_person !== 'number' ||
@@ -181,7 +182,8 @@ async function saveEdits() {
   try {
     const details = {
       name: form.name.trim(),
-      category: form.category.trim(),
+      category: form.tags[0],
+      tags: [...form.tags],
       price_per_person: form.price_per_person,
       duration_min: form.duration_min,
       indoor: form.indoor,
@@ -312,7 +314,10 @@ async function reject() {
 </script>
 
 <template>
-  <article class="card submission-preview surface-card h-100" :data-testid="`admin-submission-${submission.id}`">
+  <article
+    class="card submission-preview surface-card h-100"
+    :data-testid="`admin-submission-${submission.id}`"
+  >
     <div class="preview-photo-panel">
       <img
         v-if="submission.image_url && !imageFailed"
@@ -326,7 +331,9 @@ async function reject() {
         {{ submission.image_url ? 'Photo unavailable' : 'No photo submitted' }}
       </div>
       <div class="preview-badges">
-        <span class="badge rounded-pill bg-body-secondary text-body">{{ getSetting(submission.indoor) }}</span>
+        <span class="badge rounded-pill bg-body-secondary text-body">{{
+          getSetting(submission.indoor)
+        }}</span>
         <span
           class="badge rounded-pill text-capitalize"
           :class="{
@@ -405,8 +412,10 @@ async function reject() {
               {{ formatDate(submission.created_at) }} (Singapore time)
             </p>
             <dl class="row mb-0 details">
-              <dt class="col-sm-4">Category</dt>
-              <dd class="col-sm-8">{{ submission.category || 'Not provided' }}</dd>
+              <dt class="col-sm-4">Tags</dt>
+              <dd class="col-sm-8">
+                {{ activityTags(submission).join(', ') || 'Not provided' }}
+              </dd>
               <dt class="col-sm-4">Price / person</dt>
               <dd class="col-sm-8">{{ formatPrice(submission.price_per_person) }}</dd>
               <dt class="col-sm-4">Duration</dt>
@@ -596,22 +605,12 @@ async function reject() {
                   data-testid="admin-edit-name"
                 />
               </div>
-              <div class="col-sm-6">
-                <label :for="`category-${submission.id}`" class="form-label">Category *</label>
-                <select
-                  :id="`category-${submission.id}`"
-                  v-model="form.category"
-                  class="form-select"
-                  required
-                >
-                  <option
-                    v-if="form.category && !categories.includes(form.category)"
-                    :value="form.category"
-                  >
-                    {{ form.category }}
-                  </option>
-                  <option v-for="category in categories" :key="category">{{ category }}</option>
-                </select>
+              <div class="col-12">
+                <TagPicker
+                  v-model="form.tags"
+                  :id-prefix="`tags-${submission.id}`"
+                  testid-prefix="admin-edit-tag"
+                />
               </div>
               <div class="col-sm-6">
                 <label :for="`price-${submission.id}`" class="form-label"

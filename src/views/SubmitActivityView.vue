@@ -5,6 +5,7 @@ import { useAuth } from '@/composables/useAuth'
 import GooglePlacePicker from '@/components/GooglePlacePicker.vue'
 import { requestWithTimeout as timedRequest } from '@/lib/requestWithTimeout'
 import { ACTIVITY_CATEGORIES } from '@/data/activityCategories'
+import TagPicker from '@/components/TagPicker.vue'
 
 const { user } = useAuth()
 const submitting = ref(false)
@@ -140,7 +141,7 @@ const durations = [
 ]
 const form = reactive({
   name: '',
-  category: '',
+  tags: [], // main tag first; the first is also saved as category
   price: '',
   duration: '',
   address: '',
@@ -172,7 +173,8 @@ function submissionDetails(submittedBy) {
   if (
     !form.name.trim() ||
     !form.address.trim() ||
-    !categories.includes(form.category) ||
+    !form.tags.length ||
+    !form.tags.every((tag) => categories.includes(tag)) ||
     !areas.includes(form.area) ||
     !durations.some((duration) => duration.value === form.duration) ||
     !['indoor', 'outdoor'].includes(form.indoor) ||
@@ -204,7 +206,8 @@ function submissionDetails(submittedBy) {
     id: submissionId,
     submitted_by: submittedBy,
     name: form.name.trim(),
-    category: form.category,
+    category: form.tags[0],
+    tags: [...form.tags],
     price_per_person: price,
     duration_min: form.duration,
     indoor: form.indoor === 'indoor',
@@ -308,9 +311,17 @@ async function submitActivity() {
     }
     if (!current()) return
     attemptedInsert = true
-    const { error } = await requestWithTimeout((signal) =>
+    let { error } = await requestWithTimeout((signal) =>
       supabase.from('submissions').insert(details).abortSignal(signal),
     )
+    // Before docs/sql/admin_activity_categories.sql has run there's no tags column: keep the main tag
+    if (error?.code === 'PGRST204' && String(error.message).includes('tags')) {
+      const oneTag = { ...details }
+      delete oneTag.tags
+      ;({ error } = await requestWithTimeout((signal) =>
+        supabase.from('submissions').insert(oneTag).abortSignal(signal),
+      ))
+    }
     if (!current()) return
     if (error?.code === '23505') {
       if (!(await savedSubmission(submittedBy))) throw error
@@ -375,18 +386,12 @@ async function submitActivity() {
               data-testid="submission-name"
             />
           </div>
-          <div class="col-md-6">
-            <label for="submission-category" class="form-label">Category *</label>
-            <select
-              id="submission-category"
-              v-model="form.category"
-              class="form-select"
-              required
-              data-testid="submission-category"
-            >
-              <option disabled value="">Choose a category</option>
-              <option v-for="category in categories" :key="category">{{ category }}</option>
-            </select>
+          <div class="col-12">
+            <TagPicker
+              v-model="form.tags"
+              id-prefix="submission-tags"
+              testid-prefix="submission-tag"
+            />
           </div>
           <div class="col-md-6">
             <label for="submission-duration" class="form-label">Typical duration *</label>
