@@ -182,23 +182,6 @@
                 </div>
               </MrtStationPicker>
             </div>
-
-            <div class="col-12">
-              <p class="group-label">Who you hang out with</p>
-              <div class="d-flex flex-wrap gap-2">
-                <template v-for="item in companyOptions" :key="item">
-                  <input
-                    type="checkbox"
-                    class="btn-check"
-                    :id="'pref-company-' + slug(item)"
-                    :value="item"
-                    v-model="company"
-                    :data-testid="'pref-company-' + slug(item)"
-                  />
-                  <label class="chip" :for="'pref-company-' + slug(item)">{{ item }}</label>
-                </template>
-              </div>
-            </div>
           </div>
 
           <div class="d-flex flex-wrap align-items-center gap-3 mt-4 pt-4 panel-footer">
@@ -361,8 +344,6 @@ const budgetOptions = [
   { id: '100-plus', label: '$100+' },
 ]
 
-const companyOptions = ['Friends', 'Family', 'Partner']
-
 const loading = ref(true)
 const userId = ref('')
 const email = ref('')
@@ -381,8 +362,7 @@ const interests = ref([])
 const budget = ref('')
 const homeArea = ref('')
 const homeStationId = ref(null)
-const company = ref([])
-const savedPrefs = ref({ interests: [], budget: '', homeArea: '', homeStationId: null, company: [] })
+const savedPrefs = ref({ interests: [], budget: '', homeArea: '', homeStationId: null })
 const savingPrefs = ref(false)
 const prefsMessage = ref('')
 const prefsError = ref('')
@@ -400,8 +380,7 @@ const hasChanges = computed(() => {
     !sameList(interests.value, savedPrefs.value.interests) ||
     budget.value !== savedPrefs.value.budget ||
     homeArea.value !== savedPrefs.value.homeArea ||
-    homeStationId.value !== savedPrefs.value.homeStationId ||
-    !sameList(company.value, savedPrefs.value.company)
+    homeStationId.value !== savedPrefs.value.homeStationId
   )
 })
 
@@ -424,7 +403,7 @@ async function loadProfile() {
   profileError.value = ''
   const { data, error } = await supabase
     .from('profiles')
-    .select('display_name, interests, budget, home_area, home_station_id, company')
+    .select('display_name, interests, budget, home_area, home_station_id')
     .eq('id', userId.value)
     .maybeSingle()
 
@@ -444,7 +423,6 @@ async function loadProfile() {
   budget.value = data.budget || ''
   homeArea.value = data.home_area || ''
   homeStationId.value = data.home_station_id || null
-  company.value = data.company || []
   rememberSavedPrefs()
 }
 
@@ -577,7 +555,6 @@ function rememberSavedPrefs() {
     budget: budget.value,
     homeArea: homeArea.value,
     homeStationId: homeStationId.value,
-    company: [...company.value],
   }
 }
 
@@ -587,7 +564,6 @@ function undoChanges() {
   budget.value = savedPrefs.value.budget
   homeArea.value = savedPrefs.value.homeArea
   homeStationId.value = savedPrefs.value.homeStationId
-  company.value = [...savedPrefs.value.company]
   prefsError.value = ''
 }
 
@@ -616,7 +592,6 @@ async function savePreferences() {
         budget: budget.value || null,
         home_area: homeArea.value || null,
         home_station_id: homeStationId.value,
-        company: company.value,
       })
       .eq('id', userId.value)
       .select('id')

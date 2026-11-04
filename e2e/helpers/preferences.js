@@ -10,7 +10,6 @@ export async function mockPreferences(page, values = {}, userOverrides = {}) {
       budget: '20-50',
       home_area: null,
       home_station_id: null,
-      company: ['Friends'],
       ...values,
     },
     saves: [],

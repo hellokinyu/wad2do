@@ -20,7 +20,7 @@ test('profile SQL grants every field saved by Profile and Onboarding, without gr
         assert.ok(granted.includes(field), `${file} saves ${field}, but SQL does not grant it`)
     }
   }
-  for (const protectedField of ['id', 'is_admin', 'created_at'])
+  for (const protectedField of ['id', 'is_admin', 'created_at', 'company'])
     assert.ok(!granted.includes(protectedField))
 })
 

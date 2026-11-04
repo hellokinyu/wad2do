@@ -88,9 +88,12 @@ from **Edit name**. Onboarding finishes at Activities.
 Supabase Auth users and `public.profiles` are separate:
 
 - `ProfileView.vue` reads and updates `display_name`, `interests`, `budget`,
-  `home_area`, `home_station_id`, and `company`, matching `profiles.id` to the Auth user's ID.
+  `home_area` and `home_station_id`, matching `profiles.id` to the Auth user's ID.
 - `OnboardingView.vue` reads and updates preferences on an existing row.
 - Signup creates an Auth account, without inserting a profile from the frontend.
+
+The "Who you hang out with" preference has been removed. Profile no longer reads
+or writes `company`, so the live database does not need that column.
 
 Dashboard SQL results confirmed an existing Auth user had no matching profile and
 there were no user-defined triggers on `auth.users`. The inspected `profiles` table

@@ -924,7 +924,6 @@ test('saving Profile preferences changes Best match on return and survives a det
     interests: ['Cafes'],
     budget: '20-50',
     home_area: null,
-    company: [],
   }
   await page.route('**/rest/v1/profiles?*', (route) => {
     if (route.request().method() === 'PATCH') {
@@ -963,7 +962,7 @@ test('a zero-row preference update preserves the draft and only confirms a succe
   page,
 }) => {
   const attempts = []
-  let profile = { display_name: 'Demo', interests: ['Cafes'], company: [] }
+  let profile = { display_name: 'Demo', interests: ['Cafes'] }
   await page.route('**/rest/v1/profiles?*', (route) => {
     const request = route.request()
     if (request.method() === 'PATCH') {

@@ -69,7 +69,7 @@ async function mockBackend(page, admin = true) {
     if (endpoint === 'profiles') {
       if (state.roleError) return route.fulfill({ status: 403, json: { message: 'Read denied' } })
       return route.fulfill({
-        json: { is_admin: state.admin, display_name: 'Demo User', interests: [], company: [] },
+        json: { is_admin: state.admin, display_name: 'Demo User', interests: [] },
       })
     }
     if (endpoint === 'submissions') {
