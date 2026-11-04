@@ -95,8 +95,10 @@
             </RouterLink>
           </li>
           <li v-if="user && isAdmin" class="nav-item">
+            <!-- Lit on both admin pages (Submissions and All activities), not just the one it opens -->
             <RouterLink
               class="nav-link nav-admin-link"
+              :class="{ active: route.path.startsWith('/admin/') && route.name !== 'admin-access' }"
               active-class="active"
               to="/admin/submissions"
               aria-label="Admin"

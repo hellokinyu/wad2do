@@ -7,6 +7,7 @@ import GooglePlacePicker from '@/components/GooglePlacePicker.vue'
 import AdminActionButton from '@/components/AdminActionButton.vue'
 import BaseDialog from '@/components/BaseDialog.vue'
 import { hasCompleteOpeningHours } from '@/lib/openingHours'
+import { ACTIVITY_CATEGORIES } from '@/data/activityCategories'
 import {
   formatPrice,
   formatDuration,
@@ -35,16 +36,7 @@ function openDetails(event) {
 const form = reactive({})
 const hours = reactive({})
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const categories = [
-  'Food',
-  'Cafes',
-  'Outdoors',
-  'Arts and culture',
-  'Nightlife',
-  'Shopping',
-  'Family-friendly',
-  'Wellness',
-]
+const categories = ACTIVITY_CATEGORIES
 const weeklyHours = computed(() => getWeeklyHours(props.submission.opening_hours).rows)
 const websiteUrl = computed(() => getWebsiteUrl(props.submission))
 const pending = computed(() => props.submission.status === 'pending')

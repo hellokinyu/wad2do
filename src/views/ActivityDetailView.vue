@@ -15,6 +15,7 @@ import {
 } from '@/lib/activityDisplay'
 import ActivityShareDialog from '@/components/ActivityShareDialog.vue'
 import { useActivityActions } from '@/composables/useActivityActions'
+import { activityTags } from '@/data/activityCategories'
 
 const route = useRoute()
 const router = useRouter()
@@ -78,9 +79,17 @@ const venueUrl = computed(
 const liveMapUrl = computed(() => getMapEmbedUrl(null, googleDetails.value?.location))
 const mapEmbedUrl = computed(() => liveMapUrl.value || getMapEmbedUrl(activity.value))
 
-// A category such as Outdoor already describes the setting, so show one tag.
+// The detail page has room for every tag
+const tags = computed(() => {
+  const list = activityTags(activity.value)
+  return list.length ? list : ['Activity']
+})
+// A tag such as Outdoors already describes the setting, so don't repeat it.
 const showSettingTag = computed(
-  () => activity.value?.category?.trim().toLowerCase() !== setting.value.toLowerCase(),
+  () =>
+    !tags.value.some((tag) =>
+      [setting.value.toLowerCase(), `${setting.value.toLowerCase()}s`].includes(tag.toLowerCase()),
+    ),
 )
 
 const { saved, saving, actionError, needsLogin, message, toggleSaved, announce } =
@@ -244,7 +253,7 @@ onUnmounted(() => {
 
       <header class="mb-4">
         <div class="d-flex flex-wrap gap-2 mb-3" data-testid="detail-tags">
-          <span class="detail-badge">{{ activity.category || 'Activity' }}</span>
+          <span v-for="tag in tags" :key="tag" class="detail-badge">{{ tag }}</span>
           <span v-if="showSettingTag" class="detail-badge">{{ setting }}</span>
           <span v-if="activity.source === 'community'" class="detail-badge community-badge"
             >Community</span

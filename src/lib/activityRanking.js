@@ -1,4 +1,5 @@
 import { getPrice } from './activityDisplay.js'
+import { activityTags } from '../data/activityCategories.js'
 
 function normalize(value) {
   return typeof value === 'string'
@@ -16,6 +17,7 @@ function interestCategory(value) {
     outdoor: 'outdoors',
     workshops: 'arts and culture',
     'sports and fitness': 'wellness',
+    'social games': 'nightlife',
   }
   return Object.hasOwn(aliases, category) ? aliases[category] : category
 }
@@ -30,10 +32,9 @@ const budgetLimits = {
 // The three things Best match checks. scoreActivity adds them up; matchReasons shows them on cards.
 function matchParts(activity, profile) {
   const interests = Array.isArray(profile?.interests) ? profile.interests : []
-  const category = interestCategory(activity.category)
-  const interest = category
-    ? interests.find((value) => interestCategory(value) === category)
-    : undefined
+  // Any of the activity's tags can match, but it still only counts once
+  const tags = activityTags(activity).map(interestCategory).filter(Boolean)
+  const interest = interests.find((value) => tags.includes(interestCategory(value)))
   const budgetLimit = budgetLimits[profile?.budget]
   const price = getPrice(activity.price_per_person)
   const affordable = price !== null && price < budgetLimit

@@ -6,6 +6,7 @@ import ActivityShareDialog from '@/components/ActivityShareDialog.vue'
 import BaseDialog from '@/components/BaseDialog.vue'
 import { getPrice } from '@/lib/activityDisplay'
 import { rankActivities, matchReasons } from '@/lib/activityRanking'
+import { activityTags } from '@/data/activityCategories'
 import { useAuth } from '@/composables/useAuth'
 import { setActivitySaved } from '@/lib/activityFavourites'
 import { beginActivitiesRender } from '@/lib/activityScroll'
@@ -253,7 +254,8 @@ watch(
 )
 
 const categories = computed(() => {
-  const values = activities.value.map((activity) => activity.category).filter(Boolean)
+  // Every tag of every activity gets a chip, not just each activity's main one
+  const values = activities.value.flatMap((activity) => activityTags(activity))
   return [...new Set(values)].sort()
 })
 
@@ -334,13 +336,13 @@ const currentFilters = computed(() => ({
 function matchesFilters(activity, filters) {
   const search = searchText(filters.keyword.trim())
   const text = searchText(
-    [activity.name, activity.category, activity.area, activity.description].join(' '),
+    [activity.name, ...activityTags(activity), activity.area, activity.description].join(' '),
   )
   const range = priceRanges.find((option) => option.value === filters.price)
   const price = getPrice(activity.price_per_person)
 
   const matchesSearch = !search || text.includes(search)
-  const matchesCategory = !filters.category || activity.category === filters.category
+  const matchesCategory = !filters.category || activityTags(activity).includes(filters.category)
   const matchesSource = !filters.source || activity.source === filters.source
   const matchesArea = !filters.area || activity.area?.trim() === filters.area
   const matchesPrice =

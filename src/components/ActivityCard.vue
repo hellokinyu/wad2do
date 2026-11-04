@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { formatPrice, formatDuration, getSetting } from '@/lib/activityDisplay'
+import { activityTags } from '@/data/activityCategories'
 
 // Information supplied by ActivitiesView.
 const props = defineProps({
@@ -59,6 +60,9 @@ const showSetting = computed(
     props.activity.category?.trim().toLowerCase() !== setting.value.toLowerCase(),
 )
 const area = computed(() => props.activity.area?.trim() || '')
+const tags = computed(() => activityTags(props.activity))
+const shownTags = computed(() => (tags.value.length ? tags.value.slice(0, 2) : ['Activity']))
+const hiddenTagCount = computed(() => Math.max(0, tags.value.length - 2))
 const imageFailed = ref(false)
 watch(
   () => props.activity.image_url,
@@ -97,9 +101,20 @@ watch(
       </RouterLink>
 
       <div class="photo-badges">
-        <span class="badge rounded-pill bg-white text-dark">
-          {{ activity.category || 'Activity' }}
-        </span>
+        <!-- Two tags fit on the photo; the rest are counted and shown on the detail page -->
+        <span
+          v-for="tag in shownTags"
+          :key="tag"
+          class="badge rounded-pill bg-white text-dark"
+          data-testid="activity-tag"
+          >{{ tag }}</span
+        >
+        <span
+          v-if="hiddenTagCount"
+          class="badge rounded-pill bg-white text-dark"
+          :aria-label="`and ${hiddenTagCount} more ${hiddenTagCount === 1 ? 'tag' : 'tags'}`"
+          >+{{ hiddenTagCount }}</span
+        >
 
         <span
           v-if="activity.source === 'community'"

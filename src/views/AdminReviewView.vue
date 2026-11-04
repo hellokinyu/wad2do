@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import AdminSubmissionCard from '@/components/AdminSubmissionCard.vue'
+import AdminNav from '@/components/AdminNav.vue'
 
 const statuses = ['pending', 'approved', 'rejected']
 const selectedStatus = ref('pending')
@@ -121,6 +122,7 @@ onUnmounted(() => {
 
 <template>
   <div class="container admin-page py-4 py-md-5" data-testid="admin-review-page">
+    <AdminNav />
     <header class="mb-4">
       <h1 class="fw-bold">Review submissions</h1>
       <p class="text-secondary">Review, edit and manage community activities.</p>

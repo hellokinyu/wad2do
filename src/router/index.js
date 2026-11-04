@@ -12,6 +12,7 @@ import ActivitiesView from '@/views/ActivitiesView.vue'
 import ActivityDetailView from '@/views/ActivityDetailView.vue'
 import SubmitActivityView from '@/views/SubmitActivityView.vue'
 import AdminReviewView from '@/views/AdminReviewView.vue'
+import AdminActivitiesView from '@/views/AdminActivitiesView.vue'
 import AdminAccessView from '@/views/AdminAccessView.vue'
 import ProfileView from '@/views/ProfileView.vue'
 import GroupsView from '@/views/GroupsView.vue'
@@ -57,6 +58,12 @@ const routes = [
     path: '/admin/submissions',
     name: 'admin-review',
     component: AdminReviewView,
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/admin/activities',
+    name: 'admin-activities',
+    component: AdminActivitiesView,
     meta: { requiresAuth: true, requiresAdmin: true },
   },
   {

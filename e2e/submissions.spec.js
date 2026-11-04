@@ -105,7 +105,8 @@ for (const width of [1280, 375]) {
     await page.setViewportSize({ width, height: 812 })
     const state = await mockBackend(page)
     await page.goto('/activities')
-    await page.getByTestId('submit-activity-button').click()
+    // Phones reach the form from the bottom nav's + button instead of the page header
+    await page.getByTestId(width < 768 ? 'nav-submit-activity' : 'submit-activity-button').click()
     await expect(page).toHaveURL(/\/activities\/submit$/)
     await expect(page.getByRole('main')).toHaveCount(1)
     await fillActivity(page)

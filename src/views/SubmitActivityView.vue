@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/composables/useAuth'
 import GooglePlacePicker from '@/components/GooglePlacePicker.vue'
 import { requestWithTimeout as timedRequest } from '@/lib/requestWithTimeout'
+import { ACTIVITY_CATEGORIES } from '@/data/activityCategories'
 
 const { user } = useAuth()
 const submitting = ref(false)
@@ -94,16 +95,7 @@ onUnmounted(() => {
   requestController?.abort()
   removePhoto()
 })
-const categories = [
-  'Food',
-  'Cafes',
-  'Outdoors',
-  'Arts and culture',
-  'Nightlife',
-  'Shopping',
-  'Family-friendly',
-  'Wellness',
-]
+const categories = ACTIVITY_CATEGORIES
 const areas = [
   'Ang Mo Kio',
   'Bedok',

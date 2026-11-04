@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { rankActivities, scoreActivity } from '../src/lib/activityRanking.js'
+import { matchReasons, rankActivities, scoreActivity } from '../src/lib/activityRanking.js'
 
 test('agreed examples score interests, affordability and exact area', () => {
   const profile = {
@@ -68,4 +68,12 @@ test('missing preferences preserve catalogue order and ranking does not mutate i
   assert.deepEqual(rankActivities(activities, { interests: 'Outdoors' }), [first, second])
   assert.deepEqual(rankActivities(activities, { interests: ['Outdoors'] }), [second, first])
   assert.deepEqual(activities, [first, second])
+})
+
+test('any of an activity’s tags can match an interest, but it only counts once', () => {
+  const pottery = { category: 'Workshops', tags: ['Workshops', 'Family-friendly'] }
+  assert.equal(scoreActivity(pottery, { interests: ['Family-friendly'] }), 4)
+  assert.equal(scoreActivity(pottery, { interests: ['Arts and culture', 'Family-friendly'] }), 4)
+  assert.equal(scoreActivity({ category: 'Food', tags: [] }, { interests: ['Food'] }), 4)
+  assert.deepEqual(matchReasons(pottery, { interests: ['Family-friendly'] }), ['Family-friendly'])
 })

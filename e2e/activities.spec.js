@@ -301,6 +301,29 @@ test('demo searches, combines filters and clears them', async ({ page }) => {
   await expect(cards).toContainText('Cafés in Tiong Bahru')
 })
 
+test('an activity with several tags shows under each tag’s chip', async ({ page }) => {
+  await mockActivities(page, [
+    { ...activities[3], tags: ['Workshops', 'Family-friendly', 'Arts and culture'] },
+    activities[1],
+  ])
+  await page.goto('/activities')
+  const cards = page.getByTestId('activity-card')
+  await expect(cards).toHaveCount(2)
+  // Two tags fit on the photo; the third is counted
+  await expect(cards.first().getByTestId('activity-tag')).toHaveText([
+    'Workshops',
+    'Family-friendly',
+  ])
+  await expect(cards.first()).toContainText('+1')
+  for (const tag of ['Workshops', 'Family-friendly', 'Arts and culture']) {
+    await pickCategory(page, tag)
+    await expect(cards).toHaveCount(1)
+    await expect(cards).toContainText('Pottery Workshop')
+  }
+  await pickCategory(page, 'Outdoor')
+  await expect(cards).toContainText('Sunset Kayaking')
+})
+
 test('empty database has a different message from unmatched filters', async ({ page }) => {
   await mockActivities(page, [])
   await page.goto('/activities')
