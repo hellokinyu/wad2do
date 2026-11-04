@@ -194,15 +194,14 @@ for (const [width, zoom] of [375, 1280].flatMap((width) =>
     await mockPreferences(page)
     await openLocationStep(page)
     await expect(page.getByTestId('mrt-map-image')).toBeVisible()
-    await expect(page.getByTestId('mrt-zoom-level')).toHaveText('25%')
-    await expect(page.getByTestId('mrt-zoom-out')).toBeDisabled()
-    const zoomButton = await page.getByTestId('mrt-zoom-in').boundingBox()
+    await expect(page.getByTestId('mrt-zoom')).toHaveAttribute('data-zoom', '25')
+    const zoomButton = await page.getByTestId('mrt-zoom').boundingBox()
     expect(zoomButton.width).toBeGreaterThanOrEqual(44)
     expect(zoomButton.height).toBeGreaterThanOrEqual(44)
     for (let current = 0.25; current < zoom; current += 0.25) {
-      await page.getByTestId('mrt-zoom-in').click()
+      await page.getByTestId('mrt-zoom').click()
     }
-    await expect(page.getByTestId('mrt-zoom-level')).toHaveText(Math.round(zoom * 100) + '%')
+    await expect(page.getByTestId('mrt-zoom')).toHaveAttribute('data-zoom', String(Math.round(zoom * 100)))
     await expect(page.getByTestId('mrt-marker-clarke-quay')).toBeEnabled()
     await pickMapStation(page, 'clarke-quay')
     await expect(page.getByTestId('mrt-marker-clarke-quay')).toHaveAttribute('aria-pressed', 'true')
@@ -250,16 +249,11 @@ for (const [width, zoom] of [375, 1280].flatMap((width) =>
       fullPage: true,
     })
     for (let current = zoom; current < 1; current += 0.25) {
-      await page.getByTestId('mrt-zoom-in').click()
+      await page.getByTestId('mrt-zoom').click()
     }
-    await expect(page.getByTestId('mrt-zoom-in')).toBeDisabled()
-    await page.getByTestId('mrt-zoom-out').click()
-    await expect(page.getByTestId('mrt-zoom-level')).toHaveText('75%')
-    await page.getByTestId('mrt-zoom-out').click()
-    await expect(page.getByTestId('mrt-zoom-level')).toHaveText('50%')
-    await page.getByTestId('mrt-zoom-out').click()
-    await expect(page.getByTestId('mrt-zoom-level')).toHaveText('25%')
-    await expect(page.getByTestId('mrt-zoom-out')).toBeDisabled()
+    await expect(page.getByTestId('mrt-zoom')).toHaveAttribute('data-zoom', '100')
+    await page.getByTestId('mrt-zoom').click()
+    await expect(page.getByTestId('mrt-zoom')).toHaveAttribute('data-zoom', '25')
     await expect(page.getByTestId('mrt-marker-fort-canning')).toHaveAttribute(
       'aria-pressed',
       'true',
