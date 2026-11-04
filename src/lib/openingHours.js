@@ -59,6 +59,10 @@ export function getVisitHoursWarnings(hours, date, start, end) {
       windows.push({ open: midnight + open, close: midnight + close + (close < open ? 1440 : 0) })
     }
   }
+  return getOpeningWindowWarnings(windows, start, end)
+}
+
+export function getOpeningWindowWarnings(windows, start, end) {
   // Join continuous hours across midnight so a visit can span two open days.
   windows.sort((a, b) => a.open - b.open)
   const merged = []
@@ -68,7 +72,8 @@ export function getVisitHoursWarnings(hours, date, start, end) {
       previous.close = Math.max(previous.close, window.close)
     else merged.push({ ...window })
   }
-  const today = merged.filter((window) => window.close > 0 && window.open < 1440)
+  const midnight = Math.floor(start / 1440) * 1440
+  const today = merged.filter((window) => window.close > midnight && window.open < midnight + 1440)
   if (today.some((window) => start >= window.open && end <= window.close)) return []
   if (!today.length) return ['Closed on this day']
   const next = today.find((window) => start < window.close)

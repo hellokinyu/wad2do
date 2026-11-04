@@ -2,12 +2,12 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
-import { getVisitHoursWarnings } from '@/lib/openingHours'
+import { getGoogleVisitHours, USUAL_HOURS_NOTE } from '@/lib/googleOpeningHours'
 import { fetchTravelOptions } from '@/lib/travelOptions'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
 import { fetchForecasts, getSgToday } from '@/lib/weatherForecast'
 import { useAuth } from '@/composables/useAuth'
-import { getPrice } from '@/lib/activityDisplay'
+import { getPrice, getWebsiteUrl } from '@/lib/activityDisplay'
 import { departureAt, findFastestRoute, legKey, toMinutes, toTime } from '@/lib/routeOrder'
 import ItineraryTravelOptions from '@/components/group/ItineraryTravelOptions.vue'
 import ItineraryLoadingCar from '@/components/group/ItineraryLoadingCar.vue'
@@ -76,6 +76,7 @@ const notInPlan = computed(() => {
 
 // A short reason why an activity isn't in the plan
 function whyNotInPlan(activity) {
+  if (skippedHours.value[activity.activity_id]) return skippedHours.value[activity.activity_id]
   if (activity.cost === null) return 'Price unknown; cannot check the budget'
   const extra = toCents(totalCost.value + activity.cost - budget.value)
   if (extra > 0) return 'Over budget by $' + extra.toFixed(2)
@@ -92,6 +93,63 @@ let savedRevision
 let disposed = false
 let saveController
 let loadController
+let hoursController = new AbortController()
+let hoursRequests = new Map()
+const liveHours = ref({})
+const skippedHours = ref({})
+
+function resetHours() {
+  hoursController.abort()
+  hoursController = new AbortController()
+  hoursRequests = new Map()
+  liveHours.value = {}
+  skippedHours.value = {}
+}
+
+async function ensureHours(activity) {
+  hoursController.signal.throwIfAborted()
+  if (disposed || user.value?.id !== loadedUserId) throw new Error('Your account changed.')
+  const id = activity.activity_id
+  if (hoursRequests.has(id)) return hoursRequests.get(id)
+  const controller = hoursController
+  const pending = (async () => {
+    let details = null
+    const fetchedDate = getSgToday()
+    if (activity.google_place_id) {
+      try {
+        const { data, error } = await requestWithTimeout(
+          (signal) => supabase.functions.invoke('google-place-details', {
+            body: { activityId: id },
+            signal: AbortSignal.any([signal, controller.signal]),
+          }),
+          new AbortController(),
+          15000,
+        )
+        if (!error && data && !data.error) {
+          details = {
+            currentOpeningHours: data.currentOpeningHours,
+            regularOpeningHours: data.regularOpeningHours,
+            attributions: (Array.isArray(data.attributions) ? data.attributions : [])
+              .filter((item) => typeof item?.provider === 'string' && item.provider.trim())
+              .map((item) => ({ name: item.provider, url: getWebsiteUrl({ website: item.providerUri }) })),
+          }
+        }
+      } catch {
+        // Failed lookups stay unavailable for this attempt; retries start with fresh hours.
+      }
+    }
+    controller.signal.throwIfAborted()
+    if (disposed || user.value?.id !== loadedUserId) throw new Error('Your account changed.')
+    liveHours.value[id] = { details, fetchedDate }
+  })()
+  hoursRequests.set(id, pending)
+  return pending
+}
+
+function visitHours(activity, date, start, end) {
+  const result = liveHours.value[activity.activity_id]
+  return getGoogleVisitHours(result?.details, date, start, end, result?.fetchedDate)
+}
 
 const group = ref(null) // { chosen_start, chosen_end, budget_per_person }
 const loading = ref(true)
@@ -189,7 +247,7 @@ function toggleRainy(stop) {
 // What each card shows: the real stop, or its rainy-day alternative if the switch is on.
 // "original" always points at the real stop, so the switch and Swap know which stop it is.
 const displayStops = computed(() => {
-  return itinerary.value.stops.map((stop) => {
+  return (itinerary.value?.stops || []).map((stop) => {
     const alternative = getRainAlternative(stop)
     if (alternative && showingRainy.value.includes(stop.activity_id)) {
       return {
@@ -207,12 +265,18 @@ const displayStops = computed(() => {
 
 // Returns a list of warning messages for one stop
 function getStopWarnings(stop) {
-  return getVisitHoursWarnings(
-    stop.opening_hours,
+  if (!(stop.activity_id in liveHours.value)) return ['Checking opening hours…']
+  const result = visitHours(
+    stop,
     itinerary.value.date,
     toMinutes(stop.start),
     toMinutes(stop.end),
   )
+  return result.warnings
+}
+
+function usesUsualHours(stop) {
+  return visitHours(stop, itinerary.value.date, toMinutes(stop.start), toMinutes(stop.end)).provisional
 }
 
 // '24:30' -> '00:30'. Stops after midnight keep counting past 24:00 so their order and
@@ -254,6 +318,7 @@ onBeforeRouteLeave(() => {
   if (hasUnsavedChanges.value && !window.confirm('Leave and discard your unsaved itinerary changes?'))
     return false
   loadController?.abort()
+  hoursController.abort()
 })
 
 function warnBeforeUnload(event) {
@@ -424,6 +489,7 @@ async function saveChanges() {
       pending = travelPromise
       await pending
     } while (pending !== travelPromise)
+    await Promise.all(itinerary.value.stops.map(ensureHours))
     if (disposed || user.value?.id !== loadedUserId) throw new Error('Your account changed.')
     if (travelFailed.value) {
       saveError.value = "Some travel times couldn't be checked. Retry them before saving."
@@ -523,7 +589,7 @@ function addStop(activity) {
     cost: activity.cost,
     reason: 'Added by the group',
     indoor: activity.indoor,
-    opening_hours: activity.opening_hours,
+    google_place_id: activity.google_place_id,
     address: activity.address,
     lat: activity.lat,
     lng: activity.lng,
@@ -545,6 +611,7 @@ async function replan() {
   travelLoading.value = false
   travelPromise = Promise.resolve()
   saveError.value = ''
+  resetHours()
   try {
     await buildPlan()
   } catch {
@@ -570,7 +637,7 @@ async function loadSavedPlan(signal) {
 }
 
 const ACTIVITY_FIELDS =
-  'name, image_url, price_per_person, indoor, opening_hours, duration_min, address, lat, lng'
+  'name, image_url, price_per_person, indoor, google_place_id, duration_min, address, lat, lng'
 
 // A row from the activities table -> what a stop or "Also voted for" item needs
 function toPlanActivity(id, a) {
@@ -580,7 +647,7 @@ function toPlanActivity(id, a) {
     image_url: a.image_url || '',
     cost: getPrice(a.price_per_person),
     indoor: a.indoor,
-    opening_hours: a.opening_hours,
+    google_place_id: a.google_place_id,
     address: a.address || '',
     lat: a.lat,
     lng: a.lng,
@@ -588,8 +655,7 @@ function toPlanActivity(id, a) {
   }
 }
 
-// Load the activities in a saved plan by their ids, not through votes,
-// so a stop keeps its name, address and hours even when nobody votes for it any more
+// Load saved stops by id so their details survive the removal of all their votes.
 async function loadPlanActivities(stops, signal) {
   const ids = [...new Set(stops.map((s) => s.activity_id))]
   if (!ids.length) return []
@@ -646,6 +712,7 @@ async function loadVotes(signal) {
 // Fill the chosen time with the most-voted activities that fit the time, opening hours and budget,
 // then put those stops in the order with the least travel
 async function buildPlan() {
+  const controller = hoursController
   if (!group.value?.chosen_start) {
     itinerary.value = null // no time picked yet -> empty state
     return
@@ -667,6 +734,13 @@ async function buildPlan() {
     if (activity.cost === null || current + activity.duration_min > endMinutes || spent + activity.cost > budget.value)
       continue
     const previous = stops.at(-1)
+    await ensureHours(activity)
+    controller.signal.throwIfAborted()
+    if (visitHours(activity, start.slice(0, 10), current, current + activity.duration_min)
+      .warnings.includes('Opening hours unavailable.')) {
+      skippedHours.value[activity.activity_id] = 'Opening hours unavailable.'
+      continue
+    }
     let arrival = current
     let options
     if (previous) {
@@ -674,13 +748,17 @@ async function buildPlan() {
         fetchTravelOptions(placeOf(previous), placeOf(activity), departureAt(date, current)),
       )
       const available = options.filter((option) => option.available)
+      controller.signal.throwIfAborted()
       if (!available.length) throw new Error('Travel times are unavailable right now.')
       arrival += Math.min(...available.map((option) => option.durationMinutes))
     }
     const finish = arrival + activity.duration_min
     if (finish > endMinutes) continue // runs past the chosen end time
-    if (getVisitHoursWarnings(activity.opening_hours, date, arrival, finish).length)
+    const hours = visitHours(activity, date, arrival, finish)
+    if (hours.warnings.length) {
+      skippedHours.value[activity.activity_id] = hours.warnings.join(' ')
       continue
+    }
     if (previous) legs[legKey(previous, activity)] = { options }
     stops.push({
       activity_id: activity.activity_id,
@@ -691,7 +769,7 @@ async function buildPlan() {
       cost: activity.cost,
       reason: activity.votes + ' votes in the group',
       indoor: activity.indoor,
-      opening_hours: activity.opening_hours,
+      google_place_id: activity.google_place_id,
       address: activity.address,
       lat: activity.lat,
       lng: activity.lng,
@@ -707,8 +785,11 @@ async function buildPlan() {
         date,
         start: startMinutes,
         end: endMinutes,
-        getOptions: (from, to, departure) =>
-          fetchTravelOptions(placeOf(from), placeOf(to), departure),
+        getHoursWarnings: (stop, date, arrival, finish) => visitHours(stop, date, arrival, finish).warnings,
+        getOptions: (from, to, departure) => {
+          controller.signal.throwIfAborted()
+          return fetchTravelOptions(placeOf(from), placeOf(to), departure)
+        },
       }),
     )
     if (fastest) ({ stops, legs } = fastest)
@@ -716,6 +797,7 @@ async function buildPlan() {
     console.log(error)
   }
 
+  controller.signal.throwIfAborted()
   travelByLeg.value = legs
   itinerary.value = { date, total_cost: spent, stops }
   dayStart.value = stops[0]?.start || dayStart.value
@@ -724,6 +806,7 @@ async function buildPlan() {
 // Load an existing plan, or build and save one before showing it.
 async function loadPage() {
   loadController?.abort()
+  resetHours()
   const controller = new AbortController()
   loadController = controller
   const currentLoad = () => !disposed && loadController === controller &&
@@ -750,6 +833,7 @@ async function loadPage() {
     planSaved.value = !!saved?.stops.length
     if (saved && !rebuild) {
       useSavedPlan(saved, activities) // the group already has a plan: show it
+      await Promise.all(itinerary.value.stops.map(ensureHours))
       await loadTravel()
     } else {
       loadingMessage.value = 'Building your itinerary…'
@@ -882,6 +966,11 @@ function loadTravel() {
   return travelPromise
 }
 
+watch(
+  [loading, () => displayStops.value.map((stop) => stop.activity_id).join(',')],
+  () => { if (!loading.value) void Promise.all(displayStops.value.map(ensureHours)).catch(() => {}) },
+)
+
 // Reload travel when the stops or their order change (new plan, move, remove, swap)
 watch(
   () => JSON.stringify([dayStart.value, itinerary.value?.date,
@@ -894,6 +983,14 @@ onUnmounted(() => {
   travelRequest += 1
   saveController?.abort()
   loadController?.abort()
+  hoursController.abort()
+})
+
+watch(() => user.value?.id, (id) => {
+  if (id !== loadedUserId) {
+    hoursController.abort()
+    liveHours.value = {}
+  }
 })
 </script>
 
@@ -1131,6 +1228,14 @@ onUnmounted(() => {
                   class="badge rounded-pill text-bg-warning me-1"
                   >Rain forecast</span
                 >
+                <p v-if="usesUsualHours(stop)" class="small text-secondary mb-1" data-testid="itinerary-usual-hours">{{ USUAL_HOURS_NOTE }}</p>
+                <p v-if="liveHours[stop.activity_id]?.details" class="small text-secondary mb-1" data-testid="itinerary-hours-source">
+                  Opening hours checked with Google Maps.
+                  <span v-for="provider in liveHours[stop.activity_id].details.attributions" :key="provider.name">
+                    <a v-if="provider.url" :href="provider.url" target="_blank" rel="noopener noreferrer">{{ provider.name }}</a>
+                    <span v-else>{{ provider.name }}</span>
+                  </span>
+                </p>
                 <div
                   v-if="stop.isRainyView"
                   class="small rain-note mt-1"

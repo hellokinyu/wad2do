@@ -67,6 +67,16 @@ test('skips a faster order that would miss opening hours', async () => {
   assert.equal(route, null)
 })
 
+test('uses the caller hours check for every order, including a faster reverse order', async () => {
+  const route = await findFastestRoute([stop('A'), stop('B')], {
+    ...plan,
+    getOptions: travel({ 'A>B': 120, 'B>A': 1 }),
+    getHoursWarnings: (stop, _date, start) =>
+      stop.activity_id === 'B' && start < 12 * 60 ? ['Opens at 12:00'] : [],
+  })
+  assert.equal(route, null)
+})
+
 test('skips a faster order that runs past the end time', async () => {
   const shortDay = { ...plan, end: 10 * 60 + 150 }
   const longFirst = { ...stop('A'), end: '01:00' }

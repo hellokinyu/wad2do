@@ -32,12 +32,24 @@ export function legKey(from, to) {
 
 function fastestMinutes(options) {
   const available = (options || []).filter((option) => option.available)
-  return available.length ? Math.min(...available.map((option) => option.durationMinutes)) : Infinity
+  return available.length
+    ? Math.min(...available.map((option) => option.durationMinutes))
+    : Infinity
 }
 
 // Lay the stops out in this order from `start`, keeping each one's duration.
 // Returns null if a journey has no route, or a stop misses the end time or opening hours.
-export async function timeRoute(stops, { date, start, end, getOptions }) {
+export async function timeRoute(
+  stops,
+  {
+    date,
+    start,
+    end,
+    getOptions,
+    getHoursWarnings = (stop, date, start, end) =>
+      getVisitHoursWarnings(stop.opening_hours, date, start, end),
+  },
+) {
   const timed = []
   const legs = {}
   let current = start
@@ -54,7 +66,7 @@ export async function timeRoute(stops, { date, start, end, getOptions }) {
       legs[legKey(previous, stop)] = { options }
     }
     const finish = arrival + toMinutes(stop.end) - toMinutes(stop.start)
-    if (finish > end || getVisitHoursWarnings(stop.opening_hours, date, arrival, finish).length) {
+    if (finish > end || getHoursWarnings(stop, date, arrival, finish).length) {
       return null
     }
     timed.push({ ...stop, start: toTime(arrival), end: toTime(finish) })
@@ -89,9 +101,9 @@ async function lookUpJourneys(stops, departure, getOptions) {
 // Find the order of these stops with the least travel. Departure times change journey times, so
 // every order is ranked with one shared departure, then the best few are checked at their real
 // times. Returns the new route, or null when the current order is already the fastest that fits.
-export async function findFastestRoute(stops, { date, start, end, getOptions }) {
+export async function findFastestRoute(stops, { date, start, end, getOptions, getHoursWarnings }) {
   if (stops.length < 2 || stops.length > MAX_STOPS_TO_REORDER) return null
-  const plan = { date, start, end }
+  const plan = { date, start, end, getHoursWarnings }
   const current = await timeRoute(stops, { ...plan, getOptions })
   const journeys = await lookUpJourneys(
     stops,
