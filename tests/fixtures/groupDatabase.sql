@@ -18,7 +18,6 @@ create table public."profiles" (
   "interests" text[],
   "budget" text,
   "home_area" text,
-  "company" text[],
   "is_admin" bool default false,
   "created_at" timestamptz default timezone('utc'::text, now()),
   "home_station_id" text
