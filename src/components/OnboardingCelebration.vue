@@ -72,7 +72,9 @@ const limbColor = computed(
 const active = ref(true)
 const canvas = ref(null)
 const colors = ['#ff477e', '#ffd23f', '#3dd6a0', '#47a5ff', '#ac7bff', '#ff914d', '#f66de1']
-const duration = 7.2
+// Shorter on phones, where the mascots sit over the Find my hangouts button
+const phone = typeof window !== 'undefined' && window.innerWidth < 768
+const duration = phone ? 4.2 : 7.2
 let animationFrame
 let resizeCanvas
 
@@ -103,8 +105,8 @@ onMounted(() => {
   resizeCanvas()
   window.addEventListener('resize', resizeCanvas)
 
-  const burstCount = width < 768 ? 320 : 540
-  const rainCount = width < 768 ? 100 : 180
+  const burstCount = width < 768 ? 180 : 540
+  const rainCount = width < 768 ? 60 : 180
   const particles = Array.from({ length: burstCount + rainCount }, (_, index) => {
     const fromLeft = index % 2 === 0
     const rain = index >= burstCount
@@ -382,6 +384,12 @@ onUnmounted(() => {
 @keyframes celebration-fade {
   to {
     opacity: 0;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .celebration {
+    animation-delay: 3.5s;
   }
 }
 

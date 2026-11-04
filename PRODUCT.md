@@ -20,7 +20,7 @@ Success: a group goes from "let's meet this weekend" to an agreed itinerary in o
 
 ## Positioning
 
-The plan comes from the group's own votes and availability, not one organiser's taste. WAD2Do's planner ranks the group's voted activities, then adds them one stop at a time if each fits the chosen time slot, opening hours, remaining budget and real travel time (OneMap). When showers are forecast, outdoor stops get indoor alternatives from activities the group already voted for.
+The plan comes from the group's own votes and availability, not one organiser's taste. WAD2Do's planner ranks the group's voted activities, then adds them one stop at a time if each fits the chosen time slot, opening hours, remaining budget and real travel time (OneMap), then puts those stops in the order with the least travel. When showers are forecast, outdoor stops get indoor alternatives from activities the group already voted for.
 
 ## Operating Context
 

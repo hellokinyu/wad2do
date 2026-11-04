@@ -26,8 +26,12 @@ export function hasCompleteOpeningHours(hours) {
 }
 
 // Times are minutes from midnight on the plan's Singapore calendar date.
+// 1440 or more means the next day, for a plan that runs past midnight.
 export function getVisitHoursWarnings(hours, date, start, end) {
-  const weekday = (new Date(date + 'T00:00:00Z').getUTCDay() + 6) % 7
+  const daysLater = Math.max(Math.floor(start / 1440), 0)
+  start -= daysLater * 1440
+  end -= daysLater * 1440
+  const weekday = (new Date(date + 'T00:00:00Z').getUTCDay() + 6 + daysLater) % 7
   if (
     !Number.isInteger(weekday) ||
     !Number.isFinite(start) ||

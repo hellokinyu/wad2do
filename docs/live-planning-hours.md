@@ -17,6 +17,8 @@ Re-plan fails, finishing the loading state also fetches missing hours for retain
 stops, while preserving saved visit times and making no writes.
 
 The full visit must fit a continuous opening interval **after travel is calculated**.
+Route ordering reuses those same in-memory live hours for every candidate order,
+so a faster journey cannot move a stop outside its opening hours.
 Structured periods support split opening times, overnight carryover, 24-hour venues,
 and date-specific exceptions. Visits within the next seven days use
 `currentOpeningHours`; dates outside that coverage use `regularOpeningHours` with

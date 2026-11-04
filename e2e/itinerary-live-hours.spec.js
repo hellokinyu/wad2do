@@ -86,6 +86,40 @@ test('reopening fetches fresh hours and adds warnings without changing or saving
   expect(state.hoursLookups).toEqual([activityId, activityId])
 })
 
+test('route ordering rejects a faster order that violates live Google hours', async ({ page }) => {
+  const state = await mockItinerary(page, { hours: {} })
+  state.votes.push({
+    ...state.votes[0],
+    activity_id: secondId,
+    activities: { ...state.votes[0].activities, name: 'Late opener' },
+  })
+  const lateHours = fridayHours(23)
+  lateHours.currentOpeningHours.periods[0].open.hour = 21
+  lateHours.regularOpeningHours.periods[0].open.hour = 21
+  state.googleDetails = { [activityId]: fridayHours(23), [secondId]: lateHours }
+  await page.route('**/functions/v1/onemap-route', (route) =>
+    route.fulfill({
+      json: {
+        options: [
+          {
+            mode: 'TRANSIT',
+            available: true,
+            durationMinutes: route.request().postDataJSON().start.name === 'Late opener' ? 1 : 30,
+          },
+        ],
+      },
+    }),
+  )
+  await page.goto(`/groups/${groupId}/itinerary`)
+  await expect(page.getByTestId('itinerary-saved-status')).toBeVisible()
+  const stops = page.getByTestId('itinerary-stop')
+  await expect(stops).toHaveCount(2)
+  await expect(stops.first()).toContainText('Night activity')
+  await expect(stops.nth(1)).toContainText('21:30–22:30')
+  expect(state.saved.stops.map((stop) => stop.activity_id)).toEqual([activityId, secondId])
+  expect(state.hoursLookups).toEqual([activityId, secondId])
+})
+
 test('failed Re-plan refreshes hours for retained stops it did not reach without rewriting the saved plan', async ({
   page,
 }) => {

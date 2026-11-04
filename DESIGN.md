@@ -77,7 +77,7 @@ A festive theme is Supper Club with a slight tint of the holiday's colour in the
    - Group stage colours (Voting amber, Time picked blue, Planned green, past grey) in `src/lib/groupDisplay.js`
    - The availability heatmap greens in `GroupAvailabilityTab.vue`
    - Errors and delete buttons (Bootstrap's `danger` colours)
-   - The MRT map blue in `MrtStationPicker.vue`
+   - The MRT map colours in `MrtStationPicker.vue`. The map picture is always light, even in dark mode, so the markers drawn on it are fixed too: a `#5f6273` ring on white for a station, `#165bc6` for the picked one, and `#111219` for the name label and the keyboard focus outline. In dark mode the picture is only dimmed slightly (`brightness(0.88)`).
    - Illustrations: animal avatars, the onboarding mascot, admin action icons, seasonal navbar art
 
 ## Type
@@ -179,6 +179,16 @@ Short confirmations ("Saved to your Profile.") float at the bottom of the screen
 - A routine message fades after 4 seconds.
 - A message with a next step (for example "Go vote in Saturday Squad" after sharing) stays until it's closed, because a link that vanishes can't be tapped.
 - Its close button sends keyboard focus somewhere sensible (the results), since the button disappears with the message.
+
+## Picking a station
+
+The station picker ([MrtStationPicker.vue](src/components/MrtStationPicker.vue)) is used in onboarding and in Profile. Search comes first and the map confirms what was picked:
+
+- Search matches station names, line codes ("EW2") and LRT stops. An LRT stop picks the MRT station its line joins (the list is in [lrtStops.js](src/data/lrtStops.js)).
+- The picked station is named in a bar above the map, with a Clear button, so it's still clear when the station is scrolled out of view.
+- Tapping the map picks the nearest station within 22px, so near-misses on a phone still count. Picking never scrolls the map; only search and first load do.
+- The map starts at 50%, where names are readable. Zoom with − and +, or pinch on a phone.
+- People not near an MRT station can pick an area from the list under the map instead.
 
 ## Tab icon
 
