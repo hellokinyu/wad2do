@@ -20,7 +20,8 @@
       </button>
 
       <div ref="menu" class="collapse navbar-collapse" id="mainNav">
-        <ul class="navbar-nav ms-auto">
+        <!-- Every link would bounce back to onboarding, so they're switched off until it's finished -->
+        <ul class="navbar-nav ms-auto" :inert="needsOnboarding || undefined" :class="{ 'is-locked': needsOnboarding }">
           <li class="nav-item">
             <RouterLink
               class="nav-link"
@@ -174,7 +175,7 @@ import AnimalAvatar from '@/components/AnimalAvatar.vue'
 import NavBarTheme from '@/components/NavBarTheme.vue'
 import brandLogo from '@/assets/wad2do-logo.png'
 
-const { user, isAdmin, avatarAnimal } = useAuth()
+const { user, isAdmin, avatarAnimal, needsOnboarding } = useAuth()
 const navbar = ref(null)
 const toggler = ref(null)
 const menu = ref(null)

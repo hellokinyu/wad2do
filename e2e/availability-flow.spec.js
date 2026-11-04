@@ -23,7 +23,7 @@ for (const width of [375, 768, 1280]) {
     await slot(page, '10:00').click()
     await expect(page.getByTestId('confirm-time')).toBeDisabled()
     await expect(page.getByTestId('availability-action')).toContainText(
-      'select the last half-hour block',
+      'Now tap the last block',
     )
     await slot(page, '11:30').click()
     await expect(page.getByTestId('availability-action')).toContainText('2 hours')
@@ -86,7 +86,7 @@ test('viewing an existing itinerary never rebuilds it and incomplete picks block
   await slot(page, '11:30').click()
   await expect(page.getByTestId('confirm-time')).toHaveText('Replace time & rebuild')
   await expect(page.getByTestId('replace-plan-warning')).toContainText(
-    'removes the current itinerary',
+    'Changing the time replaces your itinerary',
   )
   await page.getByTestId('clear-time-selection').click()
   await expect(page.getByTestId('confirm-time')).toHaveText('View itinerary')

@@ -44,13 +44,12 @@ test('station-only changes enable Save, Undo restores both fields and reload res
   const state = await mockPreferences(page, { home_station_id: 'tampines', home_area: 'Tampines' })
   await page.goto('/profile')
   await expect(page.getByTestId('mrt-marker-tampines')).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByTestId('mrt-zoom')).toHaveAttribute('data-zoom', '25')
+  await expect(page.getByTestId('mrt-zoom')).toHaveAttribute('data-zoom', '50')
   const map = await page.getByTestId('mrt-map-canvas').boundingBox()
-  expect(map.width).toBeGreaterThanOrEqual(900)
+  expect(map.width).toBeGreaterThanOrEqual(1800)
   await expect(page.getByTestId('profile-save-prefs')).toBeDisabled()
   expect(state.saves).toHaveLength(0)
-  await expect(page.getByTestId('mrt-search')).toHaveCount(0)
-  await expect(page.getByTestId('mrt-select')).toHaveCount(0)
+  await expect(page.getByTestId('mrt-search')).toBeVisible()
   await pickMapStation(page, 'tampines-east')
   await expect(page.getByTestId('profile-save-prefs')).toBeEnabled()
   await page.getByTestId('profile-undo-prefs').click()
@@ -71,7 +70,7 @@ test('station-only changes enable Save, Undo restores both fields and reload res
   await expect(page.getByTestId('profile-save-prefs')).toBeDisabled()
 })
 
-test('25% map fills the Profile panel after resizing and keeps stations aligned and centred', async ({
+test('50% map fills the Profile panel after resizing and keeps stations aligned and centred', async ({
   page,
 }) => {
   const state = await mockPreferences(page, { home_station_id: 'tampines', home_area: 'Tampines' })
@@ -126,14 +125,14 @@ test('25% map fills the Profile panel after resizing and keeps stations aligned 
       .toBeLessThanOrEqual(1)
     const geometry = await measureGeometry()
     // clientWidth is rounded to an integer; getBoundingClientRect preserves subpixels.
-    expect(Math.abs(geometry.width - Math.max(900, geometry.viewportWidth))).toBeLessThanOrEqual(1)
+    expect(Math.abs(geometry.width - Math.max(1800, geometry.viewportWidth))).toBeLessThanOrEqual(1)
     expect(geometry.imageWidth).toBe(geometry.width)
     expect(geometry.imageHeight).toBeCloseTo(geometry.height, 1)
     expect(geometry.xError).toBeLessThan(0.1)
     expect(geometry.yError).toBeLessThan(0.1)
     expect(Math.abs(geometry.scrollTop - geometry.expectedTop)).toBeLessThanOrEqual(1)
     expect(geometry.pageOverflow, `Page overflow at ${width}px`).toBe(false)
-    await expect(page.getByTestId('mrt-zoom')).toHaveAttribute('data-zoom', '25')
+    await expect(page.getByTestId('mrt-zoom')).toHaveAttribute('data-zoom', '50')
   }
   expect(state.saves).toHaveLength(0)
   await page.screenshot({ path: test.info().outputPath('mrt-profile-wide.png'), fullPage: true })
@@ -171,7 +170,7 @@ test('saving disables every preference control and failed confirmation retains t
   await page.getByTestId('profile-save-prefs').click()
   await expect(page.getByTestId('mrt-marker-tampines')).toBeDisabled()
   await expect(page.getByTestId('mrt-clear')).toBeDisabled()
-  await expect(page.getByTestId('mrt-zoom')).toBeDisabled()
+  await expect(page.getByTestId('mrt-zoom-in')).toBeDisabled()
   await expect(page.getByTestId('profile-undo-prefs')).toBeDisabled()
   await expect(page.getByTestId('pref-area')).toBeDisabled()
   await expect(page.getByTestId('pref-interest-food')).toBeDisabled()

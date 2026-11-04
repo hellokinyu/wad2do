@@ -172,9 +172,9 @@
 
             <div class="col-12">
               <p class="group-label">Starting location</p>
-              <MrtStationPicker :model-value="homeStationId" :disabled="savingPrefs" @update:model-value="pickStation">
+              <MrtStationPicker :model-value="homeStationId" :area="selectedStation ? '' : homeArea" :disabled="savingPrefs" @update:model-value="pickStation">
                 <div class="mt-3">
-                  <label for="pref-area" class="group-label d-block">Home area</label>
+                  <label for="pref-area" class="group-label d-block">Not near an MRT? Pick your area instead</label>
                   <select id="pref-area" class="form-select field" :value="homeArea" data-testid="pref-area" @change="pickArea($event.target.value)">
                     <option value="">Not set</option>
                     <option v-for="area in homeAreas" :key="area" :value="area">{{ area }}</option>
@@ -362,6 +362,7 @@ const interests = ref([])
 const budget = ref('')
 const homeArea = ref('')
 const homeStationId = ref(null)
+const selectedStation = computed(() => findStation(homeStationId.value))
 const savedPrefs = ref({ interests: [], budget: '', homeArea: '', homeStationId: null })
 const savingPrefs = ref(false)
 const prefsMessage = ref('')

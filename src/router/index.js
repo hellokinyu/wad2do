@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, START_LOCATION } from 'vue-router'
 import { watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { safeRedirect } from '@/lib/safeRedirect'
@@ -107,13 +107,21 @@ const router = createRouter({
 
 const { user, isAdmin, needsOnboarding, initializeAuth, loadAdminStatus } = useAuth()
 
+// Keep a ?navTheme preview (DESIGN.md) when onboarding takes over the page
+function onboardingFor(route) {
+  return {
+    name: 'onboarding',
+    query: route.query.navTheme ? { navTheme: route.query.navTheme } : {},
+  }
+}
+
 router.beforeEach(async (to) => {
   // Wait for the saved session before deciding whether to redirect after a refresh.
   await initializeAuth()
   // Remember the page (e.g. a group invite link) so login can return to it.
   if (to.meta.requiresAuth && !user.value)
     return { name: 'login', query: { redirect: to.fullPath } }
-  if (needsOnboarding.value && to.name !== 'onboarding') return { name: 'onboarding' }
+  if (needsOnboarding.value && to.name !== 'onboarding') return onboardingFor(to)
   if (to.meta.guestOnly && user.value)
     return safeRedirect(to.query.redirect) || { name: 'activities' }
   if (to.name !== 'admin-access') await loadAdminStatus()
@@ -123,9 +131,11 @@ router.beforeEach(async (to) => {
 // Also leave a protected page when the user signs out in another tab.
 const stopWatching = watch(user, (currentUser) => {
   const route = router.currentRoute.value
+  // The first page load is still being handled by beforeEach, which already does all of this
+  if (route === START_LOCATION) return
   if (!currentUser && route.meta.requiresAuth) router.replace({ name: 'login' })
   if (currentUser && needsOnboarding.value && route.name !== 'onboarding') {
-    router.replace({ name: 'onboarding' })
+    router.replace(onboardingFor(route))
   } else if (currentUser && route.meta.guestOnly) {
     router.replace(safeRedirect(route.query.redirect) || { name: 'activities' })
   }

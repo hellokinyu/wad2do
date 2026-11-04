@@ -1,7 +1,7 @@
 <template>
   <div
     class="onboarding-page container py-4 py-md-5"
-    :class="{ 'has-footer': step <= 4 && !loading && !loadError, 'has-back': step > 1 && step <= 4 }"
+    :class="{ 'has-footer': step <= 4 && !loading && !loadError, 'is-done': step === 5 }"
     data-testid="onboarding-page"
   >
     <!-- Owner: Charmaine -->
@@ -18,26 +18,15 @@
       </div>
 
       <template v-else>
-        <button
-          v-if="step > 1 && step <= 4"
-          type="button"
-          class="onboarding-back"
-          :disabled="saving"
-          aria-label="Go back"
-          data-testid="onboarding-back"
-          @click="goBack"
-        >
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
-        </button>
-
         <div
           v-if="step <= 4"
           class="step-bars mb-4"
           role="progressbar"
           aria-label="Onboarding progress"
-          :aria-valuenow="progressPercent"
+          :aria-valuenow="step - 1"
           aria-valuemin="0"
-          aria-valuemax="100"
+          aria-valuemax="4"
+          :aria-valuetext="`Step ${step} of 4: ${stepNames[step - 1]}`"
           data-testid="onboarding-progress"
         >
           <span v-for="n in 4" :key="n" class="step-bar" :class="{ filled: n <= step }"></span>
@@ -50,10 +39,12 @@
         </p>
 
         <fieldset :disabled="saving" class="border-0 p-0 m-0">
-        <Transition name="step" mode="out-in">
+        <!-- After each step appears, its heading takes focus so screen readers announce the new step -->
+        <Transition name="step" mode="out-in" @after-enter="focusHeading">
           <section v-if="step === 1" key="interests" data-testid="onboarding-step-interests">
-            <h1 class="display-5 fw-bold title mb-3">What do you <span class="hl">love</span> doing?</h1>
-            <p class="lead-text mb-4">Pick at least 3 and we'll line up hangouts that fit you.</p>
+            <h1 class="display-5 fw-bold title mb-3" tabindex="-1">What do you <span class="hl">love</span> doing?</h1>
+            <p class="lead-text mb-2">Pick at least 3 and we'll line up hangouts that fit you.</p>
+            <p class="intro-note mb-4" data-testid="onboarding-intro">Four quick questions, about a minute. You can change any of it later in Profile.</p>
             <div class="onboarding-choices d-flex flex-wrap gap-2">
               <template v-for="item in interestOptions" :key="item">
                 <input
@@ -73,7 +64,7 @@
           </section>
 
           <section v-else-if="step === 2" key="budget" data-testid="onboarding-step-budget">
-            <h1 class="display-5 fw-bold title mb-3">What's your usual <span class="hl">budget?</span></h1>
+            <h1 class="display-5 fw-bold title mb-3" tabindex="-1">What's your usual <span class="hl">budget?</span></h1>
             <p class="lead-text mb-4">Per person, per hangout. No judgement.</p>
             <div class="onboarding-budgets row g-3">
               <div v-for="option in budgetOptions" :key="option.id" class="col-12 col-sm-6">
@@ -96,11 +87,11 @@
           </section>
 
           <section v-else-if="step === 3" key="area" data-testid="onboarding-step-area">
-            <h1 class="display-5 fw-bold title mb-3">Which MRT station do you usually <span class="hl">start from?</span></h1>
-            <p class="lead-text mb-4">Choose your usual starting station. We'll use its area for activity matches.</p>
-            <MrtStationPicker :model-value="homeStationId" :disabled="saving" @update:model-value="pickStation">
+            <h1 class="display-5 fw-bold title mb-3" tabindex="-1">Which MRT station do you usually <span class="hl">start from?</span></h1>
+            <p class="lead-text mb-4">So we can suggest places that are an easy ride for you, and work out travel times for your group's plans.</p>
+            <MrtStationPicker :model-value="homeStationId" :area="selectedStation ? '' : homeArea" :disabled="saving" @update:model-value="pickStation">
               <div class="mt-3">
-                <label for="home-area" class="form-label">Home area</label>
+                <label for="home-area" class="form-label">Not near an MRT? Pick your area instead</label>
                 <select id="home-area" class="form-select field" :value="homeArea" data-testid="home-area" @change="pickArea($event.target.value)">
                   <option value="">Not set</option>
                   <option v-for="area in homeAreas" :key="area" :value="area">{{ area }}</option>
@@ -110,7 +101,7 @@
           </section>
 
           <section v-else-if="step === 4" key="identity" data-testid="onboarding-step-identity">
-            <h1 class="display-5 fw-bold title mb-3">Make it <span class="hl">yours.</span></h1>
+            <h1 class="display-5 fw-bold title mb-3" tabindex="-1">Make it <span class="hl">yours.</span></h1>
             <p class="lead-text mb-4">One last thing: add your name and pick a little face for your profile. Both are required.</p>
             <div class="mb-4">
               <label for="onboarding-name" class="form-label fw-bold">Your name <span class="text-muted">(required)</span></label>
@@ -134,9 +125,19 @@
 
           <section v-else-if="step === 5" key="done" data-testid="onboarding-step-done">
             <OnboardingCelebration :animal="avatarAnimal" />
-            <p class="eyebrow mb-3">All done</p>
-            <h1 class="display-5 fw-bold title mb-3">You're all <span class="hl">set.</span></h1>
+            <h1 class="display-5 fw-bold title mb-3" tabindex="-1">You're all <span class="hl">set.</span></h1>
             <p class="lead-text mb-4">Here's what we'll use to find your next hangout.</p>
+
+            <!-- The payoff: a first look at what the answers just unlocked -->
+            <div v-if="matches.length" class="matches mb-4" data-testid="onboarding-matches">
+              <p class="eyebrow mb-2">First picks for you</p>
+              <ul class="match-list">
+                <li v-for="activity in matches" :key="activity.id">
+                  <RouterLink :to="`/activities/${activity.id}`" class="match-name">{{ activity.name }}</RouterLink>
+                  <span class="match-meta">{{ [activity.area, formatPrice(activity.price_per_person)].filter(Boolean).join(' · ') }}</span>
+                </li>
+              </ul>
+            </div>
 
             <div class="panel mb-4">
               <div class="summary-row d-flex align-items-center gap-3">
@@ -173,13 +174,26 @@
         </Transition>
         </fieldset>
 
-        <div v-if="errorMessage" class="notice mt-4" role="alert" data-testid="onboarding-error">
+        <div v-if="errorMessage" ref="errorBox" class="error-notice mt-4" role="alert" data-testid="onboarding-error">
           <p class="mb-3">{{ errorMessage }}</p>
-          <button type="button" class="btn btn-outline-dark rounded-pill px-3 btn-sm" :disabled="saving || !canNext" @click="saveProfile">Try again</button>
+          <button type="button" class="btn btn-outline-danger rounded-pill px-4" :disabled="saving || !canNext" @click="saveProfile">Try again</button>
         </div>
 
-        <div v-if="step <= 4" class="footer-bar d-flex justify-content-end align-items-center mt-5 pt-4">
-          <div class="footer-actions d-flex align-items-center gap-3">
+        <!-- Back, Skip and Next live together at the bottom, where a thumb reaches them on a phone -->
+        <div v-if="step <= 4" class="footer-bar mt-5 pt-4">
+          <button
+            v-if="step > 1"
+            type="button"
+            class="onboarding-back"
+            :disabled="saving"
+            aria-label="Go back"
+            data-testid="onboarding-back"
+            @click="goBack"
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+          </button>
+          <p class="footer-hint" aria-live="polite" data-testid="onboarding-footer-hint">{{ canNext ? '' : footerHint }}</p>
+          <div class="footer-actions">
             <button
               v-if="step < 4"
               type="button"
@@ -208,8 +222,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import MrtStationPicker from '@/components/MrtStationPicker.vue'
 import AnimalAvatar from '@/components/AnimalAvatar.vue'
@@ -218,6 +232,8 @@ import OnboardingCelebration from '@/components/OnboardingCelebration.vue'
 import { findProfileAnimal } from '@/data/profileAnimals'
 import { homeAreas } from '@/data/homeAreas'
 import { findStation } from '@/data/mrtStations'
+import { rankActivities, scoreActivity } from '@/lib/activityRanking'
+import { formatPrice } from '@/lib/activityDisplay'
 
 const router = useRouter()
 
@@ -241,6 +257,8 @@ const budgetOptions = [
   { id: '100-plus', label: '$100+', hint: 'Fine dining, special experiences' },
 ]
 
+// Same choices as Profile
+
 const step = ref(1)
 watch(step, () => {
   if (window.matchMedia('(max-width: 767.98px)').matches) {
@@ -254,19 +272,26 @@ const homeStationId = ref(null)
 const selectedStation = computed(() => findStation(homeStationId.value))
 const displayName = ref('')
 const avatarAnimal = ref('')
+const errorBox = ref(null)
 
 const loading = ref(true)
 const loadError = ref('')
 const saving = ref(false)
 const errorMessage = ref('')
 
-const progressPercent = computed(() => Math.round((step.value / 4) * 100))
-
 const interestHint = computed(() => {
   const count = interests.value.length
   if (count === 0) return 'Pick 3 to continue.'
   if (count < 3) return count + ' picked. Pick ' + (3 - count) + ' more.'
   return count + ' picked. Nice!'
+})
+
+// Says why Next is greyed out, next to the button
+const footerHint = computed(() => {
+  if (step.value === 1) return interestHint.value
+  if (step.value === 2) return 'Pick a budget to continue.'
+  if (step.value === 3) return 'Pick a station or an area to continue.'
+  return 'Add your name and a face to finish.'
 })
 
 const canNext = computed(() => {
@@ -283,6 +308,12 @@ const budgetLabel = computed(() => {
   const found = budgetOptions.find((option) => option.id === budget.value)
   return found ? found.label : 'Not set'
 })
+
+// Runs when the slide-in ends, so leave focus alone if someone already clicked into the new step
+function focusHeading(element) {
+  if (element.contains(document.activeElement)) return
+  element.querySelector('h1')?.focus({ preventScroll: true })
+}
 
 async function loadProfile() {
   loading.value = true
@@ -344,12 +375,9 @@ function goNext() {
   }
 }
 
+// Skip moves on and keeps whatever was already picked; Clear on the map is how to remove a location
 function skipStep() {
   if (step.value >= 4 || saving.value) return
-  if (step.value === 1) interests.value = []
-  if (step.value === 2) budget.value = ''
-  if (step.value === 3) pickStation(null)
-
   step.value++
 }
 
@@ -409,11 +437,32 @@ async function saveProfile() {
     if (identityError) throw identityError
 
     step.value = 5
+    loadMatches()
   } catch (err) {
     console.error('Onboarding save failed:', err)
-    errorMessage.value = "We couldn't save your answers. Please check you're logged in and try again."
+    errorMessage.value = "Couldn't save just now. Your answers are still here, so try again in a moment."
+    await nextTick()
+    errorBox.value?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   } finally {
     saving.value = false
+  }
+}
+
+// A first look at what the answers unlocked. Best effort: if it fails, the summary still shows.
+const matches = ref([])
+async function loadMatches() {
+  try {
+    const { data, error } = await supabase
+      .from('activities')
+      .select('id, name, category, tags, area, price_per_person')
+      .limit(300)
+    if (error) throw error
+    const profile = { interests: interests.value, budget: budget.value, home_area: homeArea.value }
+    matches.value = rankActivities(data ?? [], profile)
+      .filter((activity) => scoreActivity(activity, profile) > 0)
+      .slice(0, 3)
+  } catch {
+    matches.value = []
   }
 }
 
@@ -434,6 +483,11 @@ function exploreActivities() {
   color: var(--ink);
   letter-spacing: -0.03em;
   line-height: 1.1;
+  text-wrap: balance;
+}
+
+h1.title:focus {
+  outline: none;
 }
 
 .hl {
@@ -453,6 +507,11 @@ function exploreActivities() {
 .lead-text {
   font-size: 1.1rem;
   color: var(--muted);
+}
+
+.intro-note {
+  color: var(--muted);
+  font-size: 0.9375rem;
 }
 
 .hint {
@@ -567,8 +626,9 @@ function exploreActivities() {
   color: var(--on-ink);
 }
 
+/* --subtle doesn't flip against ink; a softened --on-ink stays readable (over 7:1) in both modes */
 .btn-check:checked + .option-tile .tile-hint {
-  color: var(--subtle);
+  color: color-mix(in srgb, var(--on-ink) 80%, var(--ink));
 }
 
 .btn-check:checked + .option-tile .tick {
@@ -586,6 +646,46 @@ function exploreActivities() {
 .field:focus {
   border-color: var(--ink);
   box-shadow: none;
+}
+
+.matches {
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface);
+}
+
+.match-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.match-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.match-list li:last-child {
+  border-bottom: none;
+}
+
+.match-name {
+  color: var(--ink);
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+
+.match-meta {
+  color: var(--muted);
+  font-size: 0.875rem;
 }
 
 .panel {
@@ -621,17 +721,44 @@ function exploreActivities() {
   background-color: var(--surface-2);
 }
 
+/* Errors use Bootstrap's danger colours (DESIGN.md) */
+.error-notice {
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--bs-danger-border-subtle);
+  border-radius: var(--radius-lg);
+  background-color: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
+  scroll-margin-bottom: 120px;
+}
+
 .footer-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px 16px;
   border-top: 1px solid var(--line);
+}
+
+.footer-hint {
+  flex: 1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+  text-align: right;
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .onboarding-back {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   width: 44px;
   height: 44px;
-  margin-bottom: 12px;
   padding: 0;
   border: 1px solid var(--line-strong);
   border-radius: 50%;
@@ -640,7 +767,7 @@ function exploreActivities() {
 }
 
 .onboarding-back:hover:not(:disabled) {
-  background: var(--surface-alt, rgba(0, 0, 0, 0.05));
+  background: var(--surface-2);
 }
 
 .skip-link {
@@ -650,11 +777,6 @@ function exploreActivities() {
 
 .skip-link:hover {
   color: var(--ink);
-}
-
-/* Primary action: amber, like .btn-dark in src/assets/styles.css */
-.area-group {
-  margin-bottom: 1.25rem;
 }
 
 .step-enter-active,
@@ -676,7 +798,11 @@ function exploreActivities() {
 
 @media (max-width: 767.98px) {
   .onboarding-page.has-footer {
-    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: calc(128px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  /* The finish screen has no footer, but the bottom nav still sits over the page */
+  .onboarding-page.is-done {
+    padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px)) !important;
   }
   .onboarding-choices {
     flex-direction: column;
@@ -721,54 +847,51 @@ function exploreActivities() {
     top: 50%;
     transform: translateY(-50%);
   }
-  .onboarding-box :deep(.animal-options) {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .onboarding-box :deep(.animal-tile) {
-    flex-direction: row;
-    justify-content: flex-start;
-    gap: 12px;
-    padding: 12px 40px 12px 16px;
-  }
-  .onboarding-box :deep(.animal-tile .animal-avatar) {
-    flex-shrink: 0;
-    width: 44px;
-    height: 44px;
-  }
-  .onboarding-box :deep(.selection-mark) {
-    top: 50%;
-    right: 16px;
-    transform: translateY(-50%);
-  }
+  /* Back, Skip and Next on one row in the thumb zone, with the reason Next is off above them */
   .footer-bar {
     position: fixed;
     inset: auto 0 0;
     z-index: 1030;
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
-    gap: 8px 12px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 2.4fr);
+    grid-template-areas:
+      'hint hint hint'
+      'back skip next';
+    gap: 6px 10px;
     margin-top: 0 !important;
-    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+    border-top: 1px solid var(--line);
     background: var(--surface);
-    box-shadow: 0 -4px 16px rgb(0 0 0 / 4%);
+  }
+  .onboarding-back {
+    grid-area: back;
+  }
+  .footer-hint {
+    grid-area: hint;
+    text-align: left;
+  }
+  .footer-hint:empty {
+    display: none;
   }
   .footer-actions {
-    display: contents !important;
+    display: contents;
   }
   .skip-link {
-    grid-column: 1;
-    grid-row: 1;
+    grid-area: skip;
     min-height: 52px;
     padding-inline: 8px;
   }
   .onboarding-next {
-    grid-column: 2;
-    grid-row: 1;
+    grid-area: next;
     min-height: 52px;
     width: 100%;
   }
-  .footer-actions .onboarding-next:only-child {
-    grid-column: 1 / -1;
+  /* Step 4 has no Skip, so Next takes its room */
+  .footer-bar:not(:has(.skip-link)) .onboarding-next {
+    grid-column: 2 / -1;
+  }
+  .footer-bar:not(:has(.onboarding-back)) .skip-link {
+    grid-column: 1 / 3;
   }
 }
 

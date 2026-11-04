@@ -117,7 +117,10 @@ test('navbar logo and final onboarding step fit on mobile and desktop', async ({
   await openIdentityStep(page)
   for (const width of [375, 1280]) {
     await page.setViewportSize({ width, height: 900 })
-    await expect(page.getByRole('img', { name: 'WAD2Do', exact: true })).toBeVisible()
+    // Phones use the bottom nav, which has no logo
+    await expect(page.getByRole('img', { name: 'WAD2Do', exact: true })).toBeVisible({
+      visible: width >= 768,
+    })
     await expect(page.getByRole('radio', { name: 'Goldfish' })).toBeAttached()
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),

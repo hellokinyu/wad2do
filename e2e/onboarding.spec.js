@@ -7,14 +7,16 @@ import {
   pickMapStation,
 } from './helpers/preferences'
 
-test('map selection saves both fields and reloads without redundant station inputs', async ({
+test('map selection saves both fields and reloads with the station still picked', async ({
   page,
 }) => {
   const state = await mockPreferences(page)
   await openLocationStep(page)
   await expect(page.getByTestId('onboarding-next')).toBeDisabled()
-  await expect(page.getByTestId('mrt-search')).toHaveCount(0)
-  await expect(page.getByTestId('mrt-select')).toHaveCount(0)
+  await expect(page.getByTestId('mrt-search')).toBeVisible()
+  await expect(page.getByTestId('onboarding-footer-hint')).toHaveText(
+    'Pick a station or an area to continue.',
+  )
   await pickMapStation(page, 'tampines')
   await expect(page.getByTestId('mrt-confirmation')).toContainText('Tampines MRT · EW2 / DT32')
   await expect(page.getByTestId('home-area')).toHaveValue('Tampines')
@@ -43,16 +45,21 @@ test('map selection saves both fields and reloads without redundant station inpu
   await expect(page.getByTestId('profile-save-prefs')).toBeDisabled()
 })
 
-test('Skip Location clears both saved fields and shows Not set in the summary', async ({
-  page,
-}) => {
+test('Skip moves on without throwing away what was already picked', async ({ page }) => {
   const state = await mockPreferences(page, { home_station_id: 'tampines', home_area: 'Tampines' })
-  await openLocationStep(page)
+  await page.goto('/onboarding')
+  await page.getByTestId('onboarding-skip').click()
+  await page.getByTestId('onboarding-skip').click()
   await page.getByTestId('onboarding-skip').click()
   await page.getByTestId('onboarding-next').click()
-  await page.getByTestId('onboarding-next').click()
-  await expect(page.getByTestId('summary-area')).toHaveText('Not set')
-  expect(state.saves[0].body).toMatchObject({ home_station_id: null, home_area: null })
+  await expect(page.getByTestId('summary-area')).toHaveText('Tampines MRT · EW2 / DT32')
+  await expect(page.getByTestId('summary-interests')).toContainText('Food')
+  expect(state.saves[0].body).toMatchObject({
+    home_station_id: 'tampines',
+    home_area: 'Tampines',
+    budget: '20-50',
+    interests: ['Food', 'Cafes', 'Outdoors'],
+  })
 })
 
 for (const stationId of [null, 'retired-station']) {
@@ -134,11 +141,17 @@ for (const [route, openPage] of [
     ]) {
       await page.keyboard.press(key)
       await expect(page.getByTestId('mrt-marker-' + station)).toBeFocused()
-      await expect(page.getByTestId('mrt-marker-jurong-east')).toHaveAttribute('aria-pressed', 'true')
+      await expect(page.getByTestId('mrt-marker-jurong-east')).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
     }
     expect(state.saves).toHaveLength(0)
     await page.keyboard.press('Enter')
-    await expect(page.getByTestId('mrt-marker-chinese-garden')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('mrt-marker-chinese-garden')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
     await expect(page.getByTestId('mrt-confirmation')).toContainText('Chinese Garden MRT')
   })
 }
@@ -150,7 +163,6 @@ test('failed onboarding save preserves the selected station for retry', async ({
   await pickMapStation(page, 'bishan')
   await finishOnboarding(page)
   await expect(page.getByTestId('onboarding-error')).toBeVisible()
-  await page.getByTestId('onboarding-back').click()
   await page.getByTestId('onboarding-back').click()
   await expect(page.getByTestId('mrt-marker-bishan')).toHaveAttribute('aria-pressed', 'true')
   state.failSave = false
@@ -193,14 +205,24 @@ for (const [width, zoom] of [375, 1280].flatMap((width) =>
     await mockPreferences(page)
     await openLocationStep(page)
     await expect(page.getByTestId('mrt-map-image')).toBeVisible()
-    await expect(page.getByTestId('mrt-zoom')).toHaveAttribute('data-zoom', '25')
-    const zoomButton = await page.getByTestId('mrt-zoom').boundingBox()
-    expect(zoomButton.width).toBeGreaterThanOrEqual(44)
-    expect(zoomButton.height).toBeGreaterThanOrEqual(44)
-    for (let current = 0.25; current < zoom; current += 0.25) {
-      await page.getByTestId('mrt-zoom').click()
+    // Starts at half size, where labels are readable and markers are 24px
+    await expect(page.getByTestId('mrt-zoom')).toHaveAttribute('data-zoom', '50')
+    await expect(page.getByTestId('mrt-zoom-level')).toHaveText('50%')
+    for (const control of ['mrt-zoom-in', 'mrt-zoom-out']) {
+      const box = await page.getByTestId(control).boundingBox()
+      expect(box.width).toBeGreaterThanOrEqual(44)
+      expect(box.height).toBeGreaterThanOrEqual(44)
     }
-    await expect(page.getByTestId('mrt-zoom')).toHaveAttribute('data-zoom', String(Math.round(zoom * 100)))
+    for (let current = 0.5; current !== zoom; current += zoom > current ? 0.25 : -0.25) {
+      await page.getByTestId(zoom > current ? 'mrt-zoom-in' : 'mrt-zoom-out').click()
+    }
+    await expect(page.getByTestId('mrt-zoom')).toHaveAttribute(
+      'data-zoom',
+      String(Math.round(zoom * 100)),
+    )
+    await expect(page.getByTestId('mrt-zoom-level')).toHaveText(Math.round(zoom * 100) + '%')
+    await expect(page.getByTestId('mrt-zoom-in')).toBeEnabled({ enabled: zoom < 1 })
+    await expect(page.getByTestId('mrt-zoom-out')).toBeEnabled({ enabled: zoom > 0.25 })
     await expect(page.getByTestId('mrt-marker-clarke-quay')).toBeEnabled()
     await pickMapStation(page, 'clarke-quay')
     await expect(page.getByTestId('mrt-marker-clarke-quay')).toHaveAttribute('aria-pressed', 'true')
@@ -243,19 +265,124 @@ for (const [width, zoom] of [375, 1280].flatMap((width) =>
       'aria-pressed',
       'true',
     )
+    // The picked station is named above the map
+    await expect(page.getByTestId('mrt-confirmation')).toContainText('Fort Canning MRT')
     await page.screenshot({
       path: test.info().outputPath(`mrt-${width}-${zoom * 100}.png`),
       fullPage: true,
     })
-    for (let current = zoom; current < 1; current += 0.25) {
-      await page.getByTestId('mrt-zoom').click()
-    }
-    await expect(page.getByTestId('mrt-zoom')).toHaveAttribute('data-zoom', '100')
-    await page.getByTestId('mrt-zoom').click()
-    await expect(page.getByTestId('mrt-zoom')).toHaveAttribute('data-zoom', '25')
-    await expect(page.getByTestId('mrt-marker-fort-canning')).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
   })
 }
+
+test('search finds a station by name, code or LRT stop and shows it on the map', async ({
+  page,
+}) => {
+  const state = await mockPreferences(page)
+  await openLocationStep(page)
+  const search = page.getByTestId('mrt-search')
+  await search.fill('EW2')
+  await expect(page.getByTestId('mrt-search-option').first()).toContainText('Tampines')
+  await search.press('Enter')
+  await expect(page.getByTestId('mrt-marker-tampines')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('mrt-confirmation')).toContainText('Tampines MRT · EW2 / DT32')
+  await expect(search).toHaveValue('')
+  // The map scrolled so the station sits inside the visible part of the map
+  const inside = await page.getByTestId('mrt-map-viewport').evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    const marker = element
+      .querySelector('[data-testid="mrt-marker-tampines"]')
+      .getBoundingClientRect()
+    return (
+      marker.left >= box.left &&
+      marker.right <= box.right &&
+      marker.top >= box.top &&
+      marker.bottom <= box.bottom
+    )
+  })
+  expect(inside).toBe(true)
+
+  // LRT stops can't be picked on the map, so search uses the MRT station their line joins
+  await search.fill('cheng lim')
+  await expect(page.getByTestId('mrt-search-option')).toHaveText([
+    /Cheng Lim LRT\s*Uses Sengkang MRT/,
+  ])
+  await page.getByTestId('mrt-search-option').click()
+  await expect(page.getByTestId('mrt-marker-sengkang')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('home-area')).toHaveValue('Sengkang')
+
+  await search.fill('Atlantis')
+  await expect(page.getByTestId('mrt-search-empty')).toContainText('No station called “Atlantis”')
+  expect(state.saves).toHaveLength(0)
+})
+
+test('a tap near a station picks the closest one, and picking never jumps the map', async ({
+  page,
+}) => {
+  await mockPreferences(page)
+  await openLocationStep(page)
+  const viewport = page.getByTestId('mrt-map-viewport')
+  const marker = page.getByTestId('mrt-marker-bishan')
+  await marker.scrollIntoViewIfNeeded()
+  const box = await marker.boundingBox()
+  const before = await viewport.evaluate((element) => [element.scrollLeft, element.scrollTop])
+  // 15px off-centre is outside the 24px marker but inside the 44px tap area
+  await page.mouse.click(box.x + box.width / 2 + 15, box.y + box.height / 2)
+  await expect(marker).toHaveAttribute('aria-pressed', 'true')
+  expect(await viewport.evaluate((element) => [element.scrollLeft, element.scrollTop])).toEqual(
+    before,
+  )
+})
+
+test('each step moves focus to its heading and the navbar is off until onboarding is done', async ({
+  page,
+}) => {
+  // A brand-new account, so onboarding is still owed
+  await mockPreferences(page, {}, { user_metadata: {} })
+  await page.goto('/onboarding')
+  await expect(page.locator('nav .navbar-nav')).toHaveAttribute('inert')
+  await page.getByTestId('onboarding-next').click()
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('budget')
+  await expect(page.getByRole('heading', { level: 1 })).toBeFocused()
+  await page.getByTestId('onboarding-back').click()
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('love')
+  await expect(page.getByRole('heading', { level: 1 })).toBeFocused()
+})
+
+test('the finish screen previews the first matched hangouts', async ({ page }) => {
+  await mockPreferences(page, { home_station_id: 'tampines', home_area: 'Tampines' })
+  await page.route('**/rest/v1/activities?*', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'a1',
+          name: 'Hawker trail',
+          category: 'Food',
+          area: 'Tampines',
+          price_per_person: 12,
+        },
+        {
+          id: 'a2',
+          name: 'Opera night',
+          category: 'Nightlife',
+          area: 'Orchard',
+          price_per_person: 80,
+        },
+        { id: 'a3', name: 'Park walk', category: 'Outdoors', area: 'Bedok', price_per_person: 0 },
+      ],
+    }),
+  )
+  await openLocationStep(page)
+  await finishOnboarding(page)
+  const matches = page.getByTestId('onboarding-matches')
+  await expect(matches.getByRole('link')).toHaveText(['Hawker trail', 'Park walk'])
+  await expect(matches).toContainText('Tampines · S$12')
+})
+
+test('a ?navTheme preview survives onboarding taking over the page', async ({ page }) => {
+  await mockPreferences(page, {}, { user_metadata: {} })
+  await page.goto('/onboarding?navTheme=light')
+  await expect(page.getByTestId('onboarding-next')).toBeVisible()
+  await expect(page).toHaveURL(/\/onboarding\?navTheme=light$/)
+  await page.goto('/activities?navTheme=dark')
+  await expect(page).toHaveURL(/\/onboarding\?navTheme=dark$/)
+})

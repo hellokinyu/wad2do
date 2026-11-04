@@ -45,8 +45,8 @@ export async function openLocationStep(page) {
   await page.getByTestId('onboarding-next').click()
 }
 
+// From the Location step: Next to the profile step, then Finish
 export async function finishOnboarding(page) {
-  await page.getByTestId('onboarding-next').click()
   await page.getByTestId('onboarding-next').click()
   await page.getByTestId('onboarding-next').click()
 }

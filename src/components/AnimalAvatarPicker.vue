@@ -63,7 +63,7 @@ const selection = defineModel({ type: String, default: '' })
   gap: 0.65rem;
   padding: 1.15rem 0.35rem 0.8rem;
   border: 2px solid var(--line);
-  border-radius: 1.25rem;
+  border-radius: var(--radius-lg);
   background: var(--surface);
   color: var(--ink);
   transition:
