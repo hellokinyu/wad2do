@@ -1490,41 +1490,51 @@ onUnmounted(() => {
 .navbar:has(> .nav-theme[data-nav-theme='newyear']) {
   --bs-navbar-toggler-border-color: rgba(255, 255, 255, 0.35);
   --bs-navbar-toggler-icon-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.9%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+  /* The coloured band already ends sharply against the dark page, so a coloured line under it
+     only reads as a seam. Light and Dark keep their hairline: there the bar matches the page. */
+  border-bottom-color: transparent !important;
 }
 
-/* ---------- Halloween: deep purple + pumpkin orange ---------- */
+/* ---------- Halloween: deep purple + pumpkin orange ----------
+   The purple darkens toward the page's own aubergine-black, so the bar fades into the page
+   like dusk instead of sitting on it as a slab. The logo and the active link share the same
+   pumpkin orange, so the bar reads as one set; dark purple text on it is 5.9:1. */
 .nav-theme[data-nav-theme='halloween'] {
-  background: linear-gradient(180deg, #2b1b3d 0%, #3a2452 100%);
+  background: linear-gradient(180deg, #33204a 0%, #1d1529 100%);
 }
 .navbar:has(> .nav-theme[data-nav-theme='halloween']) {
   --nt-logo-color: #ff7518;
   --bs-border-color: #ff7518;
   --bs-navbar-color: #f3e9ff;
-  --bs-navbar-hover-color: #ff7518;
+  --bs-navbar-hover-color: #ff9a52;
   --bs-navbar-active-color: #2b1b3d;
 }
 .navbar:has(> .nav-theme[data-nav-theme='halloween']) .nav-link.active {
   background: #ff7518;
 }
 
-/* ---------- Christmas: forest green + Christmas red ---------- */
+/* ---------- Christmas: forest green, tinsel gold + candy-cane red ----------
+   Red on this green is only 1.88:1 and hard to tell apart for colour-blind users, so the
+   logo is gold and the active link is a white pill with red text instead. */
 .nav-theme[data-nav-theme='christmas'] {
-  background: linear-gradient(180deg, #1b4332 0%, #24573f 100%);
+  /* Fades into the snowy evergreen sky behind the page (styles.css, festive scenery) */
+  background: linear-gradient(180deg, #24573f 0%, #10201a 100%);
 }
 .navbar:has(> .nav-theme[data-nav-theme='christmas']) {
-  --nt-logo-color: #c8102e;
+  --nt-logo-color: #ffbe45;
   --bs-border-color: #c8102e;
   --bs-navbar-color: #ffffff;
   --bs-navbar-hover-color: #ffd6dc;
-  --bs-navbar-active-color: #ffffff;
+  --bs-navbar-active-color: #c8102e;
 }
 .navbar:has(> .nav-theme[data-nav-theme='christmas']) .nav-link.active {
-  background: #c8102e;
+  background: #ffffff;
 }
 
 /* ---------- National Day: Singapore red + white ---------- */
 .nav-theme[data-nav-theme='nationalday'] {
-  background: linear-gradient(180deg, #a50e1a 0%, #c8102e 100%);
+  /* Singapore red that deepens into the night sky the fireworks sit in */
+  background: linear-gradient(180deg, #c8102e 0%, #6e0a16 100%);
 }
 .navbar:has(> .nav-theme[data-nav-theme='nationalday']) {
   --nt-logo-color: #ffffff;
@@ -1539,7 +1549,8 @@ onUnmounted(() => {
 
 /* ---------- New Year: midnight navy + champagne gold ---------- */
 .nav-theme[data-nav-theme='newyear'] {
-  background: linear-gradient(180deg, #0b1533 0%, #1b2a5a 100%);
+  /* Fades into the midnight sky behind the confetti */
+  background: linear-gradient(180deg, #1b2a5a 0%, #0e1530 100%);
 }
 .navbar:has(> .nav-theme[data-nav-theme='newyear']) {
   --nt-logo-color: #f5c542;

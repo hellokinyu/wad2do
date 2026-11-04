@@ -11,11 +11,32 @@ The colours live in one place: [src/assets/styles.css](src/assets/styles.css). E
 
 ## Light and dark
 
-Dark mode is on when `<html>` has `data-bs-theme="dark"`. [src/lib/colorMode.js](src/lib/colorMode.js) sets it:
+Dark mode is on when `<html>` has `data-bs-theme="dark"`. [src/lib/colorMode.js](src/lib/colorMode.js) sets it from the navbar theme picker, which is saved for the rest of the browser tab:
 
-- By default it follows the phone or computer's own light/dark setting.
-- Picking **Light** or **Dark** in the navbar theme picker overrides that for the rest of the browser tab.
-- **Auto**, **New Year**, **National Day**, **Halloween** and **Christmas** only change the navbar's decoration and follow the system setting for everything else.
+- **Light** and **Dark** are Brunch Club and Supper Club.
+- **New Year**, **National Day**, **Halloween** and **Christmas** are festive themes. **Auto** (the default) picks whichever festive theme's day is nearest today.
+
+### Festive themes: a scene behind the app, the same app on top
+
+A festive theme is Supper Club with a slight tint of the holiday's colour in the cards and lines, and a scene painted behind everything. `colorMode.js` also sets `data-app-theme` on `<html>`, and `styles.css` swaps only these names: `--bg`, `--surface`, `--surface-2`, `--surface-3`, `--line`, `--line-strong`, `--muted`, `--subtle` and `--on-ink`.
+
+- **The scene** sits on two fixed layers behind the app (`body::before` and `body::after` in `styles.css`), drawn from the SVGs in `public/festive/`:
+
+  | Theme        | Sky                                          | What moves           |
+  | ------------ | -------------------------------------------- | -------------------- |
+  | Halloween    | Violet night, ember glow, a moon with bats   | Embers rising        |
+  | Christmas    | Evergreen night, gold starlight, pines below | Snow falling         |
+  | National Day | Crimson night with firework bursts           | Red and white sparks |
+  | New Year     | Midnight navy with gold and magenta glows    | Confetti falling     |
+
+  The movement stops for people who turn on reduced motion. Keep the sky's glows dark: page text such as the results line sits straight on the sky, and `--muted` must stay 4.5:1 over the brightest part.
+
+- **Cards, dialogs and inputs stay solid** on top of the scene, so their text is always on a known colour. Cards glow in the theme's colour on hover (`--festive-glow`).
+- **Bars that use the page colour** (the Activities search and category rows) are clear at rest and frosted once they stick under the navbar. Any new sticky bar needs the same treatment, or it cuts a dark strip out of the scene.
+- The holiday's own colours also belong in the navbar: its band, which fades into the sky, plus the logo, art and active link ([NavBarTheme.vue](src/components/NavBarTheme.vue)). On phones that's the bottom bar.
+- Never change what a colour means. `--accent` stays amber in every festive theme (New Year's champagne gold `#f5c542` is the one stand-in), and `--keen`, `--nope` and the danger colours stay the same.
+- Lines stay quiet, about 1.3:1 for `--line` and 2–2.3:1 for `--line-strong` against the cards, like Supper Club. Coloured outlines on every card made the old festive pages loud.
+- Every text colour is at least 4.5:1 on `--bg`, `--surface` and `--surface-2`. Check again if you change a festive value.
 
 ## Colours
 

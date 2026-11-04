@@ -133,142 +133,217 @@
   color-scheme: dark;
 }
 
-/* Festive themes: the dark palette above, tinted with the navbar's colours (NavBarTheme.vue).
+/* Festive themes decorate, they don't repaint. Each one is Supper Club (the dark palette above)
+   with a slight tint of the holiday's colour in the page, cards and lines. The holiday's own
+   colours stay in the navbar band, logo, art and active link (NavBarTheme.vue).
+   What colours mean never changes: amber is still the action colour (New Year's gold is close
+   enough to count), teal is keen, coral is not keen, and lines stay quiet.
    <html> gets data-app-theme from src/lib/colorMode.js. Every text colour here is at least
-   4.5:1 on --bg, --surface and --surface-2, so check that again if you change one.
-   Buttons and box borders use the navbar's second colour (its logo and active-link colour).
-   --accent-edge outlines filled buttons: Christmas red is as dark as the green page,
-   so its buttons get a light pink edge to stand out. */
+   4.5:1 on --bg, --surface and --surface-2, so check that again if you change one. */
 [data-app-theme='halloween'] {
-  --bg: #2b1b3d;
-  --surface: #3a2452;
-  --surface-2: #47305f;
-  --surface-3: #553a70;
-  --ink-hover: #e4d9f2;
-  --on-ink: #2b1b3d;
-  --muted: #c9b8dd;
-  --subtle: #b4a2ca;
-  --line: #9c4c35;
-  --line-strong: #ff7518;
-  --accent: #ff7518;
-  --accent-hover: #ff8a3d;
-  --accent-active: #e8650c;
-  --accent-edge: #ff7518;
-  --on-accent: #1a1206;
-  --accent-ink: #ff9a52;
-  --accent-subtle: #4a2f3a;
-  --keen-subtle: #1f3a45;
-  --nope-subtle: #4a2440;
-  --bs-body-bg-rgb: 43, 27, 61;
-  --bs-secondary-color-rgb: 201, 184, 221;
-  --bs-secondary-rgb: 201, 184, 221;
-  --bs-tertiary-bg-rgb: 71, 48, 95;
+  --bg: #15111c;
+  --surface: #1f1a29;
+  --surface-2: #2a2336;
+  --surface-3: #352c44;
+  --on-ink: #15111c;
+  --muted: #b5abc6;
+  --subtle: #a69bb8;
+  --line: #342c42;
+  --line-strong: #564b6b;
+  --bs-body-bg-rgb: 21, 17, 28;
+  --bs-secondary-color-rgb: 181, 171, 198;
+  --bs-secondary-rgb: 181, 171, 198;
+  --bs-tertiary-bg-rgb: 42, 35, 54;
 }
 
 [data-app-theme='christmas'] {
-  --bg: #1b4332;
-  --surface: #205038;
-  --surface-2: #285a42;
-  --surface-3: #31664d;
-  --ink-hover: #dcefe4;
-  --on-ink: #1b4332;
-  --muted: #c6e0d2;
-  --subtle: #b2d1c1;
-  --line: #e0465e;
-  --line-strong: #ff7a8c;
-  --accent: #c8102e;
-  --accent-hover: #d92a45;
-  --accent-active: #a90d26;
-  --accent-edge: #ffb3bc;
-  --on-accent: #ffffff;
-  --accent-ink: #ffb3bc;
-  --keen-ink: #4fe6c2;
-  --keen-subtle: #1d5546;
-  --nope-ink: #ffb3bc;
-  --nope-subtle: #4a2a2c;
-  --accent-subtle: #4a2a2c;
-  --bs-body-bg-rgb: 27, 67, 50;
-  --bs-secondary-color-rgb: 198, 224, 210;
-  --bs-secondary-rgb: 198, 224, 210;
-  --bs-tertiary-bg-rgb: 40, 90, 66;
+  --bg: #0f1a16;
+  --surface: #17241f;
+  --surface-2: #1f2e28;
+  --surface-3: #283a32;
+  --on-ink: #0f1a16;
+  --muted: #a9b8b0;
+  --subtle: #9aaba2;
+  --line: #2a3b34;
+  --line-strong: #4a5e55;
+  --bs-body-bg-rgb: 15, 26, 22;
+  --bs-secondary-color-rgb: 169, 184, 176;
+  --bs-secondary-rgb: 169, 184, 176;
+  --bs-tertiary-bg-rgb: 31, 46, 40;
 }
 
-/* Singapore red is bright, so text and teal are lighter than the other themes to stay readable */
 [data-app-theme='nationalday'] {
-  --bg: #8c0c18;
-  --surface: #a50e1a;
-  --surface-2: #b31b28;
-  --surface-3: #c12a36;
-  --ink: #ffffff;
-  --ink-hover: #ffe1e5;
-  --on-ink: #8c0c18;
-  --muted: #ffd9dd;
-  --subtle: #ffc9cf;
-  --line: #d2868c;
-  --line-strong: #ffffff;
-  --accent: #ffffff;
-  --accent-hover: #ffe1e5;
-  --accent-active: #ffc9cf;
-  --accent-edge: #ffffff;
-  --on-accent: #a50e1a;
-  --accent-ink: #ffffff;
-  --accent-subtle: #9a3a14;
-  --keen-ink: #7ff0d4;
-  --keen-subtle: #6a2a2a;
-  --nope-ink: #ffd0d6;
-  --nope-subtle: #6e0a14;
-  --bs-body-bg-rgb: 140, 12, 24;
-  --bs-body-color-rgb: 255, 255, 255;
-  --bs-emphasis-color-rgb: 255, 255, 255;
-  --bs-secondary-color-rgb: 255, 217, 221;
-  --bs-secondary-rgb: 255, 217, 221;
-  --bs-tertiary-bg-rgb: 179, 27, 40;
-  --bs-link-color-rgb: 255, 255, 255;
-  --bs-link-hover-color-rgb: 255, 225, 229;
+  --bg: #170f11;
+  --surface: #22171a;
+  --surface-2: #2d1f23;
+  --surface-3: #3a282d;
+  --on-ink: #170f11;
+  --muted: #c4adb2;
+  --subtle: #ad979c;
+  --line: #3a2a2e;
+  --line-strong: #5e4449;
+  --bs-body-bg-rgb: 23, 15, 17;
+  --bs-secondary-color-rgb: 196, 173, 178;
+  --bs-secondary-rgb: 196, 173, 178;
+  --bs-tertiary-bg-rgb: 45, 31, 35;
 }
 
+/* New Year's champagne gold stands in for amber */
 [data-app-theme='newyear'] {
-  --bg: #0b1533;
-  --surface: #1b2a5a;
-  --surface-2: #253667;
-  --surface-3: #304274;
-  --ink-hover: #dfe4f5;
-  --on-ink: #0b1533;
-  --muted: #b9c2e0;
-  --subtle: #a3aed3;
-  --line: #88784e;
-  --line-strong: #f5c542;
+  --bg: #0c1124;
+  --surface: #161c35;
+  --surface-2: #1f2747;
+  --surface-3: #283157;
+  --on-ink: #0c1124;
+  --muted: #adb5d6;
+  --subtle: #9aa3c6;
+  --line: #29325a;
+  --line-strong: #4a5482;
   --accent: #f5c542;
   --accent-hover: #f7d066;
   --accent-active: #e0b030;
-  --accent-edge: #f5c542;
   --on-accent: #0b1533;
   --accent-ink: #f5c542;
-  --accent-subtle: #3a3520;
-  --bs-body-bg-rgb: 11, 21, 51;
-  --bs-secondary-color-rgb: 185, 194, 224;
-  --bs-secondary-rgb: 185, 194, 224;
-  --bs-tertiary-bg-rgb: 37, 54, 103;
+  --bs-body-bg-rgb: 12, 17, 36;
+  --bs-secondary-color-rgb: 173, 181, 214;
+  --bs-secondary-rgb: 173, 181, 214;
+  --bs-tertiary-bg-rgb: 31, 39, 71;
 }
 
-[data-app-theme] .btn-dark {
-  --bs-btn-border-color: var(--accent-edge);
-  --bs-btn-hover-border-color: var(--accent-edge);
-  --bs-btn-active-border-color: var(--accent-edge);
-  --bs-btn-disabled-border-color: var(--accent-edge);
+/* ---------- Festive scenery ----------
+   Each festive theme paints a scene behind the whole app on two fixed layers: body::before holds
+   the sky and what stays put (the moon and bats, the pines, the fireworks), body::after holds what
+   drifts (embers rising, snow, sparks and confetti falling). The drawings are in public/festive/.
+   Cards, dialogs and inputs stay solid on top. The sky's glows are kept dark enough that --muted
+   text still reaches 4.5:1 wherever page text scrolls over them, so check that if you brighten one. */
+[data-app-theme='halloween'] {
+  --festive-scene:
+    url('/festive/halloween-bats.svg') right 4% top 84px / 240px auto no-repeat,
+    radial-gradient(
+      circle at 88% 16%,
+      rgb(255 236 200 / 15%) 0 36px,
+      rgb(255 190 120 / 7%) 37px 96px,
+      transparent 170px
+    ),
+    radial-gradient(70% 55% at 100% 100%, rgb(120 46 8 / 55%), transparent 70%),
+    radial-gradient(60% 50% at 0% 100%, rgb(88 30 140 / 50%), transparent 70%),
+    radial-gradient(45% 35% at 20% 0%, rgb(110 60 170 / 28%), transparent 70%),
+    linear-gradient(180deg, #1d1529 0%, #160f20 60%, #1a0f17 100%);
+  --festive-drift: url('/festive/halloween-embers.svg');
+  --festive-drift-step: -400px; /* embers rise */
+  --festive-drift-time: 70s;
+  --festive-glow: rgb(255 117 24 / 45%);
+  --festive-glow-edge: rgb(255 117 24 / 60%);
 }
 
-[data-app-theme] .btn-outline-dark {
-  --bs-btn-border-color: var(--line-strong);
-  --bs-btn-hover-bg: var(--accent-subtle);
-  --bs-btn-hover-border-color: var(--line-strong);
-  --bs-btn-active-color: var(--on-accent);
-  --bs-btn-active-bg: var(--accent);
-  --bs-btn-active-border-color: var(--accent-edge);
+[data-app-theme='christmas'] {
+  --festive-scene:
+    url('/festive/christmas-pines.svg') left bottom / 600px auto repeat-x,
+    radial-gradient(55% 40% at 50% -5%, rgb(255 190 69 / 14%), transparent 70%),
+    radial-gradient(55% 45% at 0% 100%, rgb(200 16 46 / 22%), transparent 70%),
+    radial-gradient(55% 45% at 100% 100%, rgb(36 120 80 / 30%), transparent 70%),
+    linear-gradient(180deg, #10201a 0%, #0b1611 100%);
+  --festive-drift: url('/festive/christmas-snow.svg');
+  --festive-drift-time: 45s;
+  --festive-glow: rgb(255 190 69 / 35%);
+  --festive-glow-edge: rgb(255 190 69 / 55%);
 }
 
-[data-app-theme] .form-check-input:checked {
-  border-color: var(--accent-edge);
+[data-app-theme='nationalday'] {
+  --festive-scene:
+    url('/festive/nationalday-fireworks.svg') center top 56px / min(1200px, 170%) auto no-repeat,
+    radial-gradient(50% 40% at 15% 10%, rgb(200 16 46 / 28%), transparent 70%),
+    radial-gradient(50% 40% at 85% 25%, rgb(200 16 46 / 22%), transparent 70%),
+    linear-gradient(180deg, #1d0b11 0%, #12070a 100%);
+  --festive-drift: url('/festive/nationalday-sparks.svg');
+  --festive-drift-time: 80s;
+  --festive-glow: rgb(255 90 110 / 40%);
+  --festive-glow-edge: rgb(255 138 153 / 60%);
+}
+
+[data-app-theme='newyear'] {
+  --festive-scene:
+    radial-gradient(45% 40% at 85% 5%, rgb(245 197 66 / 16%), transparent 70%),
+    radial-gradient(50% 45% at 5% 30%, rgb(180 40 140 / 20%), transparent 70%),
+    radial-gradient(60% 45% at 60% 100%, rgb(70 60 200 / 22%), transparent 70%),
+    linear-gradient(180deg, #0e1530 0%, #0a0e1f 100%);
+  --festive-drift: url('/festive/newyear-confetti.svg');
+  /* A slow, sparse sprinkle: a full-speed confetti storm behind a page is too much to read past */
+  --festive-drift-time: 120s;
+  --festive-glow: rgb(245 197 66 / 35%);
+  --festive-glow-edge: rgb(245 197 66 / 60%);
+}
+
+[data-app-theme] {
+  background-color: var(--bg);
+}
+
+[data-app-theme] body {
+  background: transparent;
+}
+
+[data-app-theme] body::before,
+[data-app-theme] body::after {
+  content: '';
+  position: fixed;
+  z-index: -1;
+  pointer-events: none;
+}
+
+[data-app-theme] body::before {
+  inset: 0;
+  background: var(--festive-scene);
+}
+
+/* Taller than the screen by one tile each way, so moving it one tile loops without a gap */
+[data-app-theme] body::after {
+  inset: -400px 0;
+  background: var(--festive-drift) 0 0 / 400px 400px repeat;
+  animation: festive-drift var(--festive-drift-time, 60s) linear infinite;
+  will-change: transform;
+}
+
+@keyframes festive-drift {
+  to {
+    transform: translateY(var(--festive-drift-step, 400px));
+  }
+}
+
+/* The Activities page's search and category bars are page-coloured, which would cut a dark strip
+   out of the scene. They're clear at rest, and frosted only once stuck under the navbar, where
+   they have to separate the controls from cards scrolling underneath. */
+[data-app-theme] :is(.search-row, .browse-row) {
+  background: transparent !important;
+}
+
+[data-app-theme] :is(.search-row.is-stuck, .search-row.is-stuck + .browse-row) {
+  background: color-mix(in srgb, var(--bg) 72%, transparent) !important;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+/* Cards light up in the theme's colour when you point at them */
+[data-app-theme] .surface-card {
+  transition:
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+@media (hover: hover) {
+  [data-app-theme] .surface-card:hover {
+    border-color: var(--festive-glow-edge);
+    box-shadow: 0 16px 40px -14px var(--festive-glow);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-app-theme] body::after {
+    animation: none;
+  }
+
+  [data-app-theme] .surface-card {
+    transition: none;
+  }
 }
 
 body {
