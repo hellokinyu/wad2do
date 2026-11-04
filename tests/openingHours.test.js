@@ -68,6 +68,17 @@ test('overnight hours work on both the opening date and the following closed day
   assert.deepEqual(getVisitHoursWarnings(hours, '2026-10-30', 19 * 60, 20 * 60), ['Opens at 20:00'])
 })
 
+test('a visit starting after midnight uses the next day from the plan date', () => {
+  const hours = { ...closedWeek(), Sat: { open: '00:00', close: '02:00' } }
+  assert.deepEqual(getVisitHoursWarnings(hours, '2026-10-30', 24 * 60 + 30, 25 * 60 + 30), [])
+  assert.deepEqual(getVisitHoursWarnings(hours, '2026-10-30', 25 * 60 + 30, 26 * 60 + 30), [
+    'Closes at 02:00',
+  ])
+  assert.deepEqual(getVisitHoursWarnings(closedWeek(), '2026-10-30', 24 * 60 + 30, 25 * 60), [
+    'Closed on this day',
+  ])
+})
+
 test('Sunday carryover wraps the week and separate opening periods retain their gap', () => {
   const hours = {
     ...closedWeek(),

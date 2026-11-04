@@ -8,6 +8,7 @@ import { requestWithTimeout } from '@/lib/requestWithTimeout'
 import { fetchForecasts, getSgToday } from '@/lib/weatherForecast'
 import { useAuth } from '@/composables/useAuth'
 import { getPrice } from '@/lib/activityDisplay'
+import { departureAt, findFastestRoute, legKey, toMinutes, toTime } from '@/lib/routeOrder'
 import ItineraryTravelOptions from '@/components/group/ItineraryTravelOptions.vue'
 import ItineraryLoadingCar from '@/components/group/ItineraryLoadingCar.vue'
 
@@ -214,17 +215,11 @@ function getStopWarnings(stop) {
   )
 }
 
-// '10:30' -> 630 (minutes since midnight)
-function toMinutes(time) {
-  const [hours, minutes] = time.split(':')
-  return Number(hours) * 60 + Number(minutes)
-}
-
-// 630 -> '10:30'
-function toTime(totalMinutes) {
-  const hours = Math.floor(totalMinutes / 60)
-  const minutes = totalMinutes % 60
-  return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0')
+// '24:30' -> '00:30'. Stops after midnight keep counting past 24:00 so their order and
+// lengths stay simple, but people should see, and time inputs need, a normal clock time.
+function clockTime(time) {
+  const minutes = toMinutes(time)
+  return Number.isNaN(minutes) ? time : toTime(minutes % 1440)
 }
 
 // ----- Edit mode -----
@@ -241,17 +236,17 @@ const endDraft = ref('-')
 watch(
   [dayStart, () => itinerary.value ? endTime.value : '', isEditing],
   ([start, end, editing], [previousStart, previousEnd]) => {
-    if (!editing || document.activeElement !== startField.value || startDraft.value === previousStart)
-      startDraft.value = start
-    if (!editing || document.activeElement !== endField.value || endDraft.value === previousEnd)
-      endDraft.value = end
+    if (!editing || document.activeElement !== startField.value || startDraft.value === clockTime(previousStart ?? ''))
+      startDraft.value = clockTime(start)
+    if (!editing || document.activeElement !== endField.value || endDraft.value === clockTime(previousEnd ?? ''))
+      endDraft.value = clockTime(end)
   },
   { immediate: true },
 )
 
 const hasUnsavedChanges = computed(() =>
   user.value?.id === loadedUserId && isEditing.value &&
-  (startDraft.value !== dayStart.value || endDraft.value !== endTime.value ||
+  (startDraft.value !== clockTime(dayStart.value) || endDraft.value !== clockTime(endTime.value) ||
     JSON.stringify(itinerary.value?.stops) !== JSON.stringify(savedCopy?.stops)),
 )
 
@@ -326,7 +321,7 @@ function stopsUntil(end) {
     if (finish <= endMinutes) {
       kept.push(stop)
     } else {
-      if (endMinutes - start >= (finish - start) / 2) kept.push({ ...stop, end }) // shortened
+      if (endMinutes - start >= (finish - start) / 2) kept.push({ ...stop, end: toTime(endMinutes) }) // shortened
       break // every later stop starts after this one, so it's past the end too
     }
   }
@@ -337,7 +332,7 @@ function stopsUntil(end) {
 function useStops(kept) {
   const removed = itinerary.value.stops.length - kept.length
   itinerary.value.stops = kept
-  endDraft.value = endTime.value
+  endDraft.value = clockTime(endTime.value)
   timeError.value = ''
   timeNote.value = removed
     ? `${removed} ${removed === 1 ? "stop doesn't" : "stops don't"} fit any more, so ${removed === 1 ? 'it was' : 'they were'} moved to "Also voted for".`
@@ -347,16 +342,17 @@ function useStops(kept) {
 // A new start time moves every stop. A later start can push the last stops past the
 // group's free time, so those are cut short or taken out, like an earlier end time.
 function changeDayStart(event) {
-  const start = event.target.value
-  if (start === dayStart.value) return
+  const typed = event.target.value
+  if (typed === clockTime(dayStart.value)) return
   const before ={ dayStart: dayStart.value, stops: itinerary.value.stops.map((s) => ({ ...s })) }
   const putBack = (message) => {
     dayStart.value = before.dayStart
     itinerary.value.stops = before.stops
-    event.target.value = startDraft.value = before.dayStart
+    event.target.value = startDraft.value = clockTime(before.dayStart)
     timeError.value = message
   }
-  if (!start) return putBack('')
+  if (!typed) return putBack('')
+  const start = toTime(planMinutes(typed))
   if (!fitsFreeTime(start, start)) return putBack(outsideFreeTimeMessage())
   dayStart.value = start
   recalculateTimes()
@@ -373,20 +369,20 @@ function changeDayStart(event) {
 function changeDayEnd(event) {
   const stops = itinerary.value.stops
   const end = event.target.value
-  if (end === endTime.value) return
+  if (end === clockTime(endTime.value)) return
   const putBack = (message) => {
-    event.target.value = endDraft.value = endTime.value
+    event.target.value = endDraft.value = clockTime(endTime.value)
     timeError.value = message
   }
   if (!stops.length || !end) return putBack('')
   if (!fitsFreeTime(startTime.value, end)) return putBack(outsideFreeTimeMessage())
   if (planMinutes(end) >= planMinutes(stops.at(-1).end)) {
-    stops.at(-1).end = end
+    stops.at(-1).end = toTime(planMinutes(end))
     return useStops(stops)
   }
   const kept = stopsUntil(end)
   if (!kept.length) {
-    return putBack(`That's too early to fit the first stop, which starts at ${stops[0].start}.`)
+    return putBack(`That's too early to fit the first stop, which starts at ${clockTime(stops[0].start)}.`)
   }
   useStops(kept)
 }
@@ -647,20 +643,24 @@ async function loadVotes(signal) {
   votedActivities.value = allVotedActivities.value.filter((a) => a.votes > 0)
 }
 
-// Fill the chosen time with the most-voted activities that fit the time, opening hours and budget
+// Fill the chosen time with the most-voted activities that fit the time, opening hours and budget,
+// then put those stops in the order with the least travel
 async function buildPlan() {
   if (!group.value?.chosen_start) {
     itinerary.value = null // no time picked yet -> empty state
     return
   }
   const start = toSgKey(group.value.chosen_start) // '2026-10-24T10:00'
-  const end = toSgKey(group.value.chosen_end)
-  const endMinutes = toMinutes(end.slice(11)) // '16:00' -> 960
+  const date = start.slice(0, 10)
+  const startMinutes = toMinutes(start.slice(11))
+  // Counted from the start of the plan's day, so a time past midnight is still later: 01:00 -> 1500
+  const endMinutes =
+    startMinutes + (new Date(group.value.chosen_end) - new Date(group.value.chosen_start)) / 60000
 
   const sorted = [...votedActivities.value].sort((a, b) => b.votes - a.votes)
-  const stops = []
-  const legs = {}
-  let current = toMinutes(start.slice(11))
+  let stops = []
+  let legs = {}
+  let current = startMinutes
   let spent = 0
 
   for (const activity of sorted) {
@@ -671,11 +671,7 @@ async function buildPlan() {
     let options
     if (previous) {
       options = await requestWithTimeout(() =>
-        fetchTravelOptions(
-          placeOf(previous),
-          placeOf(activity),
-          start.slice(0, 10) + 'T' + previous.end,
-        ),
+        fetchTravelOptions(placeOf(previous), placeOf(activity), departureAt(date, current)),
       )
       const available = options.filter((option) => option.available)
       if (!available.length) throw new Error('Travel times are unavailable right now.')
@@ -683,7 +679,7 @@ async function buildPlan() {
     }
     const finish = arrival + activity.duration_min
     if (finish > endMinutes) continue // runs past the chosen end time
-    if (getVisitHoursWarnings(activity.opening_hours, start.slice(0, 10), arrival, finish).length)
+    if (getVisitHoursWarnings(activity.opening_hours, date, arrival, finish).length)
       continue
     if (previous) legs[legKey(previous, activity)] = { options }
     stops.push({
@@ -704,8 +700,24 @@ async function buildPlan() {
     current = finish
   }
 
+  // The vote order above already works, so a failed search only misses a shorter route
+  try {
+    const fastest = await requestWithTimeout(() =>
+      findFastestRoute(stops, {
+        date,
+        start: startMinutes,
+        end: endMinutes,
+        getOptions: (from, to, departure) =>
+          fetchTravelOptions(placeOf(from), placeOf(to), departure),
+      }),
+    )
+    if (fastest) ({ stops, legs } = fastest)
+  } catch (error) {
+    console.log(error)
+  }
+
   travelByLeg.value = legs
-  itinerary.value = { date: start.slice(0, 10), total_cost: spent, stops }
+  itinerary.value = { date, total_cost: spent, stops }
   dayStart.value = stops[0]?.start || dayStart.value
 }
 
@@ -773,10 +785,6 @@ const travelByLeg = ref({}) // 'fromId>toId' -> { loading: true } or { options }
 const travelLoading = ref(false)
 let travelRequest = 0
 let travelPromise = Promise.resolve()
-
-function legKey(from, to) {
-  return from.activity_id + '>' + to.activity_id
-}
 
 // The travel after the stop at this position, or null for the last stop
 function legAfter(index) {
@@ -851,7 +859,7 @@ function loadTravel() {
         const key = legKey(from, to)
         try {
           const options = await requestWithTimeout(() =>
-            fetchTravelOptions(placeOf(from), placeOf(to), plan.date + 'T' + from.end),
+            fetchTravelOptions(placeOf(from), placeOf(to), departureAt(plan.date, toMinutes(from.end))),
           )
           if (!currentRequest()) return
           legs[key] = { options }
@@ -1107,7 +1115,7 @@ onUnmounted(() => {
                     {{ stop.name }}
                   </RouterLink>
                 </h3>
-                <p class="stop-range small text-secondary mb-1">{{ stop.start }}–{{ stop.end }}</p>
+                <p class="stop-range small text-secondary mb-1">{{ clockTime(stop.start) }}–{{ clockTime(stop.end) }}</p>
                 <p class="mb-1 small fw-semibold">{{ stop.cost === null ? 'Price unknown' : '$' + stop.cost + ' per person' }}</p>
                 <p class="text-secondary small mb-1">{{ stop.reason }}</p>
                 <span
