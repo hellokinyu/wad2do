@@ -18,6 +18,18 @@
       </div>
 
       <template v-else>
+        <button
+          v-if="step > 1 && step <= 4"
+          type="button"
+          class="onboarding-back"
+          :disabled="saving"
+          aria-label="Go back"
+          data-testid="onboarding-back"
+          @click="goBack"
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+        </button>
+
         <div
           v-if="step <= 4"
           class="step-bars mb-4"
@@ -166,17 +178,7 @@
           <button type="button" class="btn btn-outline-dark rounded-pill px-3 btn-sm" :disabled="saving || !canNext" @click="saveProfile">Try again</button>
         </div>
 
-        <div v-if="step <= 4" class="footer-bar d-flex justify-content-between align-items-center mt-5 pt-4">
-          <button
-            type="button"
-            class="onboarding-back btn btn-outline-dark rounded-pill px-4 py-2"
-            :class="{ invisible: step === 1 }"
-            :disabled="saving"
-            data-testid="onboarding-back"
-            @click="goBack"
-          >
-            ← Back
-          </button>
+        <div v-if="step <= 4" class="footer-bar d-flex justify-content-end align-items-center mt-5 pt-4">
           <div class="footer-actions d-flex align-items-center gap-3">
             <button
               v-if="step < 4"
@@ -623,6 +625,24 @@ function exploreActivities() {
   border-top: 1px solid var(--line);
 }
 
+.onboarding-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 12px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+}
+
+.onboarding-back:hover:not(:disabled) {
+  background: var(--surface-alt, rgba(0, 0, 0, 0.05));
+}
+
 .skip-link {
   color: var(--muted);
   text-decoration: none;
@@ -657,9 +677,6 @@ function exploreActivities() {
 @media (max-width: 767.98px) {
   .onboarding-page.has-footer {
     padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
-  }
-  .onboarding-page.has-footer.has-back {
-    padding-bottom: calc(144px + env(safe-area-inset-bottom, 0px)) !important;
   }
   .onboarding-choices {
     flex-direction: column;
@@ -738,15 +755,6 @@ function exploreActivities() {
   .footer-actions {
     display: contents !important;
   }
-  .onboarding-back {
-    grid-row: 1;
-    grid-column: 1 / -1;
-    justify-self: start;
-    min-height: 44px;
-  }
-  .onboarding-back.invisible {
-    display: none;
-  }
   .skip-link {
     grid-column: 1;
     grid-row: 1;
@@ -758,10 +766,6 @@ function exploreActivities() {
     grid-row: 1;
     min-height: 52px;
     width: 100%;
-  }
-  .has-back .skip-link,
-  .has-back .onboarding-next {
-    grid-row: 2;
   }
   .footer-actions .onboarding-next:only-child {
     grid-column: 1 / -1;
