@@ -1,7 +1,7 @@
 <template>
   <div
     class="onboarding-page container py-4 py-md-5"
-    :class="{ 'has-footer': step <= 5 && !loading && !loadError, 'has-back': step > 1 && step <= 5 }"
+    :class="{ 'has-footer': step <= 4 && !loading && !loadError, 'has-back': step > 1 && step <= 4 }"
     data-testid="onboarding-page"
   >
     <!-- Owner: Charmaine -->
@@ -19,7 +19,7 @@
 
       <template v-else>
         <div
-          v-if="step <= 5"
+          v-if="step <= 4"
           class="step-bars mb-4"
           role="progressbar"
           aria-label="Onboarding progress"
@@ -28,11 +28,11 @@
           aria-valuemax="100"
           data-testid="onboarding-progress"
         >
-          <span v-for="n in 5" :key="n" class="step-bar" :class="{ filled: n <= step }"></span>
+          <span v-for="n in 4" :key="n" class="step-bar" :class="{ filled: n <= step }"></span>
         </div>
 
-        <p v-if="step <= 5" class="eyebrow mb-3">
-          <span data-testid="onboarding-step-label">Step {{ step }} of 5</span>
+        <p v-if="step <= 4" class="eyebrow mb-3">
+          <span data-testid="onboarding-step-label">Step {{ step }} of 4</span>
           <span class="mx-2">·</span>
           <span>{{ stepNames[step - 1] }}</span>
         </p>
@@ -97,26 +97,7 @@
             </MrtStationPicker>
           </section>
 
-          <section v-else-if="step === 4" key="company" data-testid="onboarding-step-company">
-            <h1 class="display-5 fw-bold title mb-3">Who do you usually <span class="hl">hang out</span> with?</h1>
-            <p class="lead-text mb-4">Optional. Pick any that apply.</p>
-            <div class="onboarding-choices d-flex flex-wrap gap-2">
-              <template v-for="item in companyOptions" :key="item">
-                <input
-                  type="checkbox"
-                  class="btn-check"
-                  :id="'company-' + slug(item)"
-                  :value="item"
-                  v-model="company"
-                  :data-testid="'company-' + slug(item)"
-                />
-                <label class="chip chip-lg" :for="'company-' + slug(item)">{{ item }}<span class="mobile-choice-mark" aria-hidden="true"></span></label>
-              </template>
-            </div>
-
-          </section>
-
-          <section v-else-if="step === 5" key="identity" data-testid="onboarding-step-identity">
+          <section v-else-if="step === 4" key="identity" data-testid="onboarding-step-identity">
             <h1 class="display-5 fw-bold title mb-3">Make it <span class="hl">yours.</span></h1>
             <p class="lead-text mb-4">One last thing: add your name and pick a little face for your profile. Both are required.</p>
             <div class="mb-4">
@@ -139,7 +120,7 @@
             <AnimalAvatarPicker v-model="avatarAnimal" :disabled="saving" />
           </section>
 
-          <section v-else-if="step === 6" key="done" data-testid="onboarding-step-done">
+          <section v-else-if="step === 5" key="done" data-testid="onboarding-step-done">
             <OnboardingCelebration :animal="avatarAnimal" />
             <p class="eyebrow mb-3">All done</p>
             <h1 class="display-5 fw-bold title mb-3">You're all <span class="hl">set.</span></h1>
@@ -168,10 +149,6 @@
                 <p class="eyebrow mb-1">Starting location</p>
                 <p class="fw-semibold mb-0" data-testid="summary-area">{{ selectedStation ? selectedStation.name + ' MRT · ' + selectedStation.codes.join(' / ') : homeArea || 'Not set' }}</p>
               </div>
-              <div class="summary-row">
-                <p class="eyebrow mb-1">Hangs out with</p>
-                <p class="fw-semibold mb-0" data-testid="summary-company">{{ listOrNotSet(company) }}</p>
-              </div>
             </div>
 
             <div class="d-flex flex-wrap align-items-center gap-3">
@@ -189,7 +166,7 @@
           <button type="button" class="btn btn-outline-dark rounded-pill px-3 btn-sm" :disabled="saving || !canNext" @click="saveProfile">Try again</button>
         </div>
 
-        <div v-if="step <= 5" class="footer-bar d-flex justify-content-between align-items-center mt-5 pt-4">
+        <div v-if="step <= 4" class="footer-bar d-flex justify-content-between align-items-center mt-5 pt-4">
           <button
             type="button"
             class="onboarding-back btn btn-outline-dark rounded-pill px-4 py-2"
@@ -202,7 +179,7 @@
           </button>
           <div class="footer-actions d-flex align-items-center gap-3">
             <button
-              v-if="step < 5"
+              v-if="step < 4"
               type="button"
               class="btn btn-link skip-link"
               :disabled="saving"
@@ -219,7 +196,7 @@
               @click="goNext"
             >
               <span v-if="saving" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-              {{ step === 5 ? 'Finish' : 'Next' }} →
+              {{ step === 4 ? 'Finish' : 'Next' }} →
             </button>
           </div>
         </div>
@@ -242,7 +219,7 @@ import { findStation } from '@/data/mrtStations'
 
 const router = useRouter()
 
-const stepNames = ['Interests', 'Budget', 'Location', 'Company', 'Your profile']
+const stepNames = ['Interests', 'Budget', 'Location', 'Your profile']
 
 const interestOptions = [
   'Food',
@@ -262,8 +239,6 @@ const budgetOptions = [
   { id: '100-plus', label: '$100+', hint: 'Fine dining, special experiences' },
 ]
 
-const companyOptions = ['Friends', 'Family', 'Partner']
-
 const step = ref(1)
 watch(step, () => {
   if (window.matchMedia('(max-width: 767.98px)').matches) {
@@ -275,7 +250,6 @@ const budget = ref('')
 const homeArea = ref('')
 const homeStationId = ref(null)
 const selectedStation = computed(() => findStation(homeStationId.value))
-const company = ref([])
 const displayName = ref('')
 const avatarAnimal = ref('')
 
@@ -284,7 +258,7 @@ const loadError = ref('')
 const saving = ref(false)
 const errorMessage = ref('')
 
-const progressPercent = computed(() => Math.round((step.value / 5) * 100))
+const progressPercent = computed(() => Math.round((step.value / 4) * 100))
 
 const interestHint = computed(() => {
   const count = interests.value.length
@@ -297,7 +271,7 @@ const canNext = computed(() => {
   if (step.value === 1) return interests.value.length >= 3
   if (step.value === 2) return budget.value !== ''
   if (step.value === 3) return !!selectedStation.value || homeAreas.includes(homeArea.value)
-  if (step.value === 5) {
+  if (step.value === 4) {
     return displayName.value.trim().length > 0 && displayName.value.trim().length <= 40 && !!findProfileAnimal(avatarAnimal.value)
   }
   return true
@@ -308,14 +282,6 @@ const budgetLabel = computed(() => {
   return found ? found.label : 'Not set'
 })
 
-function slug(text) {
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-}
-
-function listOrNotSet(items) {
-  return items.length > 0 ? items.join(', ') : 'Not set'
-}
-
 async function loadProfile() {
   loading.value = true
   loadError.value = ''
@@ -324,7 +290,7 @@ async function loadProfile() {
     if (userError || !userData.user) throw userError || new Error('Not logged in')
     const { data, error } = await supabase
       .from('profiles')
-      .select('display_name, interests, budget, home_area, home_station_id, company')
+      .select('display_name, interests, budget, home_area, home_station_id')
       .eq('id', userData.user.id)
       .single()
 
@@ -333,7 +299,6 @@ async function loadProfile() {
     budget.value = data.budget || ''
     homeArea.value = data.home_area || ''
     homeStationId.value = data.home_station_id || null
-    company.value = data.company || []
     displayName.value = data.display_name || ''
     avatarAnimal.value = findProfileAnimal(userData.user.user_metadata?.avatar_animal)?.id || ''
   } catch (err) {
@@ -350,7 +315,7 @@ function onEnterKey(event) {
   if (event.key !== 'Enter' || loading.value || loadError.value) return
   const tag = event.target.tagName
   if (['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) return
-  if (step.value <= 5 && canNext.value && !saving.value) goNext()
+  if (step.value <= 4 && canNext.value && !saving.value) goNext()
 }
 
 onMounted(() => {
@@ -368,9 +333,9 @@ function goBack() {
 }
 
 function goNext() {
-  if (!canNext.value || saving.value || step.value > 5) return
+  if (!canNext.value || saving.value || step.value > 4) return
   errorMessage.value = ''
-  if (step.value < 5) {
+  if (step.value < 4) {
     step.value++
   } else {
     saveProfile()
@@ -378,13 +343,16 @@ function goNext() {
 }
 
 function skipStep() {
-  if (step.value >= 5 || saving.value) return
+  if (step.value >= 4 || saving.value) return
   if (step.value === 1) interests.value = []
   if (step.value === 2) budget.value = ''
   if (step.value === 3) pickStation(null)
-  if (step.value === 4) company.value = []
 
   step.value++
+}
+
+function slug(text) {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-')
 }
 
 function pickArea(area) {
@@ -399,7 +367,7 @@ function pickStation(id) {
 }
 
 async function saveProfile() {
-  if (saving.value || step.value !== 5) return
+  if (saving.value || step.value !== 4) return
   if (!canNext.value) {
     errorMessage.value = 'Please enter your name and choose an animal before finishing.'
     return
@@ -421,7 +389,6 @@ async function saveProfile() {
         budget: budget.value || null,
         home_area: homeArea.value || null,
         home_station_id: homeStationId.value,
-        company: company.value,
       })
       .eq('id', userData.user.id)
       .select('id')
@@ -439,7 +406,7 @@ async function saveProfile() {
     })
     if (identityError) throw identityError
 
-    step.value = 6
+    step.value = 5
   } catch (err) {
     console.error('Onboarding save failed:', err)
     errorMessage.value = "We couldn't save your answers. Please check you're logged in and try again."
