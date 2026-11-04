@@ -60,8 +60,8 @@
         <p class="text-secondary mb-1">
           {{
             mode === 'mine'
-              ? 'Mark every time you could join. Your answers save automatically.'
-              : 'Anyone in the group can confirm the outing time for everyone.'
+              ? "Tap or drag the times you're free. Saves automatically."
+              : 'Tap the first and last block of your time.'
           }}
         </p>
         <p class="small text-secondary mb-0" data-testid="availability-response-count">
@@ -70,13 +70,11 @@
       </div>
       <div v-if="group.chosen_start" class="status-banner chosen" data-testid="chosen-slot">
         <span>
-          Confirmed group time:
+          📌 Confirmed:
           <button type="button" class="btn btn-link chosen-link p-0" @click="showChosenTime">
             {{ chosenLabel }}
           </button>
-          <span v-if="hasPlan" class="d-block small"
-            >Your itinerary is ready. Choose group time to view it or change the time.</span
-          >
+          <span v-if="hasPlan" class="d-block small">Itinerary ready.</span>
         </span>
       </div>
       <div
@@ -181,14 +179,9 @@
 
             <!-- THE GRID: days across the top, 30-minute slots down the side (CSS Grid, see <style>) -->
             <p id="availability-keyboard-help" class="small text-secondary">
-              <template v-if="mode === 'mine'"
-                >Tap or drag to mark every half-hour you could join.</template
-              >
-              <template v-else
-                >Tap the first and last half-hour blocks on the same day. Tap a block twice for 30
-                minutes.</template
-              >
-              Use arrow keys to move; Enter or Space selects a block.
+              <template v-if="mode === 'mine'">Tap or drag your free times.</template>
+              <template v-else>Tap the first and last block (same day).</template>
+              Arrow keys move, Enter selects.
             </p>
             <div class="grid-scroll" data-testid="availability-grid">
               <div
@@ -251,7 +244,7 @@
                 :style="{ backgroundColor: c }"
               ></span>
               <span>Everyone free 🎉</span>
-              <span>Number = people free · ⭐ = most people free so far</span>
+              <span>Number = people free · ⭐ = most free · 📌 = confirmed</span>
             </div>
             <p v-if="mode === 'heatmap'" class="mt-2 mb-0 small" data-testid="slot-info">
               <template v-if="inspect">
@@ -293,9 +286,7 @@
                 Starts {{ formatDay(pickStart.slice(0, 10)) }} at
                 {{ formatTime(pickStart.slice(11)) }}
               </h4>
-              <p class="small text-secondary mb-0">
-                Now select the last half-hour block. This time is not confirmed yet.
-              </p>
+              <p class="small text-secondary mb-0">Now tap the last block.</p>
             </template>
             <template v-else-if="actionRange">
               <h4 class="h6 fw-bold mb-1">{{ actionRange.label }}</h4>
@@ -303,15 +294,12 @@
                 {{ durationLabel(actionRange.start, actionRange.end) }} · {{ rangeAttendance }}
               </p>
               <p class="small text-secondary mb-0">
-                {{ pickStart ? 'Not confirmed yet.' : 'Saved group time.' }} Uses your votes and
-                {{ budgetLabel }} budget per person.
+                {{ pickStart ? 'Not confirmed yet' : '📌 Confirmed' }} · {{ budgetLabel }} each
               </p>
             </template>
             <template v-else>
               <h4 class="h6 fw-bold mb-1">Choose your outing time</h4>
-              <p class="small text-secondary mb-0">
-                Select a suggested time or the first and last blocks in the heatmap.
-              </p>
+              <p class="small text-secondary mb-0">Tap a start block, then an end block.</p>
             </template>
           </div>
           <p v-if="saving" role="status" class="small mb-0" data-testid="availability-save-status">
@@ -345,8 +333,7 @@
             class="small text-danger mb-0"
             data-testid="replace-plan-warning"
           >
-            Changing the group time removes the current itinerary. The replacement will be built
-            next.
+            Changing the time replaces your itinerary.
           </p>
           <div
             v-if="actionError"
@@ -654,9 +641,12 @@ function isBestSlot(day, t) {
   return bestSlot.value && freeCount(day, t) === bestSlot.value.count
 }
 
-// What to print inside a heatmap cell: 🎉 everyone, ⭐ best slot, otherwise the number of people free
+// What to print inside a heatmap cell: 📌 first block of the confirmed time, 🎉 everyone,
+// ⭐ best slot, otherwise the number of people free
 function slotLabel(day, t) {
   if (mode.value !== 'heatmap') return ''
+  // 📌 marks the first block of the confirmed group time
+  if (group.value.chosen_start && makeKey(day, t) === fromDb(group.value.chosen_start)) return '📌'
   const n = freeCount(day, t)
   if (n === 0) return ''
   if (isEveryoneFree(day, t)) return '🎉'
@@ -1134,13 +1124,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-
-/* Your current selection must stay visible, even on blocks that are already confirmed */
-.slot-picked,
-.slot-picked.slot-chosen {
-  outline: 3px solid var(--ink);
-  outline-offset: -2px;
-}
 .flow-controls {
   border: 0;
   padding: 0;
@@ -1466,9 +1449,17 @@ onMounted(async () => {
   min-height: 52px;
 }
 
-/* The time the group already confirmed: dashed purple outline */
+/* The time the group already confirmed: a solid gold frame around every block in the range
+   (the 📌 sits on its first block) */
 .slot-chosen {
-  outline: 2px dashed #6f42c1;
+  outline: 3px solid #ffc107;
+  outline-offset: -2px;
+}
+
+/* Your current pick must still show on top of the gold frame */
+.slot-picked,
+.slot-picked.slot-chosen {
+  outline: 3px solid var(--ink);
   outline-offset: -2px;
 }
 
