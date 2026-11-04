@@ -3,10 +3,10 @@ import { mockPreferences } from './helpers/preferences'
 
 async function openIdentityStep(page) {
   await page.goto('/onboarding')
-  for (let step = 1; step <= 4; step++) {
+  for (let step = 1; step <= 3; step++) {
     await page.getByTestId('onboarding-skip').click()
   }
-  await expect(page.getByTestId('onboarding-step-label')).toHaveText('Step 5 of 5')
+  await expect(page.getByTestId('onboarding-step-label')).toHaveText('Step 4 of 4')
 }
 
 test('name and animal are required, persist, and appear beside Profile', async ({ page }) => {
