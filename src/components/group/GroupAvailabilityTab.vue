@@ -1134,6 +1134,13 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+
+/* Your current selection must stay visible, even on blocks that are already confirmed */
+.slot-picked,
+.slot-picked.slot-chosen {
+  outline: 3px solid var(--ink);
+  outline-offset: -2px;
+}
 .flow-controls {
   border: 0;
   padding: 0;
