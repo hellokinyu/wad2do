@@ -4,7 +4,8 @@
 --    stays as the main tag on its own, so everything that reads one tag keeps working.
 -- 2. Lets admins change an activity's tags from the admin Activities page, without giving the
 --    browser write access to the activities table.
--- 3. Renames the old tag spellings to the official ones.
+-- 3. Lets people pick several tags when they submit an activity; approval copies them across.
+-- 4. Renames the old tag spellings to the official ones.
 -- The official list must match src/data/activityCategories.js.
 begin;
 
@@ -105,9 +106,9 @@ begin
   if not found then
     raise exception 'Activity not found.' using errcode = 'P0002';
   end if;
-  -- A community activity keeps its submission's main tag in step, so editing the submission
-  -- later doesn't bring the old tag back.
-  update public.submissions as s set category = cleaned[1] where s.activity_id = p_activity_id;
+  -- A community activity keeps its submission in step, so editing the submission later
+  -- doesn't bring the old tags back.
+  update public.submissions as s set tags = cleaned where s.activity_id = p_activity_id;
 
   return query select a.id, a.category, a.tags from public.activities as a where a.id = p_activity_id;
 end;
@@ -115,6 +116,102 @@ $$;
 
 revoke all on function public.admin_set_activity_tags(uuid, text[]) from public, anon;
 grant execute on function public.admin_set_activity_tags(uuid, text[]) to authenticated;
+
+
+-- ---------- Several tags on submissions too ----------
+alter table public.submissions add column if not exists tags text[] not null default '{}';
+update public.submissions set tags = array[category]
+  where cardinality(tags) = 0 and category is not null;
+grant insert (tags), update (tags) on public.submissions to authenticated;
+
+drop trigger if exists wad2do_keep_main_tag on public.submissions;
+create trigger wad2do_keep_main_tag before insert or update of category, tags on public.submissions
+  for each row execute function public.wad2do_keep_main_tag();
+
+-- A submission's tags follow it onto its activity: when it's approved (activity_id is set)
+-- and whenever its tags change afterwards. Approval itself didn't need changing.
+create or replace function public.wad2do_publish_submission_tags()
+returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+begin
+  if new.activity_id is not null and cardinality(new.tags) > 0
+    and (old.activity_id is distinct from new.activity_id or old.tags is distinct from new.tags) then
+    update public.activities set tags = new.tags where id = new.activity_id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists wad2do_publish_submission_tags on public.submissions;
+create trigger wad2do_publish_submission_tags after update of activity_id, tags on public.submissions
+  for each row execute function public.wad2do_publish_submission_tags();
+
+-- Editing an approved submission can now change its tags (same function as
+-- admin_activity_management.sql, with tags added to the fields it accepts and saves)
+create or replace function public.edit_approved_submission(p_submission_id uuid, p_details jsonb)
+returns public.submissions
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  submission public.submissions;
+  edited public.submissions;
+  fields text[] := array['name', 'category', 'price_per_person', 'duration_min',
+    'indoor', 'address', 'postal_code', 'google_place_id', 'area', 'description',
+    'website', 'image_url', 'opening_hours', 'tags'];
+begin
+  if not public.wad2do_is_admin() then
+    raise exception 'Admin access required.' using errcode = '42501';
+  end if;
+  if jsonb_typeof(p_details) is distinct from 'object'
+    or p_details - fields <> '{}'::jsonb then
+    raise exception 'Only editable activity details may be changed.' using errcode = '22023';
+  end if;
+  select * into submission from public.submissions where id = p_submission_id for update;
+  if not found then
+    raise exception 'Submission not found.';
+  end if;
+  if submission.status is distinct from 'approved' or submission.activity_id is null then
+    raise exception 'This submission is no longer linked to an approved activity.';
+  end if;
+  select * into edited from jsonb_populate_record(submission, p_details);
+  if not public.wad2do_valid_opening_hours(edited.opening_hours::jsonb) then
+    raise exception 'Enter valid opening hours for every day.' using errcode = '22023';
+  end if;
+  if (edited.website is not null and edited.website !~* '^https?://[^[:space:]]+$')
+    or (edited.image_url is not null and edited.image_url !~* '^https?://[^[:space:]]+$') then
+    raise exception 'Website and photo URLs must start with http:// or https://.' using errcode = '22023';
+  end if;
+
+  -- Both updates roll back together if either row fails validation or is missing.
+  update public.submissions set
+    name = edited.name, category = edited.category, price_per_person = edited.price_per_person,
+    duration_min = edited.duration_min, indoor = edited.indoor, address = edited.address,
+    postal_code = edited.postal_code, google_place_id = edited.google_place_id,
+    area = edited.area, description = edited.description, website = edited.website,
+    image_url = edited.image_url, opening_hours = edited.opening_hours, tags = edited.tags
+    where id = p_submission_id returning * into edited;
+
+  update public.activities set
+    name = edited.name, category = edited.category, price_per_person = edited.price_per_person,
+    duration_min = edited.duration_min, indoor = edited.indoor, address = edited.address,
+    google_place_id = edited.google_place_id, area = edited.area, description = edited.description,
+    website = edited.website, image_url = edited.image_url, opening_hours = edited.opening_hours,
+    -- A corrected venue must not retain coordinates or a map from the previous location.
+    lat = case when address is distinct from edited.address or google_place_id is distinct from edited.google_place_id then null else lat end,
+    lng = case when address is distinct from edited.address or google_place_id is distinct from edited.google_place_id then null else lng end,
+    map_embed_url = case when address is distinct from edited.address or google_place_id is distinct from edited.google_place_id then null else map_embed_url end,
+    price_note = case when price_per_person is distinct from edited.price_per_person then null else price_note end
+    where id = submission.activity_id;
+  if not found then
+    raise exception 'Published activity not found. No changes were saved.';
+  end if;
+  return edited;
+end;
+$$;
+
 
 commit;
 
