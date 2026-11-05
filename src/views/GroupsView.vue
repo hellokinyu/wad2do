@@ -1076,7 +1076,12 @@ svg:not(.animal-avatar) {
   box-shadow: 0 0 0 3px var(--bs-focus-ring-color);
 }
 
+/* inline-flex centres the label: a <button> does that by itself when it's taller than its text,
+   but a link styled as a button (like "Go to group") doesn't */
 .panel .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 48px;
   font-weight: 600;
 }
