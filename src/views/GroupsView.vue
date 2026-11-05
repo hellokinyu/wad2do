@@ -1521,7 +1521,12 @@ a.ticket:hover .ticket-arrow {
   display: block;
   height: 12px;
   border-radius: var(--radius-pill);
-  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-2) 50%, var(--surface-2) 100%);
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 0%,
+    var(--surface-2) 50%,
+    var(--surface-2) 100%
+  );
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
 }
