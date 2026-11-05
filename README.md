@@ -1,5 +1,5 @@
 # WAD2Do
-  
+
 IS216 Web Application Development II, group G7.
 
 Planning a weekend outing with friends usually means juggling a group chat, a poll, a shared spreadsheet and a map app, and one person ends up deciding for everyone. WAD2Do puts the whole thing in one app: each person browses Singapore activities ranked for their interests, budget and home area, shares the ones they like to a group, and votes on them. Everyone marks when they're free, and the app builds an itinerary from the group's votes and free time, checking opening hours, budget, real travel time and the weather.
@@ -12,19 +12,25 @@ Test accounts (you can also sign up with any email address and confirm it):
 
 | Role | Email | Password |
 | --- | --- | --- |
-| Member | TODO | TODO |
-| Admin (can review community submissions) | TODO | TODO |
+| Member | See README.txt in the submission | |
+| Admin (can review community submissions and manage activities) | See README.txt in the submission | |
+
+<!-- The logins are only in the submitted README.txt, because this repo is public. -->
+
 
 Please use Google Chrome. The app is built phone-first and works from iPhone 6 width (375px) up to Bootstrap's XL breakpoint (1200px) and beyond.
 
 ### Try the main flow
 
-1. Log in with a test account (or sign up), then finish onboarding: interests, budget and home MRT station.
-2. **Activities**: browse activities ranked for you, open one for details, and share a few to a group.
+1. Log in with a test account (or sign up), then finish onboarding: interests, budget, home MRT station, then your name and an animal avatar.
+2. **Activities**: browse activities ranked for you, open one for details, save the ones you like (heart) and share a few to a group.
 3. **Groups**: create a group with a date range and budget, or join one with an invite link or 6-character code.
 4. In the group, **Activities** tab: vote Keen or Not keen on the shared activities.
 5. **Availability** tab: tap or drag the times you're free (tap a date to mark the whole day). Then go to step 2, pick a time on the heatmap and press **Confirm time & build itinerary**.
 6. **Itinerary** tab: see the planned stops with times, cost per person, travel between stops, why each stop was picked and wet-weather alternatives. You can edit times, reorder and swap stops.
+7. **Profile**: change your preferences, see your saved activities and submissions, or delete your account.
+
+Admins also get an admin area for reviewing community submissions and managing published activities.
 
 Votes, shares and availability update live for everyone in the group. To see this, log in with the two test accounts in two different browsers and open the same group.
 
@@ -32,7 +38,7 @@ Votes, shares and availability update live for everyone in the group. To see thi
 
 The submitted zip contains the full source code. The app's entry page is `index.html` in the project's top folder; Vite builds it together with the files in `src/`.
 
-You need [Node.js](https://nodejs.org) 24.15 or newer and pnpm.
+You need [Node.js](https://nodejs.org) 22.18 or newer (or 24.12 or newer) and pnpm.
 
 1. Install pnpm once, if you don't have it:
 
@@ -105,8 +111,10 @@ What each core user journey is tested by:
 
 | User journey | Test files in `e2e/` |
 | --- | --- |
+| Landing page and navigation | `vue.spec.js` |
 | Sign up, log in, log out, protected pages | `auth.spec.js` |
 | Onboarding and profile (interests, budget, MRT station, avatar) | `onboarding.spec.js`, `profile-identity.spec.js`, `profile-preferences.spec.js` |
+| Delete account | `profile-delete-account.spec.js` |
 | Browse, filter and open activities; save favourites | `activities.spec.js`, `activity-detail.spec.js`, `activity-favourites.spec.js` |
 | Share activities to a group | `activity-sharing.spec.js` |
 | Create, join and manage groups | `group-database.spec.js`, `group-actions-preview.spec.js`, `group-stage-colour.spec.js` |
@@ -136,7 +144,7 @@ External APIs, all called with asynchronous HTTP requests:
 
 - **Google Places API (New)**: activity search, details, photos and opening hours. Called from Supabase Edge Functions (`supabase/functions/google-place-*`) so the API key stays on the server. Only each place's ID is stored, as Google's terms require.
 - **OneMap API** (Singapore Land Authority): real travel times between stops. Called from the `onemap-route` Edge Function.
-- **data.gov.sg weather forecasts** (NEA): 24-hour and 4-day forecasts, used to suggest indoor alternatives when showers are expected (`src/lib/weatherForecast.js`).
+- **data.gov.sg weather forecasts** (NEA): 24-hour and 4-day forecasts, used to suggest indoor alternatives when showers are expected, or when the outing is too far ahead to have a forecast yet (`src/lib/weatherForecast.js`).
 
 Data sources: Google Places, the Singapore Tourism Board's Tourist Attractions dataset on data.gov.sg, our own curated activity data, and approved community submissions. Curated photos are in `public/images/`.
 
@@ -144,7 +152,7 @@ Open-source libraries we used (all free): Vue, Vue Router, Bootstrap, Supabase J
 
 ## Use of AI
 
-TODO (team): list the parts we relied on AI/LLM for, as the briefing asks. Be specific, for example: layouts and styling ideas, debugging, boilerplate, test data and mock responses, and any feature code.
+Used AI to generate initial structure of application, planning of the app features. Used it to generate the test scripts. Used for code review. Used to review application design, and ask for improvements.
 
 ## Other commands
 
@@ -200,8 +208,8 @@ How we work:
 
 The zip on eLearn (Assignments → Final Project Deliverables) needs three things:
 
-1. **The web app source**, with `index.html` in the top folder. Leave out `node_modules`, `dist`, `playwright-report` and `test-results`.
-2. **`README.txt`**: a copy of this file with every TODO filled in (live URL, test accounts, where graders get the Supabase values, use of AI).
+1. **The web app source**, with `index.html` in the top folder. Leave out `node_modules`, `dist`, `playwright-report`, `test-results`, `.git`, `.claude`, `.cursor`, `.vscode` and `.impeccable`.
+2. **`README.txt`**: a copy of this file with the remaining TODOs filled in (where graders get the Supabase values, use of AI), and the two test account emails and passwords put into the table. Don't commit `README.txt` or the passwords, because this repo is public.
 3. **Presentation slides** (.pptx or .pdf) with the YouTube link to the recorded presentation (max 12 minutes, at least 720p, unlisted or public) on the title slide.
 
 Before submitting, check the live site in Chrome from iPhone 6 width up to 1200px, logged out and with each test account.

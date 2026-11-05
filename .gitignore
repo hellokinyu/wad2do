@@ -45,3 +45,6 @@ playwright-report/
 .claude/
 .cursor/
 .impeccable/
+
+# The submitted README.txt holds the test account passwords; never commit it (the repo is public)
+/README.txt
