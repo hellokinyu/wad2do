@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUpdate, onUpdated, ref, watch } from 'vue'
 import TravelIcon from '@/components/group/TravelIcon.vue'
 
 const props = defineProps({
@@ -11,15 +11,57 @@ const emit = defineEmits(['choose'])
 
 const PUBLIC_MODES = ['TRANSIT', 'MRT', 'BUS']
 
+// While loading, the tabs and route line are already laid out (greyed out), so the row is
+// its final height before the times arrive and the cards below don't jump
+const loading = computed(() => !props.leg || props.leg.loading)
+
+// The last times this row showed. While it re-checks (say after another journey's mode
+// changes and every later stop moves), it keeps showing them dimmed, in the same layout,
+// so the rows don't all grow and shrink at once.
+const lastOptions = ref(null)
+watch(
+  () => props.leg,
+  (leg) => {
+    if (leg?.options) lastOptions.value = leg.options
+  },
+  { immediate: true },
+)
+const options = computed(() => props.leg?.options || (loading.value ? lastOptions.value : null) || [])
+const stale = computed(() => loading.value && options.value.length > 0)
+
+// If the height still changes (say walking turns out fastest, so the Best / MRT only /
+// Bus only row goes), ease to the new height instead of jumping
+const root = ref(null)
+let startHeight = 0
+onBeforeUpdate(() => {
+  if (!root.value) return
+  startHeight = root.value.getBoundingClientRect().height // mid-ease if still easing
+  root.value.getAnimations().forEach((animation) => animation.cancel())
+})
+onUpdated(() => {
+  const el = root.value
+  if (!el || !startHeight) return
+  const endHeight = el.getBoundingClientRect().height
+  if (Math.abs(endHeight - startHeight) < 1) return
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  el.animate(
+    [
+      { height: startHeight + 'px', overflow: 'hidden' },
+      { height: endHeight + 'px', overflow: 'hidden' },
+    ],
+    { duration: 400, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' },
+  )
+})
+
 // One mode's result, e.g. optionFor('WALK')
 function optionFor(mode) {
-  return props.leg?.options?.find((option) => option.mode === mode) || null
+  return options.value.find((option) => option.mode === mode) || null
 }
 
 // The mode to show: the group's choice, or else the fastest one with a route
 const selectedMode = computed(() => {
   if (props.mode) return props.mode
-  const available = (props.leg?.options || []).filter((option) => option.available)
+  const available = options.value.filter((option) => option.available)
   if (available.length === 0) return 'TRANSIT'
   return available.reduce((best, option) =>
     option.durationMinutes < best.durationMinutes ? option : best,
@@ -35,7 +77,12 @@ const tabs = computed(() => {
     { mode: publicMode, icon: 'TRAIN', label: 'Public transport', active: isPublic.value },
     { mode: 'WALK', icon: 'WALK', label: 'Walk', active: selectedMode.value === 'WALK' },
     { mode: 'CYCLE', icon: 'CYCLE', label: 'Cycle', active: selectedMode.value === 'CYCLE' },
-  ].map((tab) => ({ ...tab, option: optionFor(tab.mode) }))
+  ].map((tab) => ({
+    ...tab,
+    // Nothing looks chosen on a first check; a re-check keeps showing the current choice
+    active: tab.active && (!loading.value || stale.value),
+    option: optionFor(tab.mode),
+  }))
 })
 
 // 'Walk 6 min → DT line 3 stops → Bus 106' -> one icon and short text per step
@@ -65,11 +112,10 @@ function formatDistance(meters) {
 </script>
 
 <template>
-  <div class="d-flex" data-testid="itinerary-travel">
+  <div ref="root" class="d-flex" data-testid="itinerary-travel" :aria-busy="loading">
     <div class="travel-line" aria-hidden="true"></div>
-    <div class="py-2 small flex-grow-1">
-      <span v-if="!leg || leg.loading" class="text-muted">Checking travel times...</span>
-      <span v-else-if="leg.error" class="text-muted">
+    <div class="py-2 small flex-grow-1 travel-body" :class="{ stale }">
+      <span v-if="leg?.error" class="text-muted">
         Travel times unavailable: {{ leg.error }}
       </span>
       <template v-else>
@@ -80,7 +126,7 @@ function formatDistance(meters) {
             type="button"
             class="mode-tab"
             :class="{ active: tab.active }"
-            :disabled="!tab.option?.available"
+            :disabled="loading || !tab.option?.available"
             :aria-pressed="tab.active"
             :title="tab.label"
             :data-testid="'travel-tab-' + tab.icon.toLowerCase()"
@@ -88,7 +134,13 @@ function formatDistance(meters) {
           >
             <TravelIcon :kind="tab.icon" />
             <span class="visually-hidden">{{ tab.label }}</span>
-            {{ tab.option?.available ? formatMinutes(tab.option.durationMinutes) : '–' }}
+            {{
+              loading && !stale
+                ? '…'
+                : tab.option?.available
+                  ? formatMinutes(tab.option.durationMinutes)
+                  : '–'
+            }}
           </button>
         </div>
         <div v-if="isPublic && editable" class="btn-group btn-group-sm mb-2">
@@ -97,16 +149,19 @@ function formatDistance(meters) {
             :key="mode"
             type="button"
             class="btn btn-outline-dark"
-            :class="{ active: selectedMode === mode }"
-            :disabled="!optionFor(mode)?.available"
+            :class="{ active: selectedMode === mode && (!loading || stale) }"
+            :disabled="loading || !optionFor(mode)?.available"
             @click="emit('choose', mode)"
           >
             {{ mode === 'TRANSIT' ? 'Best' : mode === 'MRT' ? 'MRT only' : 'Bus only' }}
           </button>
         </div>
 
+        <!-- First check only: one line of text, like the route it stands in for (its icons
+             are shorter than a line). A re-check keeps showing the last route, dimmed. -->
+        <div v-if="loading && !stale" class="text-muted">Checking travel times...</div>
         <div
-          v-if="selected?.available"
+          v-else-if="selected?.available"
           class="d-flex flex-wrap align-items-center gap-1 text-body-secondary"
           data-testid="travel-route"
         >
@@ -128,6 +183,15 @@ function formatDistance(meters) {
 /* Sits beside the itinerary's timeline line, between one stop's card and the next */
 .travel-line {
   margin: 0 1rem 0 0.25rem;
+}
+
+/* Last times, shown while new ones are checked */
+.travel-body {
+  transition: opacity 0.2s ease;
+}
+
+.travel-body.stale {
+  opacity: 0.5;
 }
 
 /* Google Maps-style mode tabs */

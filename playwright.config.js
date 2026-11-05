@@ -39,8 +39,10 @@ export default defineConfig({
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
 
-    /* Only on CI systems run the tests headless */
-    headless: !!process.env.CI,
+    /* Always headless. Visible windows running side by side get throttled by the browser
+       when covered, so the page's looping animations never look "stable" and clicks time
+       out. Pass --headed to watch a test run. */
+    headless: true,
   },
 
   /* Configure projects for major browsers */

@@ -556,11 +556,129 @@ function forgetChangedModes(before) {
   })
 }
 
+// Editing the plan moves like "Update rankings" on the Activities tab (FLIP: measure where
+// each card is, make the change, then slide every card from its old spot to its new one).
+// The times and dots stay put, since they belong to the slot rather than the stop. A card
+// moving up lifts toward you and passes over; the one it swaps with sinks back underneath.
+const timelineRef = ref(null)
+const GLIDE_MS = 700
+const EASE_OUT_EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)'
+
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+// Where each stop card and travel row is on screen, by its data-flip key
+function getPlaces() {
+  const places = {}
+  for (const el of timelineRef.value?.querySelectorAll('[data-flip]') ?? []) {
+    places[el.dataset.flip] = el.getBoundingClientRect().top
+  }
+  return places
+}
+
+// A copy of a removed card, left where the card was so it can fade out. The stop itself is
+// gone straight away, so a quick Save can't keep it.
+function makeGhost(card) {
+  const box = card.getBoundingClientRect()
+  const list = timelineRef.value.getBoundingClientRect()
+  const ghost = card.cloneNode(true)
+  ghost.removeAttribute('data-flip')
+  // Only a picture: no duplicate ids, labels' targets or test ids from the copied card
+  for (const el of [ghost, ...ghost.querySelectorAll('[id], [for], [data-testid]')]) {
+    el.removeAttribute('id')
+    el.removeAttribute('for')
+    el.removeAttribute('data-testid')
+  }
+  ghost.setAttribute('aria-hidden', 'true')
+  ghost.inert = true
+  Object.assign(ghost.style, {
+    position: 'absolute',
+    top: box.top - list.top + 'px',
+    left: box.left - list.left + 'px',
+    width: box.width + 'px',
+    height: box.height + 'px',
+    margin: '0',
+    zIndex: 0,
+    pointerEvents: 'none',
+  })
+  return ghost
+}
+
+// Runs change() (which edits the stops), then animates the cards to their new places.
+// moves: data-flip key -> 1 for a card going up the plan, -1 for one going down.
+// leaving: the data-flip key of a card being removed, which fades out.
+async function animateStops(change, moves = {}, leaving = '') {
+  if (!timelineRef.value || prefersReducedMotion()) return change()
+  // Measured mid-glide if a card is still moving, so a quick second tap carries on smoothly
+  const before = getPlaces()
+  const leavingCard = leaving && timelineRef.value.querySelector(`[data-flip="${leaving}"]`)
+  const ghost = leavingCard && makeGhost(leavingCard)
+  change()
+  await nextTick()
+
+  if (ghost && timelineRef.value) {
+    timelineRef.value.append(ghost)
+    const fade = ghost.animate([{ opacity: 1 }, { opacity: 0, scale: '0.96' }], {
+      duration: 250,
+      easing: 'ease-in',
+      fill: 'forwards',
+    })
+    fade.onfinish = fade.oncancel = () => ghost.remove()
+  }
+
+  for (const el of timelineRef.value.querySelectorAll('[data-flip]')) {
+    el.getAnimations().forEach((animation) => animation.cancel())
+    const key = el.dataset.flip
+    if (before[key] === undefined) {
+      // A stop that was just added rises into place
+      el.animate(
+        [{ opacity: 0, transform: 'translateY(16px)', scale: '0.97' }, { opacity: 1 }],
+        { duration: 450, easing: EASE_OUT_EXPO },
+      )
+      continue
+    }
+    const dy = before[key] - el.getBoundingClientRect().top
+    if (dy === 0) continue
+    const move = moves[key] || 0
+    el.style.position = 'relative'
+    el.style.zIndex = move > 0 ? 3 : move < 0 ? 1 : 2
+    const glide = el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], {
+      duration: GLIDE_MS,
+      easing: EASE_OUT_EXPO,
+    })
+    glide.onfinish = glide.oncancel = () => {
+      el.style.position = ''
+      el.style.zIndex = ''
+    }
+
+    if (!move) continue
+    // `scale` is separate from `transform`, so this runs on top of the glide
+    const rest = { scale: '1', opacity: 1, boxShadow: getComputedStyle(el).boxShadow }
+    const away =
+      move > 0
+        ? { scale: '1.025', opacity: 1, boxShadow: '0 28px 56px rgb(0 0 0 / 35%)' }
+        : { scale: '0.975', opacity: 0.72, boxShadow: rest.boxShadow }
+    el.animate([rest, { ...away, offset: 0.3 }, rest], {
+      duration: GLIDE_MS,
+      easing: 'cubic-bezier(0.65, 0, 0.35, 1)',
+    })
+  }
+}
+
+// The card fades out while the stops below glide up to close the gap
 function removeStop(index) {
-  const before = [...itinerary.value.stops]
-  itinerary.value.stops.splice(index, 1) // remove 1 item at this position
-  forgetChangedModes(before)
-  recalculateTimes()
+  const leaving = 'stop-' + itinerary.value.stops[index].activity_id
+  animateStops(
+    () => {
+      const before = [...itinerary.value.stops]
+      itinerary.value.stops.splice(index, 1) // remove 1 item at this position
+      forgetChangedModes(before)
+      recalculateTimes()
+    },
+    {},
+    leaving,
+  )
 }
 
 // direction is -1 (up) or +1 (down)
@@ -568,17 +686,27 @@ function moveStop(index, direction) {
   const stops = itinerary.value.stops
   const other = index + direction
   if (other < 0 || other >= stops.length) return // already at the top or bottom
-  const before = [...stops]
-  const temp = stops[index]
-  stops[index] = stops[other]
-  stops[other] = temp
-  forgetChangedModes(before)
-  recalculateTimes()
+  const moves = {
+    ['stop-' + stops[index].activity_id]: -direction,
+    ['stop-' + stops[other].activity_id]: direction,
+  }
+  animateStops(() => {
+    const before = [...stops]
+    const temp = stops[index]
+    stops[index] = stops[other]
+    stops[other] = temp
+    forgetChangedModes(before)
+    recalculateTimes()
+  }, moves)
 }
 
 // Add a voted activity to the end of the plan, even if it goes over budget
 function addStop(activity) {
   if (activity.cost === null) return
+  animateStops(() => appendStop(activity))
+}
+
+function appendStop(activity) {
   const before = [...itinerary.value.stops]
   itinerary.value.stops.push({
     activity_id: activity.activity_id,
@@ -1163,8 +1291,15 @@ watch(() => user.value?.id, (id) => {
           </button>
         </template>
       </div>
-      <p v-if="isEditing && travelLoading" role="status" class="text-secondary small">
-        Checking travel times before saving…
+      <!-- Its line is kept while editing, so the plan doesn't drop down and jump back up
+           each time the travel times are re-checked -->
+      <p
+        v-if="isEditing && (travelLoading || !travelFailed)"
+        role="status"
+        class="text-secondary small travel-status"
+        :class="{ shown: travelLoading }"
+      >
+        <span v-if="travelLoading">Checking travel times before saving…</span>
       </p>
       <div v-else-if="travelFailed" role="alert" class="d-flex flex-wrap align-items-center gap-2 mb-3"
         data-testid="itinerary-travel-failed">
@@ -1178,7 +1313,7 @@ watch(() => user.value?.id, (id) => {
       <button v-if="saveConflict" type="button" class="btn btn-outline-dark rounded-pill mb-3"
         data-testid="itinerary-load-latest" @click="reloadLatestPlan">Load latest plan</button>
 
-      <ol class="timeline list-unstyled mb-0" data-testid="itinerary-timeline">
+      <ol ref="timelineRef" class="timeline list-unstyled mb-0" data-testid="itinerary-timeline">
         <template v-for="(stop, index) in displayStops" :key="stop.original.activity_id">
           <li class="timeline-row" data-testid="itinerary-stop">
             <div class="timeline-time">
@@ -1186,7 +1321,11 @@ watch(() => user.value?.id, (id) => {
               <span class="length">{{ formatHours(stop.start, stop.end) }}</span>
             </div>
             <div class="timeline-rail" aria-hidden="true"><span class="timeline-dot"></span></div>
-            <div class="stop-card surface-card" :class="{ rainy: stop.isRainyView }">
+            <div
+              class="stop-card surface-card"
+              :class="{ rainy: stop.isRainyView }"
+              :data-flip="'stop-' + stop.original.activity_id"
+            >
             <div class="stop-body">
               <!-- Opens the activity's details, like the Activities tab. Not while editing,
                    so leaving the page can't throw away unsaved changes. -->
@@ -1299,7 +1438,11 @@ watch(() => user.value?.id, (id) => {
             </div>
             </div>
           </li>
-          <li v-if="index < displayStops.length - 1" class="timeline-row travel-row">
+          <li
+            v-if="index < displayStops.length - 1"
+            class="timeline-row travel-row"
+            :data-flip="'travel-' + index"
+          >
             <div class="timeline-rail" aria-hidden="true"></div>
             <ItineraryTravelOptions
               :leg="legAfter(index)"
@@ -1512,12 +1655,13 @@ watch(() => user.value?.id, (id) => {
   background: var(--line);
 }
 
-/* Start the line at the first dot and stop it at the last one */
-.timeline-row:first-child .timeline-rail::before {
+/* Start the line at the first dot and stop it at the last one. "of-type" counts only the
+   rows, not the fading copy of a removed stop (a div) added at the end of the list. */
+.timeline-row:first-of-type .timeline-rail::before {
   top: 20px;
 }
 
-.timeline-row:last-child .timeline-rail::before {
+.timeline-row:last-of-type .timeline-rail::before {
   bottom: auto;
   height: 20px;
 }
@@ -1542,6 +1686,22 @@ watch(() => user.value?.id, (id) => {
 .stop-card {
   grid-column: 3;
   padding: 16px;
+}
+
+/* One line tall even when empty; the text fades in and out instead of the line appearing */
+.travel-status {
+  min-height: 1.5em;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.travel-status.shown {
+  opacity: 1;
+}
+
+/* Holds the fading copy of a removed stop (see makeGhost) */
+.timeline {
+  position: relative;
 }
 
 .stop-card.rainy {
