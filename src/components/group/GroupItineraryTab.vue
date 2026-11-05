@@ -104,7 +104,7 @@ function whyNotInPlan(activity) {
 // How many activities Plan skipped because their live hours couldn't be checked, for the
 // empty state. The lookup's cause isn't kept, so this can't say whether a limit was reached.
 const unavailableHoursCount = computed(
-  () => Object.values(skippedHours.value).filter((reason) => reason === 'Opening hours unavailable.').length,
+  () => Object.values(skippedHours.value).filter((reason) => reason === HOURS_UNAVAILABLE).length,
 )
 
 // ----- The group (real data from Supabase) -----
@@ -1220,8 +1220,8 @@ watch(() => user.value?.id, (id) => {
           <p class="fw-semibold mb-1">We couldn't check opening hours, so no activities were added.</p>
           <p class="small mb-2">
             Live opening hours weren't available for {{ unavailableHoursCount }} voted
-            {{ unavailableHoursCount === 1 ? 'activity' : 'activities' }}. This may be temporary (for example,
-            the hourly limit on Google lookups), so try again in about an hour: press Edit, then Re-plan.
+            {{ unavailableHoursCount === 1 ? 'activity' : 'activities' }}. Review the skipped activities below,
+            or choose Edit, then Re-plan to retry.
           </p>
         </template>
         <template v-else>

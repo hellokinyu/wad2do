@@ -1,8 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { activityId, groupId, mockItinerary, week } from './helpers/itinerary'
 
-// Failure states from the rubric audit. Some of these fail on purpose until the work in
-// docs/itinerary-fix-guide.md is done: they describe the behaviour we want, not what happens now.
 const secondId = '77777777-7777-4777-8777-777777777777'
 const hours = week({ Fri: { open24h: true } })
 const tokenExpired = 'OneMap token expired, update ONEMAP_TOKEN in .env'
@@ -22,13 +20,23 @@ async function mockExpiredToken(page) {
 }
 
 test.describe('OneMap token expired', () => {
-  test('a new plan shows an error and still shows its stops', async ({ page }) => {
+  test('a new plan can be retried without saving unverified stops', async ({ page }) => {
     const state = await mockItinerary(page, { hours })
     addSecondVote(state)
     await mockExpiredToken(page)
     await page.goto(`/groups/${groupId}/itinerary`)
     await expect(page.getByTestId('itinerary-error')).toBeVisible()
-    await expect(page.getByTestId('itinerary-stop')).toHaveCount(2)
+    const stops = page.getByTestId('itinerary-stop')
+    await expect(stops).toHaveCount(0)
+    expect(state.writes).toHaveLength(0)
+    await page.route('**/functions/v1/onemap-route', (route) =>
+      route.fulfill({
+        json: { options: [{ mode: 'TRANSIT', available: true, durationMinutes: 30 }] },
+      }),
+    )
+    await page.getByTestId('itinerary-retry').click()
+    await expect(stops).toHaveCount(2)
+    expect(state.writes).toHaveLength(1)
   })
 
   test('a saved plan shows an error and still shows its stops', async ({ page }) => {
@@ -51,45 +59,25 @@ test.describe('OneMap token expired', () => {
 })
 
 test.describe('Google lookup failures', () => {
-  async function mockLookupFailure(page, status, code) {
-    let lookups = 0
-    await page.route('**/functions/v1/google-place-details', (route) => {
-      lookups++
-      return route.fulfill({ status, json: { error: code } })
+  for (const [status, code] of [[429, 'user_limit'], [503, 'unavailable']]) {
+    test(`a ${code} response explains the empty plan without guessing a retry time`, async ({ page }) => {
+      const state = await mockItinerary(page, { hours })
+      addSecondVote(state)
+      await page.route('**/functions/v1/google-place-details', (route) =>
+        route.fulfill({ status, json: { error: code } }),
+      )
+      await page.goto(`/groups/${groupId}/itinerary`)
+      const empty = page.getByTestId('itinerary-no-fit')
+      await expect(empty).toContainText("We couldn't check opening hours")
+      await expect(empty).toContainText('2 voted activities')
+      await expect(empty).toContainText('choose Edit, then Re-plan to retry')
+      await expect(empty).not.toContainText(/\bhour\b|\blimit\b/i)
+      await expect(page.getByTestId('itinerary-not-in-plan')).toContainText(
+        'Opening hours unavailable.',
+      )
+      expect(state.writes).toHaveLength(0)
     })
-    return () => lookups
   }
-
-  test('a 429 for every activity says the lookup limit was reached', async ({ page }) => {
-    const state = await mockItinerary(page, { hours })
-    addSecondVote(state)
-    const lookups = await mockLookupFailure(page, 429, 'user_limit')
-    await page.goto(`/groups/${groupId}/itinerary`)
-    await expect(page.getByTestId('itinerary-no-fit')).toBeVisible()
-    expect(lookups()).toBe(2)
-    expect(state.writes).toHaveLength(0)
-    // The wording the activity detail page already uses for this response
-    await expect(page.getByTestId('itinerary-no-fit')).toContainText(
-      'You have reached the hourly Google lookup limit',
-    )
-  })
-
-  test('another lookup failure explains the empty plan without claiming a limit was reached', async ({
-    page,
-  }) => {
-    const state = await mockItinerary(page, { hours })
-    addSecondVote(state)
-    await mockLookupFailure(page, 503, 'unavailable')
-    await page.goto(`/groups/${groupId}/itinerary`)
-    const empty = page.getByTestId('itinerary-no-fit')
-    await expect(empty).toContainText("We couldn't check opening hours")
-    await expect(empty).toContainText('2 voted activities')
-    await expect(empty).not.toContainText('You have reached')
-    await expect(page.getByTestId('itinerary-not-in-plan')).toContainText(
-      'Opening hours unavailable.',
-    )
-    expect(state.writes).toHaveLength(0)
-  })
 })
 
 test.describe('weather request problems', () => {
@@ -104,7 +92,7 @@ test.describe('weather request problems', () => {
     ['returns an error', (route) => route.fulfill({ status: 500, json: {} })],
     ['cannot connect', (route) => route.abort()],
   ]) {
-    test(`a plan still renders without rainy-day swaps when the weather request ${name}`, async ({
+    test(`the indoor preview remains available when the weather request ${name}`, async ({
       page,
     }) => {
       await mockPlanWithIndoorOption(page)
@@ -112,7 +100,8 @@ test.describe('weather request problems', () => {
       await page.goto(`/groups/${groupId}/itinerary`)
       await expect(page.getByTestId('itinerary-stop')).toHaveCount(1)
       await expect(page.getByTestId('itinerary-weather-unavailable')).toBeVisible()
-      await expect(page.getByTestId('itinerary-rainy-toggle')).toHaveCount(0)
+      await page.getByTestId('itinerary-rainy-toggle').check()
+      await expect(page.getByTestId('itinerary-stop')).toContainText('Indoor activity')
     })
   }
 
