@@ -23,7 +23,7 @@ for (const width of [375, 768, 1280]) {
     await slot(page, '10:00').click()
     await expect(page.getByTestId('confirm-time')).toBeDisabled()
     await expect(page.getByTestId('availability-action')).toContainText(
-      'Now tap the last block',
+      'Now tap or drag to the last block',
     )
     await slot(page, '11:30').click()
     await expect(page.getByTestId('availability-action')).toContainText('2 hours')
@@ -100,14 +100,14 @@ test('a one-block suggestion completes a deliberate 30-minute selection', async 
   state.availability = [{ user_id: mockUser.id, slot_start: '2026-10-30T10:00:00+08:00' }]
   await page.goto(`/groups/${groupId}/availability`)
   await page.getByTestId('availability-next').click()
-  await expect(slot(page, '10:00')).toHaveText('🎉')
-  await expect(page.getByTestId('all-free-banner').getByRole('button')).toContainText('🎉 Everyone free')
+  await expect(slot(page, '10:00')).toHaveAttribute('data-mark', 'all')
+  await expect(page.getByTestId('all-free-banner').getByRole('button')).toContainText('30 minutes')
   await page.getByTestId('all-free-banner').getByRole('button').click()
   await expect(page.getByTestId('all-free-banner').getByRole('button')).toHaveAttribute(
     'aria-pressed',
     'true',
   )
-  await expect(page.getByTestId('availability-action')).toContainText('30 minutes · 🎉 Everyone free')
+  await expect(page.getByTestId('availability-action')).toContainText('30 minutes · Everyone free')
   await expect(page.getByTestId('confirm-time')).toBeEnabled()
   await page.getByTestId('confirm-time').click()
   await expect(page.getByTestId('itinerary-no-fit')).toContainText('No activities fit')
@@ -133,12 +133,12 @@ test('stars mark tied best blocks and a range the same members can attend throug
   ]
   await page.goto(`/groups/${groupId}/availability`)
   await page.getByTestId('availability-next').click()
-  await expect(slot(page, '10:00')).toHaveText('⭐')
-  await expect(slot(page, '10:30')).toHaveText('⭐')
+  await expect(slot(page, '10:00')).toHaveAttribute('data-mark', 'best')
+  await expect(slot(page, '10:30')).toHaveAttribute('data-mark', 'best')
   await expect(slot(page, '11:00')).toHaveText('1')
   await slot(page, '10:00').click()
   await slot(page, '10:30').click()
-  await expect(page.getByTestId('availability-action')).toContainText('⭐ 2 of 3 free throughout · Best available')
+  await expect(page.getByTestId('availability-action')).toContainText('2 of 3 free throughout · Best available')
 })
 
 test('stars appear on best-so-far grid blocks before everyone has responded', async ({ page }) => {
@@ -158,12 +158,12 @@ test('stars appear on best-so-far grid blocks before everyone has responded', as
   await page.goto(`/groups/${groupId}/availability`)
   await page.getByTestId('availability-next').click()
   await expect(page.getByTestId('availability-response-count')).toContainText('2 of 3')
-  await expect(slot(page, '10:00')).toHaveText('⭐')
-  await expect(slot(page, '10:30')).toHaveText('⭐')
+  await expect(slot(page, '10:00')).toHaveAttribute('data-mark', 'best')
+  await expect(slot(page, '10:30')).toHaveAttribute('data-mark', 'best')
   await expect(slot(page, '11:00')).toHaveText('')
   await slot(page, '10:00').click()
   await slot(page, '10:30').click()
-  await expect(page.getByTestId('availability-action')).toContainText('⭐ 2 of 3 free throughout')
+  await expect(page.getByTestId('availability-action')).toContainText('2 of 3 free throughout')
   await expect(page.getByTestId('availability-action')).toContainText('Best so far')
   await page.screenshot({ path: test.info().outputPath('best-so-far-stars.png'), fullPage: false })
 })
@@ -231,4 +231,58 @@ test('leaving while a group time is saving cannot navigate back when the respons
   await expect(page).toHaveURL(`/groups/${groupId}/activities`)
   await expect(page.getByTestId('group-activities-tab')).toBeVisible()
   expect(state.writes).toHaveLength(0)
+})
+
+test('tapping a date marks the whole day free, and tapping again clears it', async ({ page }) => {
+  const state = await mockItinerary(page, { hours, start: null, end: null })
+  await page.goto(`/groups/${groupId}/availability`)
+  await page.getByTestId('day-head-2026-10-30').click()
+  await expect(slot(page, '09:00')).toHaveClass(/slot-free/)
+  await expect(slot(page, '22:30')).toHaveClass(/slot-free/)
+  await expect.poll(() => state.availability?.length).toBe(28)
+  await expect(page.getByTestId('day-head-2026-10-30')).toHaveAccessibleName(/Clear all of/)
+  await page.getByTestId('day-head-2026-10-30').click()
+  await expect(slot(page, '09:00')).not.toHaveClass(/slot-free/)
+  await expect.poll(() => state.availability?.length).toBe(0)
+})
+
+test('dragging across heatmap blocks picks a range on one day', async ({ page }) => {
+  await mockItinerary(page, { hours, start: null, end: null })
+  await page.goto(`/groups/${groupId}/availability`)
+  await page.getByTestId('availability-next').click()
+  const box = async (time) => (await slot(page, time).boundingBox())
+  const from = await box('10:00')
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  const to = await box('11:30')
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 6 })
+  await page.mouse.up()
+  await expect(slot(page, '10:00')).toHaveClass(/slot-picked/)
+  await expect(slot(page, '11:00')).toHaveClass(/slot-picked/)
+  await expect(slot(page, '11:30')).toHaveClass(/slot-picked/)
+  await expect(page.getByTestId('availability-action')).toContainText('2 hours')
+  await expect(page.getByTestId('slot-info')).toContainText('11:30am')
+})
+
+test('adding a day when no time works asks first and then extends the dates', async ({ page }) => {
+  const state = await mockItinerary(page, { hours, start: null, end: null })
+  const friend = '66666666-6666-4666-8666-666666666666'
+  state.members = [
+    { id: mockUser.id, display_name: 'Demo User' },
+    { id: friend, display_name: 'Friend' },
+  ]
+  state.availability = [
+    { user_id: mockUser.id, slot_start: '2026-10-30T10:00:00+08:00' },
+    { user_id: friend, slot_start: '2026-10-30T11:00:00+08:00' },
+  ]
+  await page.goto(`/groups/${groupId}/availability`)
+  await page.getByTestId('availability-next').click()
+  await page.getByTestId('extend-range').click()
+  await expect(page.getByTestId('extend-confirm')).toContainText('3 Nov')
+  const patch = page.waitForRequest(
+    (request) => request.url().includes('/groups') && request.method() === 'PATCH',
+  )
+  await page.getByTestId('extend-range-confirm').click()
+  expect((await patch).postDataJSON()).toEqual({ end_date: '2026-11-03' })
+  await expect(page.getByTestId('extend-range')).toBeVisible()
 })

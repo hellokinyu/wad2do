@@ -192,6 +192,8 @@ test('keyboard marks availability and picks a heatmap range without tabbing thro
   await expect(first).toHaveAttribute('aria-pressed', 'true')
   await expect.poll(() => state.availability.length).toBe(1)
   await first.press('ArrowUp')
+  await expect(page.getByTestId('day-head-2026-10-30')).toBeFocused()
+  await page.keyboard.press('ArrowDown')
   await expect(first).toBeFocused()
   await first.press('ArrowDown')
   await expect(slot(page, '09:30')).toBeFocused()
@@ -231,7 +233,7 @@ test('live availability, membership and time changes refresh without erasing a p
   state.releaseSave()
   await expect(page.getByTestId('responded-list').locator('li.done')).toHaveCount(2)
   await page.getByTestId('mode-heatmap').click()
-  await expect(slot(page, '10:00')).toHaveText('🎉')
+  await expect(slot(page, '10:00')).toHaveAttribute('data-mark', 'all')
   await slot(page, '11:00').click()
   Object.assign(state.group, {
     chosen_start: '2026-10-30T13:00:00+08:00', chosen_end: '2026-10-30T14:00:00+08:00',
