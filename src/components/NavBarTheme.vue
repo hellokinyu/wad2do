@@ -1513,22 +1513,23 @@ onUnmounted(() => {
   background: #ff7518;
 }
 
-/* ---------- Christmas: forest green, tinsel gold + candy-cane red ----------
-   Red on this green is only 1.88:1 and hard to tell apart for colour-blind users, so the
-   logo is gold and the active link is a white pill with red text instead. */
+/* ---------- Christmas: forest green + tinsel gold ----------
+   Red on this green is only 1.88:1 and hard to tell apart for colour-blind users, so the bar
+   uses gold instead; the red comes from Santa and the reindeer. Like Halloween, the logo and
+   the active link share the same gold, so the bar reads as one set; dark green on it is 11:1. */
 .nav-theme[data-nav-theme='christmas'] {
   /* Fades into the snowy evergreen sky behind the page (styles.css, festive scenery) */
   background: linear-gradient(180deg, #24573f 0%, #10201a 100%);
 }
 .navbar:has(> .nav-theme[data-nav-theme='christmas']) {
   --nt-logo-color: #ffbe45;
-  --bs-border-color: #c8102e;
+  --bs-border-color: #ffbe45;
   --bs-navbar-color: #ffffff;
-  --bs-navbar-hover-color: #ffd6dc;
-  --bs-navbar-active-color: #c8102e;
+  --bs-navbar-hover-color: #ffd98a;
+  --bs-navbar-active-color: #10201a;
 }
 .navbar:has(> .nav-theme[data-nav-theme='christmas']) .nav-link.active {
-  background: #ffffff;
+  background: #ffbe45;
 }
 
 /* ---------- National Day: Singapore red + white ---------- */
