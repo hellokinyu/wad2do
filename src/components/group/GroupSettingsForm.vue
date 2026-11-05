@@ -11,7 +11,6 @@ const emit = defineEmits(['saved', 'cancel'])
 
 const router = useRouter()
 
-// Start the form with the group's current settings
 const groupName = ref(props.group.name)
 const startDate = ref(props.group.start_date)
 const endDate = ref(props.group.end_date)

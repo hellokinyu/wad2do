@@ -107,7 +107,7 @@ async function findLocation() {
             if (request === requestNumber && !signal.aborted)
               errorMessage.value = messages[code] || messages.unavailable
           } catch {
-            /* Use safe fallback. */
+            // If the error body can't be read, use the generic lookup error below.
           }
         }
         return result

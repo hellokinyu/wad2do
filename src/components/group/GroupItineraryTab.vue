@@ -554,7 +554,7 @@ async function saveChanges() {
       saveError.value = outsideFreeTimeMessage()
       return false
     }
-    // Only save the fields from the brief. Name, photo etc. come from the activity.
+    // Display details come from the activity record.
     const stopsToSave = itinerary.value.stops.map((s) => ({
       activity_id: s.activity_id,
       start: s.start,
@@ -611,10 +611,7 @@ function forgetChangedModes(before) {
   })
 }
 
-// Editing the plan moves like "Update rankings" on the Activities tab (FLIP: measure where
-// each card is, make the change, then slide every card from its old spot to its new one).
-// The times and dots stay put, since they belong to the slot rather than the stop. A card
-// moving up lifts toward you and passes over; the one it swaps with sinks back underneath.
+// Cards animate from their previous positions while times and dots stay in their timeline slots.
 const timelineRef = ref(null)
 const GLIDE_MS = 700
 const EASE_OUT_EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)'
@@ -727,7 +724,7 @@ function removeStop(index) {
   animateStops(
     () => {
       const before = [...itinerary.value.stops]
-      itinerary.value.stops.splice(index, 1) // remove 1 item at this position
+      itinerary.value.stops.splice(index, 1)
       forgetChangedModes(before)
       recalculateTimes()
     },
@@ -892,8 +889,7 @@ async function loadVotes(signal) {
   votedActivities.value = allVotedActivities.value.filter((a) => a.votes > 0)
 }
 
-// Fill the chosen time with the most-voted activities that fit the time, opening hours and budget,
-// then put those stops in the order with the least travel
+// Pick the most-voted activities that fit the time, opening hours and budget, then try to shorten the route.
 async function buildPlan() {
   const controller = hoursController
   if (!group.value?.chosen_start) {

@@ -181,8 +181,6 @@ const toggler = ref(null)
 const menu = ref(null)
 const route = useRoute()
 
-// On phones, Bootstrap leaves the menu open after tapping a link, covering the new page.
-// Close it by pressing the menu button again whenever the page changes.
 watch(
   () => route.fullPath,
   () => {

@@ -185,14 +185,9 @@ const showList = computed(
 const memberCount = computed(() => Object.keys(memberNames.value).length)
 const allVoted = computed(() => shownActivities.value.every((a) => a.myVote !== 0))
 
-// The reorder's length and curve. Exponential ease-out: cards set off quickly and
-// decelerate smoothly into place, with no bounce or overshoot.
 const SHUFFLE_MS = 900
 const EASE_OUT_EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)'
 
-// Re-sort the cards when the user taps "Update rankings". The list never moves by itself,
-// so this one tap gets its own moment: see shuffleCards. Cards that moved also get a
-// short highlight, and a card that climbs to first place gets a light sweep.
 async function applyRanking() {
   const moves = Object.fromEntries(shownActivities.value.map((a) => [a.id, a.move]))
   const newLeader = shownActivities.value.find((a) => a.move > 0 && a.rank - a.move === 1)
@@ -201,7 +196,6 @@ async function applyRanking() {
     Object.entries(moves).map(([id, move]) => [id, move < 0 ? 'down' : 'up']),
   )
 
-  // Where every card is before the re-sort, so each can fly from there to its new place
   const before = getCardPlaces()
   shuffling.value = true
   takeSnapshot()
@@ -420,7 +414,6 @@ function vote(activity, value) {
   saveVote(activity, activity.myVote === value ? 0 : value)
 }
 
-// Save newVote (1, -1, or 0 for no vote)
 async function saveVote(activity, newVote) {
   if (isSaving(activity.id)) return
 
@@ -431,7 +424,6 @@ async function saveVote(activity, newVote) {
 
   try {
     if (newVote === 0) {
-      // Remove the vote
       const { error } = await supabase
         .from('votes')
         .delete()
@@ -440,7 +432,6 @@ async function saveVote(activity, newVote) {
         .eq('user_id', userId.value)
       if (error) throw error
     } else if (oldVote === 0) {
-      // First vote on this activity
       const { error } = await supabase.from('votes').insert({
         group_id: groupId,
         activity_id: activity.id,
@@ -449,7 +440,6 @@ async function saveVote(activity, newVote) {
       })
       if (error) throw error
     } else {
-      // Switch from keen to not keen, or the other way round
       const { error } = await supabase
         .from('votes')
         .update({ value: newVote })
@@ -1766,7 +1756,6 @@ onUnmounted(() => {
   transform: translateY(0.75rem);
 }
 
-/* Tablets: a narrower photo column */
 /* Below tablet width the cards stack in one column */
 @media (max-width: 767.98px) {
   .activity-list {

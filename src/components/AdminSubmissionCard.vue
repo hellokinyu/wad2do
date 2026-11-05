@@ -263,7 +263,6 @@ async function approve() {
   errorMessage.value = ''
   try {
     // One database call creates the activity and marks the submission approved.
-    // rpc() means "run a database function"
     const { data, error } = await requestWithTimeout((signal) =>
       supabase
         .rpc('approve_submission', {
@@ -294,7 +293,6 @@ async function reject() {
   try {
     const { data, error } = await requestWithTimeout((signal) =>
       supabase
-        // rpc() means run a database function
         .rpc('reject_submission', {
           p_submission_id: props.submission.id,
           p_reason: reason,

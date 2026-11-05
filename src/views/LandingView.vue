@@ -8,7 +8,6 @@ import { useAuth } from '@/composables/useAuth'
 
 const { user } = useAuth()
 
-// Build the image URL from its Unsplash photo ID.
 const picture = (id) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=850&q=85`
 
 const slides = [
@@ -150,7 +149,6 @@ onUnmounted(pause)
           Discover things to do in Singapore, plan with friends,<br class="desktop-break" />
           and make the most of your weekends (and weekdays).
         </p>
-        <!-- Each reusable link handles its own hover microinteraction. -->
         <div class="hero-actions d-flex flex-wrap">
           <template v-if="user">
             <LandingActionLink to="/activities" primary>Explore activities</LandingActionLink>

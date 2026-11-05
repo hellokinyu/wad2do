@@ -9,7 +9,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
   )
 }
 
-// to use: import { supabase } from '@/lib/supabase'. (@ means the src folder.)
 // Only use the public anon/publishable key here. Vite variables are visible in the browser.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

@@ -4,7 +4,6 @@ import { RouterLink } from 'vue-router'
 import { formatPrice, formatDuration, getSetting } from '@/lib/activityDisplay'
 import { activityTags } from '@/data/activityCategories'
 
-// Information supplied by ActivitiesView.
 const props = defineProps({
   activity: {
     type: Object,
@@ -33,7 +32,6 @@ const props = defineProps({
   },
 })
 
-// Events that ActivitiesView can listen for.
 const emit = defineEmits(['save', 'share'])
 
 function share(event) {

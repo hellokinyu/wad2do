@@ -143,9 +143,7 @@
       </div>
       <div class="availability-layout">
         <div class="availability-main">
-          <!-- The grid and everything about it sit together in one card -->
           <div class="avail-card surface-card">
-            <!-- PAGE NAV: 3 days per page on phones, 7 on laptops -->
             <div
               v-if="pageCount > 1"
               class="d-flex align-items-center justify-content-center gap-3 mb-3"
@@ -426,22 +424,22 @@ let channel
 
 // ---------- pagination: 3 days per page on phones, 7 on laptops ----------
 const isPhone = ref(window.innerWidth < 768) // same breakpoint as Bootstrap's md
-const page = ref(0) // which page of days is showing (0 = first)
+const page = ref(0)
 function onResize() {
   isPhone.value = window.innerWidth < 768
 }
 
-const userId = ref(null) // current logged-in user
+const userId = ref(null)
 const group = ref({}) // start_date, end_date, chosen_start, chosen_end
 const members = ref([]) // [{ id, name }]
 const allSlots = ref([]) // everyone's saved slots: [{ user_id, key }]
 const mySlots = ref({}) // my slots as an object: { "2026-10-17T14:00": true }
 
 const mode = ref('mine') // 'mine' | 'heatmap'
-const hoveredKey = ref(null) // slot being hovered/tapped in the heatmap
+const hoveredKey = ref(null)
 const focusedSlot = ref(null)
-const pickStart = ref(null) // first slot picked on the heatmap
-const pickEnd = ref(null) // second slot picked on the heatmap
+const pickStart = ref(null)
+const pickEnd = ref(null)
 
 // dragging state for "tap or drag to mark free slots"
 const isDragging = ref(false)
@@ -875,7 +873,7 @@ async function loadAll() {
     if (!(await refreshShared())) throw new Error('Availability unavailable.')
     if (disposed) return
 
-    // 4. split out my own slots so the "My availability" grid is pre-filled
+    // Restore the current member's saved slots.
     const mine = {}
     for (const r of allSlots.value) {
       if (r.user_id === userId.value) mine[r.key] = true
@@ -1254,7 +1252,7 @@ onMounted(async () => {
   border: 1px solid var(--line);
   border-radius: var(--radius-xs);
   background-color: var(--surface);
-  display: flex; /* centres the number / emoji */
+  display: flex;
   align-items: center;
   justify-content: center;
   font-size: 0.72rem;
@@ -1380,7 +1378,6 @@ onMounted(async () => {
   background: var(--surface-2);
 }
 
-/* "My availability" / "Group heatmap" switch, styled like the category chips */
 .mode-toggle {
   display: inline-flex;
   gap: 4px;

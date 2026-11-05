@@ -67,7 +67,6 @@ async function getUser() {
   return data.user
 }
 
-// Load the user's groups when the page opens
 async function loadGroups() {
   loading.value = true
   errorMessage.value = ''
@@ -717,7 +716,6 @@ async function joinGroup() {
       </Transition>
     </div>
 
-    <!-- List of groups -->
     <div v-if="loading" class="ticket-grid" role="status">
       <span class="visually-hidden">Loading your groups…</span>
       <div v-for="n in 3" :key="n" class="ticket surface-card ticket-skeleton" aria-hidden="true">

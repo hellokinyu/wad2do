@@ -98,9 +98,8 @@ async function lookUpJourneys(stops, departure, getOptions) {
   return journeys
 }
 
-// Find the order of these stops with the least travel. Departure times change journey times, so
-// every order is ranked with one shared departure, then the best few are checked at their real
-// times. Returns the new route, or null when the current order is already the fastest that fits.
+// Estimate each order using one departure time, then check the best few at their actual times.
+// Return a shorter route that fits, or null if the search finds no better order.
 export async function findFastestRoute(stops, { date, start, end, getOptions, getHoursWarnings }) {
   if (stops.length < 2 || stops.length > MAX_STOPS_TO_REORDER) return null
   const plan = { date, start, end, getHoursWarnings }
