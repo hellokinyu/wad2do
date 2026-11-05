@@ -14,7 +14,7 @@ const plannedGroup = {
 }
 
 // The real wad2do_group_details function doesn't return itineraries, so the group page has to
-// look the plan up itself. Otherwise a planned group is green on its Groups card but blue
+// look the plan up itself. Otherwise a planned group is green on its Groups card but amber
 // ("Time picked") in the group page hero.
 test('a planned group has the same stage colour on its card and in the group page hero', async ({
   page,

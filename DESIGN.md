@@ -74,7 +74,7 @@ A festive theme is Supper Club with a slight tint of the holiday's colour in the
 4. **Selected states use ink.** A selected chip, tab or toggle is `background: var(--ink); color: var(--on-ink)`. This flips correctly in dark mode.
 5. **White on photos stays white.** Buttons and labels drawn on top of photos (the heart and share icons, photo captions) keep literal `white`, because photos look the same in both modes. Icon buttons sit on a `--photo-scrim` disc so they stay readable on bright photos and on the grey no-photo placeholder.
 6. **Colours that mean something stay as they are**, in both modes:
-   - Group stage colours (Voting amber, Time picked blue, Planned green, past grey) in `src/lib/groupDisplay.js`
+   - Group stage colours (amber until planned, Planned green, past grey) in `src/lib/groupDisplay.js`
    - The availability heatmap greens in `GroupAvailabilityTab.vue`
    - Errors and delete buttons (Bootstrap's `danger` colours)
    - The MRT map colours in `MrtStationPicker.vue`. The map picture is always light, even in dark mode, so the markers drawn on it are fixed too: a `#5f6273` ring on white for a station, `#165bc6` for the picked one, and `#111219` for the name label and the keyboard focus outline. In dark mode the picture is only dimmed slightly (`brightness(0.88)`).

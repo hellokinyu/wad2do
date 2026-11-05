@@ -109,12 +109,15 @@ export function getBudgetText(group) {
   return 'S$' + (Number.isInteger(budget) ? budget : budget.toFixed(2)) + ' per person'
 }
 
-// Each stage has its own colour; past outings go grey whatever stage they reached.
+// Amber until the group has a plan, then green; past outings go grey whatever stage they
+// reached. "Time picked" stays amber because the itinerary is built straight after, so a
+// colour of its own would only flash before turning green.
 // `ink` is the text colour on top, `tear` the dashed line beside the stub, and `mark` the
 // colour for small marks on white (dots, progress bars), which grey needs darker.
+const inProgress = { stage: '#f4b400', ink: '#111', tear: 'rgb(0 0 0 / 22%)' } // amber
 const stageColours = {
-  Voting: { stage: '#f4b400', ink: '#111', tear: 'rgb(0 0 0 / 22%)' }, // amber: needs votes
-  'Time picked': { stage: '#2563eb', ink: 'white', tear: 'rgb(255 255 255 / 45%)' }, // blue
+  Voting: inProgress,
+  'Time picked': inProgress,
   Planned: { stage: '#15803d', ink: 'white', tear: 'rgb(255 255 255 / 45%)' }, // green: ready
   past: { stage: '#ececec', ink: '#555', tear: 'rgb(0 0 0 / 15%)', mark: '#9a9a9a' },
 }
