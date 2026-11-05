@@ -306,6 +306,67 @@
           </li>
         </ul>
       </section>
+
+      <section class="delete-account" data-testid="profile-delete-account">
+        <h2 class="h5 fw-bold title mb-1">Delete account</h2>
+        <p class="muted mb-3">This can't be undone.</p>
+        <button
+          type="button"
+          class="btn btn-outline-danger rounded-pill px-3 btn-sm"
+          data-testid="profile-delete-account-open"
+          @click="openDeleteAccount"
+        >
+          Delete account…
+        </button>
+      </section>
+
+      <BaseDialog
+        v-model:open="deleteOpen"
+        title="Delete your account?"
+        close-label="Keep my account"
+        :closable="!deletingAccount"
+        form
+        data-testid="delete-account-dialog"
+        @submit="deleteAccount"
+      >
+        <p class="mb-3">
+          Your profile, saved activities, and your votes and free times in every group will be gone for
+          good. Your groups stay for your friends.
+        </p>
+        <label for="delete-confirm-input" class="form-label fw-semibold">Type DELETE to confirm</label>
+        <input
+          id="delete-confirm-input"
+          v-model="deleteConfirm"
+          type="text"
+          class="form-control field"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          :disabled="deletingAccount"
+          data-testid="delete-account-confirm-input"
+        />
+        <p v-if="deleteError" class="error-text small mt-2 mb-0" role="alert" data-testid="delete-account-error">
+          {{ deleteError }}
+        </p>
+        <template #footer>
+          <button
+            type="button"
+            class="btn btn-outline-dark rounded-pill px-4"
+            :disabled="deletingAccount"
+            @click="deleteOpen = false"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="btn btn-danger rounded-pill px-4"
+            :disabled="!deleteConfirmed || deletingAccount"
+            data-testid="delete-account-submit"
+          >
+            {{ deletingAccount ? 'Deleting…' : 'Delete account' }}
+          </button>
+        </template>
+      </BaseDialog>
     </template>
   </div>
 </template>
@@ -318,6 +379,7 @@ import MrtStationPicker from '@/components/MrtStationPicker.vue'
 import AnimalAvatar from '@/components/AnimalAvatar.vue'
 import AnimalAvatarPicker from '@/components/AnimalAvatarPicker.vue'
 import NavBarTheme from '@/components/NavBarTheme.vue'
+import BaseDialog from '@/components/BaseDialog.vue'
 import { findProfileAnimal } from '@/data/profileAnimals'
 import { homeAreas } from '@/data/homeAreas'
 import { findStation } from '@/data/mrtStations'
@@ -370,6 +432,13 @@ const prefsError = ref('')
 const profileError = ref('')
 const logoutError = ref('')
 const loggingOut = ref(false)
+
+// Delete account: a confirmation pop-up where the user types DELETE first
+const deleteOpen = ref(false)
+const deleteConfirm = ref('')
+const deletingAccount = ref(false)
+const deleteError = ref('')
+const deleteConfirmed = computed(() => deleteConfirm.value.trim().toUpperCase() === 'DELETE')
 
 const savedActivities = ref([])
 const savedError = ref('')
@@ -548,6 +617,38 @@ async function logOut() {
   } finally {
     loggingOut.value = false
   }
+}
+
+function openDeleteAccount() {
+  deleteConfirm.value = ''
+  deleteError.value = ''
+  deleteOpen.value = true
+}
+
+// Deleting runs in one database function (docs/sql/delete_account.sql), so either everything
+// goes or nothing does. Trying again after an unclear failure is safe.
+async function deleteAccount() {
+  if (deletingAccount.value || !deleteConfirmed.value) return
+  deletingAccount.value = true
+  deleteError.value = ''
+  try {
+    const { error } = await supabase.rpc('delete_my_account')
+    if (error) throw error
+  } catch (error) {
+    console.error('Could not delete account:', error)
+    deleteError.value = "Couldn't delete your account. Please try again."
+    deletingAccount.value = false
+    return
+  }
+  // The account is gone on the server; clear this browser's session as well.
+  try {
+    await supabase.auth.signOut({ scope: 'local' })
+  } catch (error) {
+    console.error('Could not clear the local session:', error)
+  }
+  deletingAccount.value = false
+  deleteOpen.value = false
+  await router.replace({ path: '/login', query: { deleted: '1' } })
 }
 
 function rememberSavedPrefs() {
@@ -976,6 +1077,13 @@ function statusClass(status) {
 
 .reason {
   color: var(--muted);
+}
+
+/* Delete account sits last, set apart from the everyday settings above */
+.delete-account {
+  margin-top: 4rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
 }
 
 .notice {
