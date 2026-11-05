@@ -65,7 +65,7 @@ test('live hours override empty saved hours, check arrival plus duration, and fe
 test('reopening fetches fresh hours and adds warnings without changing or saving the schedule', async ({
   page,
 }) => {
-  const state = await mockItinerary(page, { hours: {} })
+  const state = await mockItinerary(page, { hours: {}, rainy: true })
   state.googleDetails = { [activityId]: fridayHours(23) }
   await page.goto(`/groups/${groupId}/itinerary`)
   await expect(page.getByTestId('itinerary-saved-status')).toBeVisible()
@@ -74,8 +74,29 @@ test('reopening fetches fresh hours and adds warnings without changing or saving
     ...fridayHours(20),
     attributions: [{ provider: 'Venue hours provider', providerUri: 'https://example.com/hours' }],
   }
+  state.votes.push({
+    activity_id: secondId,
+    value: 1,
+    activities: { ...state.votes[0].activities, name: 'Indoor alternative', indoor: true },
+  })
+  state.googleDetails[secondId] = fridayHours(23)
   await page.reload()
   await expect(page.getByTestId('itinerary-stop-warning')).toHaveText('Closes at 20:00')
+  const summary = page.getByTestId('itinerary-saved-status')
+  await expect(summary).toContainText('Saved itinerary · 1 opening-hours conflict')
+  await expect(summary).toContainText('Closes at 20:00')
+  const rainyToggle = page.getByTestId('itinerary-rainy-toggle')
+  const stop = page.getByTestId('itinerary-stop')
+  await rainyToggle.check()
+  await expect(stop.getByRole('heading')).toContainText('Indoor alternative')
+  await expect(stop.getByTestId('itinerary-hours-source')).toBeVisible()
+  await expect(stop.getByTestId('itinerary-stop-warning')).toHaveCount(0)
+  await expect(summary).toContainText('Saved itinerary · 1 opening-hours conflict')
+  await expect(summary).toContainText('Night activity')
+  await summary.getByRole('link', { name: 'View stop' }).click()
+  await expect(rainyToggle).not.toBeChecked()
+  await expect(stop.getByRole('heading')).toBeFocused()
+  await expect(stop.getByRole('heading')).toContainText('Night activity')
   await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
   await expect(page.getByRole('link', { name: 'Venue hours provider' })).toHaveAttribute(
     'href',
@@ -83,7 +104,7 @@ test('reopening fetches fresh hours and adds warnings without changing or saving
   )
   expect(state.writes).toHaveLength(1)
   expect(state.saved).toEqual(saved)
-  expect(state.hoursLookups).toEqual([activityId, activityId])
+  expect(state.hoursLookups).toEqual([activityId, activityId, secondId])
 })
 
 test('route ordering rejects a faster order that violates live Google hours', async ({ page }) => {
@@ -199,6 +220,9 @@ for (const code of ['user_limit', 'app_limit', 'lookup_disabled', 'unavailable']
     await expect(page.getByTestId('itinerary-stop-warning')).toHaveText(
       'Opening hours unavailable.',
     )
+    const summary = page.getByTestId('itinerary-saved-status')
+    await expect(summary).toContainText('Opening hours could not be verified for some stops.')
+    await expect(summary).not.toContainText('opening-hours conflict')
     expect(state.writes).toHaveLength(0)
   })
 }

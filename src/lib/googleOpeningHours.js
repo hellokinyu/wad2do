@@ -1,7 +1,8 @@
 import { getOpeningWindowWarnings } from './openingHours.js'
 
 export const USUAL_HOURS_NOTE = 'Based on usual opening hours; holiday hours may differ.'
-const unavailable = () => ({ warnings: ['Opening hours unavailable.'], provisional: false })
+export const HOURS_UNAVAILABLE = 'Opening hours unavailable.'
+const unavailable = () => ({ warnings: [HOURS_UNAVAILABLE], provisional: false })
 const dayMs = 86400000
 
 function dateNumber(value) {

@@ -2,7 +2,7 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
-import { getGoogleVisitHours, USUAL_HOURS_NOTE } from '@/lib/googleOpeningHours'
+import { getGoogleVisitHours, HOURS_UNAVAILABLE, USUAL_HOURS_NOTE } from '@/lib/googleOpeningHours'
 import { fetchTravelOptions } from '@/lib/travelOptions'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
 import { fetchForecasts, getSgToday } from '@/lib/weatherForecast'
@@ -277,6 +277,39 @@ function getStopWarnings(stop) {
 
 function usesUsualHours(stop) {
   return visitHours(stop, itinerary.value.date, toMinutes(stop.start), toMinutes(stop.end)).provisional
+}
+
+const savedHoursSummary = computed(() => {
+  const conflicts = []
+  let checking = false
+  let unavailable = false
+  let provisional = false
+  for (const stop of itinerary.value?.stops || []) {
+    if (!(stop.activity_id in liveHours.value)) {
+      checking = true
+      continue
+    }
+    const { warnings, provisional: usesUsual } = visitHours(
+      stop,
+      itinerary.value.date,
+      toMinutes(stop.start),
+      toMinutes(stop.end),
+    )
+    provisional ||= usesUsual
+    if (warnings.includes(HOURS_UNAVAILABLE)) unavailable = true
+    else if (warnings.length) conflicts.push({ stop, warning: warnings.join(' ') })
+  }
+  return { conflicts, checking, unavailable, provisional }
+})
+
+async function focusStop(stop) {
+  if (showingRainy.value.includes(stop.activity_id)) {
+    toggleRainy(stop)
+    await nextTick()
+  }
+  const heading = document.getElementById('itinerary-stop-' + stop.activity_id)
+  heading?.focus({ preventScroll: true })
+  heading?.scrollIntoView({ block: 'center' })
 }
 
 // '24:30' -> '00:30'. Stops after midnight keep counting past 24:00 so their order and
@@ -865,8 +898,8 @@ async function buildPlan() {
     await ensureHours(activity)
     controller.signal.throwIfAborted()
     if (visitHours(activity, start.slice(0, 10), current, current + activity.duration_min)
-      .warnings.includes('Opening hours unavailable.')) {
-      skippedHours.value[activity.activity_id] = 'Opening hours unavailable.'
+      .warnings.includes(HOURS_UNAVAILABLE)) {
+      skippedHours.value[activity.activity_id] = HOURS_UNAVAILABLE
       continue
     }
     let arrival = current
@@ -1164,7 +1197,39 @@ watch(() => user.value?.id, (id) => {
         <RouterLink :to="{ name: 'group-availability' }" class="btn btn-outline-dark rounded-pill me-2">Change time</RouterLink>
         <RouterLink :to="{ name: 'group-activities' }" class="btn btn-link text-body">Back to voting</RouterLink>
       </div>
-      <p v-else-if="planSaved && !isEditing" class="text-success-emphasis small" role="status" data-testid="itinerary-saved-status">✓ Itinerary saved for your group.</p>
+      <div
+        v-else-if="planSaved && !isEditing"
+        class="small mb-3"
+        :class="{
+          'alert alert-warning': savedHoursSummary.conflicts.length || savedHoursSummary.unavailable,
+          'text-success-emphasis': !savedHoursSummary.conflicts.length && !savedHoursSummary.unavailable && !savedHoursSummary.checking,
+        }"
+        role="status"
+        data-testid="itinerary-saved-status"
+      >
+        <template v-if="savedHoursSummary.conflicts.length">
+          <p class="fw-semibold mb-1">
+            Saved itinerary · {{ savedHoursSummary.conflicts.length }}
+            {{ savedHoursSummary.conflicts.length === 1 ? 'opening-hours conflict' : 'opening-hours conflicts' }}
+          </p>
+          <p class="mb-1">
+            {{ savedHoursSummary.conflicts[0].stop.name }} ({{ clockTime(savedHoursSummary.conflicts[0].stop.start) }}–{{ clockTime(savedHoursSummary.conflicts[0].stop.end) }})
+            · {{ savedHoursSummary.conflicts[0].warning }}
+            <a
+              class="alert-link"
+              :href="'#itinerary-stop-' + savedHoursSummary.conflicts[0].stop.activity_id"
+              @click.prevent="focusStop(savedHoursSummary.conflicts[0].stop)"
+            >View stop</a>
+          </p>
+        </template>
+        <span v-else-if="savedHoursSummary.checking || savedHoursSummary.unavailable">Itinerary saved for your group.</span>
+        <span v-else>✓ Itinerary saved for your group.</span>
+        <p v-if="savedHoursSummary.checking" class="mb-0">Checking opening hours…</p>
+        <p v-if="savedHoursSummary.unavailable" class="mb-0">Opening hours could not be verified for some stops.</p>
+        <p v-if="savedHoursSummary.provisional" class="mb-0">
+          {{ isPlanPast ? 'Based on current published hours.' : USUAL_HOURS_NOTE }}
+        </p>
+      </div>
       <div v-if="isPlanPast" class="info-banner muted" data-testid="itinerary-weather-past">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
@@ -1340,7 +1405,7 @@ watch(() => user.value?.id, (id) => {
                 <img :src="stop.image_url" alt="" class="stop-photo" width="80" height="80" />
               </component>
               <div class="stop-main">
-                <h3 class="stop-name">
+                <h3 :id="'itinerary-stop-' + stop.original.activity_id" class="stop-name" tabindex="-1">
                   {{ index + 1 }}.
                   <span v-if="isEditing">{{ stop.name }}</span>
                   <RouterLink
