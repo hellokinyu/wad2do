@@ -8,6 +8,7 @@ import { requestWithTimeout } from '@/lib/requestWithTimeout'
 import { fetchForecasts, getSgToday } from '@/lib/weatherForecast'
 import { useAuth } from '@/composables/useAuth'
 import { getPrice, getWebsiteUrl } from '@/lib/activityDisplay'
+import { formatPart } from '@/lib/groupDisplay'
 import { departureAt, findFastestRoute, legKey, toMinutes, toTime } from '@/lib/routeOrder'
 import ItineraryTravelOptions from '@/components/group/ItineraryTravelOptions.vue'
 import ItineraryLoadingCar from '@/components/group/ItineraryLoadingCar.vue'
@@ -61,6 +62,23 @@ function formatClock(time) {
   return (hours % 12 || 12) + ':' + String(minutes).padStart(2, '0') + ' ' + suffix
 }
 
+// '10:00', '11:00' -> '10:00 am – 11:00 am'
+function formatClockRange(start, end) {
+  return formatClock(start) + ' – ' + formatClock(end)
+}
+
+// '2026-10-30' -> 'Fri, 30 Oct 2026'. A saved plan with no group time has no date.
+function formatPlanDate(date) {
+  return date ? formatPart(date, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''
+}
+
+// The summary's read-only time. An empty plan has only a start, and its end draft is '-'.
+const summaryTimeText = computed(() =>
+  endDraft.value && endDraft.value !== '-'
+    ? formatClockRange(startDraft.value, endDraft.value)
+    : formatClock(startDraft.value),
+)
+
 // '10:00', '11:30' -> '1.5 hr' (or '45 min' when under an hour)
 function formatHours(start, end) {
   const minutes = (((toMinutes(end) - toMinutes(start)) % 1440) + 1440) % 1440
@@ -82,6 +100,12 @@ function whyNotInPlan(activity) {
   if (extra > 0) return 'Over budget by $' + extra.toFixed(2)
   return "Doesn't fit the time or opening hours"
 }
+
+// How many activities Plan skipped because their live hours couldn't be checked, for the
+// empty state. The lookup's cause isn't kept, so this can't say whether a limit was reached.
+const unavailableHoursCount = computed(
+  () => Object.values(skippedHours.value).filter((reason) => reason === 'Opening hours unavailable.').length,
+)
 
 // ----- The group (real data from Supabase) -----
 const route = useRoute()
@@ -405,7 +429,7 @@ function fitsFreeTime(start, end) {
 }
 
 function outsideFreeTimeMessage() {
-  return `Pick a time within the group's free time (${freeTime.value.start}–${freeTime.value.end}).`
+  return `Pick a time within the group's free time (${formatClockRange(freeTime.value.start, freeTime.value.end)}).`
 }
 
 // The stops that still fit when the day ends at `end`. A stop that runs past it
@@ -457,7 +481,7 @@ function changeDayStart(event) {
   if (!freeTime.value || !itinerary.value.stops.length) return useStops(itinerary.value.stops)
   const kept = stopsUntil(freeTime.value.end)
   if (!kept.length) {
-    return putBack(`That's too late to fit the first stop before the group's free time ends at ${freeTime.value.end}.`)
+    return putBack(`That's too late to fit the first stop before the group's free time ends at ${formatClock(freeTime.value.end)}.`)
   }
   useStops(kept)
 }
@@ -480,7 +504,7 @@ function changeDayEnd(event) {
   }
   const kept = stopsUntil(end)
   if (!kept.length) {
-    return putBack(`That's too early to fit the first stop, which starts at ${clockTime(stops[0].start)}.`)
+    return putBack(`That's too early to fit the first stop, which starts at ${formatClock(stops[0].start)}.`)
   }
   useStops(kept)
 }
@@ -1192,8 +1216,18 @@ watch(() => user.value?.id, (id) => {
     <!-- There is a plan -->
     <fieldset v-else class="border-0 p-0 m-0 w-100" :disabled="saving" data-testid="itinerary-plan">
       <div v-if="!itinerary.stops.length" class="alert alert-warning" role="status" data-testid="itinerary-no-fit">
-        <p class="fw-semibold mb-1">No activities fit this time and budget.</p>
-        <p class="small mb-2">Choose a longer time, adjust the group budget, or vote for other activities.</p>
+        <template v-if="unavailableHoursCount">
+          <p class="fw-semibold mb-1">We couldn't check opening hours, so no activities were added.</p>
+          <p class="small mb-2">
+            Live opening hours weren't available for {{ unavailableHoursCount }} voted
+            {{ unavailableHoursCount === 1 ? 'activity' : 'activities' }}. This may be temporary (for example,
+            the hourly limit on Google lookups), so try again in about an hour: press Edit, then Re-plan.
+          </p>
+        </template>
+        <template v-else>
+          <p class="fw-semibold mb-1">No activities fit this time and budget.</p>
+          <p class="small mb-2">Choose a longer time, adjust the group budget, or vote for other activities.</p>
+        </template>
         <RouterLink :to="{ name: 'group-availability' }" class="btn btn-outline-dark rounded-pill me-2">Change time</RouterLink>
         <RouterLink :to="{ name: 'group-activities' }" class="btn btn-link text-body">Back to voting</RouterLink>
       </div>
@@ -1213,7 +1247,8 @@ watch(() => user.value?.id, (id) => {
             {{ savedHoursSummary.conflicts.length === 1 ? 'opening-hours conflict' : 'opening-hours conflicts' }}
           </p>
           <p class="mb-1">
-            {{ savedHoursSummary.conflicts[0].stop.name }} ({{ clockTime(savedHoursSummary.conflicts[0].stop.start) }}–{{ clockTime(savedHoursSummary.conflicts[0].stop.end) }})
+            {{ savedHoursSummary.conflicts[0].stop.name }}
+            ({{ formatClockRange(savedHoursSummary.conflicts[0].stop.start, savedHoursSummary.conflicts[0].stop.end) }})
             · {{ savedHoursSummary.conflicts[0].warning }}
             <a
               class="alert-link"
@@ -1236,7 +1271,7 @@ watch(() => user.value?.id, (id) => {
         </svg>
         <span>This day has passed, so there's no forecast.</span>
       </div>
-      <p v-else-if="weatherLoading" class="text-secondary small">Checking the weather...</p>
+      <p v-else-if="weatherLoading" class="text-secondary small" data-testid="itinerary-weather-loading">Checking the weather...</p>
       <div v-else-if="weather" class="info-banner" data-testid="itinerary-weather">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
@@ -1256,13 +1291,16 @@ watch(() => user.value?.id, (id) => {
       <dl class="summary-panel" data-testid="itinerary-summary">
         <div>
           <dt>Date</dt>
-          <dd>{{ itinerary.date }}</dd>
+          <dd>{{ formatPlanDate(itinerary.date) }}</dd>
         </div>
         <div>
           <dt>Time</dt>
-          <!-- Read-only text until Edit is pressed, so the panel doesn't change shape -->
+          <!-- Formatted text until Edit is pressed. A native time input shows '05:00 pm', so the
+               inputs stay mounted but hidden, keeping their values and listeners unchanged. -->
           <dd class="d-flex align-items-center gap-1">
+            <span v-if="!isEditing" class="summary-time" data-testid="itinerary-time-text">{{ summaryTimeText }}</span>
             <input
+              v-show="isEditing"
               ref="startField"
               v-model="startDraft"
               type="time"
@@ -1277,8 +1315,9 @@ watch(() => user.value?.id, (id) => {
               @blur="changeDayStart"
               @keydown.enter="changeDayStart"
             />
-            –
+            <span v-show="isEditing">–</span>
             <input
+              v-show="isEditing"
               ref="endField"
               v-model="endDraft"
               type="time"
@@ -1416,7 +1455,7 @@ watch(() => user.value?.id, (id) => {
                     {{ stop.name }}
                   </RouterLink>
                 </h3>
-                <p class="stop-range small text-secondary mb-1">{{ clockTime(stop.start) }}–{{ clockTime(stop.end) }}</p>
+                <p class="stop-range small text-secondary mb-1">{{ formatClockRange(stop.start, stop.end) }}</p>
                 <p class="mb-1 small fw-semibold">{{ stop.cost === null ? 'Price unknown' : '$' + stop.cost + ' per person' }}</p>
                 <p class="text-secondary small mb-1">{{ stop.reason }}</p>
                 <span
@@ -1673,6 +1712,12 @@ watch(() => user.value?.id, (id) => {
 /* No clock icon while the time is read-only */
 .time-input.form-control-plaintext::-webkit-calendar-picker-indicator {
   display: none;
+}
+
+/* Same height as the time inputs, so the panel doesn't jump when editing starts */
+.summary-time {
+  line-height: 1.75rem;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Timeline: start time and length on the left, a dot on a thin line, then the stop card */

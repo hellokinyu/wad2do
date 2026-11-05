@@ -27,7 +27,7 @@ test('Plan accepts a Friday evening visit ending before an overnight closing tim
   await mockItinerary(page, { hours: week({ Fri: { open: '20:00', close: '02:00' } }) })
   await page.goto(`/groups/${groupId}/itinerary`)
   await expect(page.getByTestId('itinerary-stop')).toHaveCount(1)
-  await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('8:00 pm – 9:00 pm')
   await expect(page.getByTestId('itinerary-stop-warning')).toHaveCount(0)
 })
 
@@ -62,8 +62,8 @@ test('Saturday early morning uses Friday overnight hours even when Saturday is c
     end: '2026-10-30T19:00:00Z',
   })
   await page.goto(`/groups/${groupId}/itinerary`)
-  await expect(page.getByTestId('itinerary-stop')).toContainText('01:00–02:00')
-  await expect(page.getByTestId('itinerary-summary')).toContainText('2026-10-31')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('1:00 am – 2:00 am')
+  await expect(page.getByTestId('itinerary-summary')).toContainText('Sat, 31 Oct 2026')
   await expect(page.getByTestId('itinerary-stop-warning')).toHaveCount(0)
 })
 
@@ -78,11 +78,11 @@ test('edited and reloaded plans use the same hours checks as initial planning', 
   // 19:00 is before the group's free time (20:00–23:00), so the start stays put
   await page.getByTestId('itinerary-start-time').fill('19:00')
   await page.getByTestId('itinerary-start-time').blur()
-  await expect(page.getByTestId('itinerary-time-error')).toContainText('20:00–23:00')
+  await expect(page.getByTestId('itinerary-time-error')).toContainText('8:00 pm – 11:00 pm')
   await expect(page.getByTestId('itinerary-start-time')).toHaveValue('20:00')
-  await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('8:00 pm – 9:00 pm')
   await page.getByTestId('itinerary-discard').click()
-  await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('8:00 pm – 9:00 pm')
   await expect(page.getByTestId('itinerary-stop-warning')).toHaveCount(0)
   await page.getByTestId('itinerary-edit').click()
   await page.getByTestId('itinerary-start-time').fill('21:00')
@@ -93,7 +93,7 @@ test('edited and reloaded plans use the same hours checks as initial planning', 
   expect(state.saved.stops[0]).toMatchObject({ start: '21:00', end: '22:00' })
   expect(state.saved.stops[0]).not.toHaveProperty('opening_hours')
   await page.reload()
-  await expect(page.getByTestId('itinerary-stop')).toContainText('21:00–22:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('9:00 pm – 10:00 pm')
   await expect(page.getByTestId('itinerary-stop-warning')).toHaveCount(0)
 })
 
@@ -110,12 +110,12 @@ test('editing the end time changes the last stop and saves it', async ({ page })
   await expect(end).toHaveValue('21:00')
   await end.fill('23:30') // after the group's free time ends at 23:00
   await end.blur()
-  await expect(page.getByTestId('itinerary-time-error')).toContainText('20:00–23:00')
+  await expect(page.getByTestId('itinerary-time-error')).toContainText('8:00 pm – 11:00 pm')
   await expect(end).toHaveValue('21:00')
   await end.fill('22:30')
   await end.blur()
   await expect(page.getByTestId('itinerary-time-error')).toHaveCount(0)
-  await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–22:30')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('8:00 pm – 10:30 pm')
   await page.getByTestId('itinerary-save').click()
   await expect(page.getByTestId('itinerary-edit')).toBeVisible()
   await expect(end).toHaveValue('22:30')
@@ -131,14 +131,14 @@ test('an earlier end time shortens or drops the stops that no longer fit', async
   await page.goto(`/groups/${groupId}/itinerary`)
   const stops = page.getByTestId('itinerary-stop')
   await expect(stops).toHaveCount(2)
-  await expect(stops.nth(1)).toContainText('21:30–22:30')
+  await expect(stops.nth(1)).toContainText('9:30 pm – 10:30 pm')
   await page.getByTestId('itinerary-edit').click()
   const end = page.getByTestId('itinerary-end-time')
   // Keeps half of the second stop, so it's cut short
   await end.fill('22:00')
   await end.blur()
   await expect(stops).toHaveCount(2)
-  await expect(stops.nth(1)).toContainText('21:30–22:00')
+  await expect(stops.nth(1)).toContainText('9:30 pm – 10:00 pm')
   // Would keep only 10 of its 30 minutes, so it's removed
   await end.fill('21:40')
   await end.blur()
@@ -179,26 +179,26 @@ test('a later start fits the plan into the free time instead of refusing', async
   await start.fill('13:30')
   await start.press('Enter')
   await expect(stops).toHaveCount(5)
-  await expect(stops.first()).toContainText('13:30–14:30')
-  await expect(stops.last()).toContainText('19:30–20:00')
+  await expect(stops.first()).toContainText('1:30 pm – 2:30 pm')
+  await expect(stops.last()).toContainText('7:30 pm – 8:00 pm')
   // Now the last stop would start at 20:00, so it's taken out
   await start.fill('14:00')
   await start.blur()
   await expect(stops).toHaveCount(4)
-  await expect(stops.last()).toContainText('18:30–19:30')
+  await expect(stops.last()).toContainText('6:30 pm – 7:30 pm')
   await expect(page.getByTestId('itinerary-time-note')).toContainText('1 stop')
   await expect(page.getByTestId('itinerary-time-error')).toHaveCount(0)
   // Before the free time starts is still refused
   await start.fill('11:00')
   await start.blur()
-  await expect(page.getByTestId('itinerary-time-error')).toContainText('12:00–20:00')
+  await expect(page.getByTestId('itinerary-time-error')).toContainText('12:00 pm – 8:00 pm')
   await expect(start).toHaveValue('14:00')
   await expect(stops).toHaveCount(4)
 })
 
 for (const [field, value, firstRange, lastRange] of [
-  ['start', '14:00', '14:00–15:00', '18:30–19:30'],
-  ['end', '17:00', '12:00–13:00', '16:30–17:00'],
+  ['start', '14:00', '2:00 pm – 3:00 pm', '6:30 pm – 7:30 pm'],
+  ['end', '17:00', '12:00 pm – 1:00 pm', '4:30 pm – 5:00 pm'],
 ]) {
   test(`an uncommitted ${field} time survives a weather refresh and retimes on blur`, async ({ page }) => {
     const state = await mockItinerary(page, {
@@ -270,7 +270,7 @@ for (const [stateName, interact, draft, stopCount, savedEnd] of [
     await interact(end)
     release()
     await expect(page.getByTestId('itinerary-save')).toBeEnabled()
-    await expect(page.getByTestId('itinerary-stop').last()).toContainText('14:30–15:30')
+    await expect(page.getByTestId('itinerary-stop').last()).toContainText('2:30 pm – 3:30 pm')
     await expect(end).toHaveValue(draft)
     await end.blur()
     await expect(page.getByTestId('itinerary-stop')).toHaveCount(stopCount)
@@ -326,7 +326,7 @@ test('generation waits for travel estimates and saves the times shown to members
   await expect(page.getByTestId('itinerary-plan')).toHaveCount(0)
   expect(state.writes).toHaveLength(0)
   releaseTravel()
-  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('21:15–22:15')
+  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('9:15 pm – 10:15 pm')
   expect(state.writes).toHaveLength(1)
   expect(state.saved.stops[1]).toMatchObject({ start: '21:15', end: '22:15' })
 })
@@ -350,14 +350,14 @@ test('Plan excludes a stop when real travel would exceed the chosen end time', a
 
   await page.goto(`/groups/${groupId}/itinerary`)
   await expect(page.getByTestId('itinerary-stop')).toHaveCount(1)
-  await expect(page.getByTestId('itinerary-stop')).toContainText('10:00–11:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('10:00 am – 11:00 am')
   await expect(page.getByTestId('itinerary-not-in-plan')).toContainText('Second activity')
   expect(state.saved.stops).toHaveLength(1)
   expect(state.saved.stops[0]).toMatchObject({ activity_id: activityId, end: '11:00' })
   await page.getByTestId('itinerary-edit').click()
   await page.getByTestId('itinerary-replan').click()
   await expect(page.getByTestId('itinerary-stop')).toHaveCount(1)
-  await expect(page.getByTestId('itinerary-stop')).toContainText('10:00–11:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('10:00 am – 11:00 am')
   await expect(page.getByTestId('itinerary-replan')).toBeFocused()
   expect(state.writes).toHaveLength(1)
 })
@@ -389,7 +389,7 @@ test('Plan uses actual departures and fits shorter journeys up to the exact end 
 
   await page.goto(`/groups/${groupId}/itinerary`)
   await expect(page.getByTestId('itinerary-stop')).toHaveCount(3)
-  await expect(page.getByTestId('itinerary-stop').nth(2)).toContainText('11:30–12:00')
+  await expect(page.getByTestId('itinerary-stop').nth(2)).toContainText('11:30 am – 12:00 pm')
   // The first two are the journeys as stops are added; the rest compare other orders
   expect(departures.slice(0, 2)).toEqual(['2026-10-30T10:30', '2026-10-30T11:15'])
   expect(state.saved.stops[2]).toMatchObject({ start: '11:30', end: '12:00' })
@@ -428,9 +428,9 @@ test('Plan puts the chosen stops in the order with the least travel', async ({ p
   await expect(stops).toHaveCount(3)
   await expect(stops.nth(0)).toContainText('Most voted')
   await expect(stops.nth(1)).toContainText('Next door')
-  await expect(stops.nth(1)).toContainText('11:10–12:10')
+  await expect(stops.nth(1)).toContainText('11:10 am – 12:10 pm')
   await expect(stops.nth(2)).toContainText('Far away')
-  await expect(stops.nth(2)).toContainText('12:20–13:20')
+  await expect(stops.nth(2)).toContainText('12:20 pm – 1:20 pm')
   expect(state.saved.stops[2]).toMatchObject({ start: '12:20', end: '13:20' })
 })
 
@@ -459,7 +459,7 @@ test('Plan keeps the vote order when comparing other routes fails', async ({ pag
   const stops = page.getByTestId('itinerary-stop')
   await expect(stops).toHaveCount(2)
   await expect(stops.nth(0)).toContainText('Night activity')
-  await expect(stops.nth(1)).toContainText('11:20–12:20')
+  await expect(stops.nth(1)).toContainText('11:20 am – 12:20 pm')
   expect(state.saved.stops).toHaveLength(2)
 })
 
@@ -470,7 +470,7 @@ test('Plan fills a free time that ends at midnight', async ({ page }) => {
     end: '2026-10-30T16:00:00Z', // 00:00 Saturday
   })
   await page.goto(`/groups/${groupId}/itinerary`)
-  await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('8:00 pm – 9:00 pm')
   expect(state.saved.stops[0]).toMatchObject({ start: '20:00', end: '21:00' })
 })
 
@@ -500,9 +500,9 @@ test('Plan runs past midnight, using the next day for hours and travel', async (
   await page.goto(`/groups/${groupId}/itinerary`)
   const stops = page.getByTestId('itinerary-stop')
   await expect(stops).toHaveCount(2)
-  await expect(stops.nth(0)).toContainText('23:00–00:00')
+  await expect(stops.nth(0)).toContainText('11:00 pm – 12:00 am')
   await expect(stops.nth(1)).toContainText('After midnight')
-  await expect(stops.nth(1)).toContainText('00:30–01:30')
+  await expect(stops.nth(1)).toContainText('12:30 am – 1:30 am')
   await expect(stops.nth(1)).toContainText('12:30 am')
   await expect(page.getByTestId('itinerary-stop-warning')).toHaveCount(0)
   expect(departures[0]).toBe('2026-10-31T00:00')
@@ -514,14 +514,14 @@ test('Plan runs past midnight, using the next day for hours and travel', async (
   await expect(page.getByTestId('itinerary-save')).toBeEnabled()
   await end.fill('01:00')
   await end.blur()
-  await expect(stops.nth(1)).toContainText('00:30–01:00')
+  await expect(stops.nth(1)).toContainText('12:30 am – 1:00 am')
   await page.getByTestId('itinerary-save').click()
   await expect(page.getByTestId('itinerary-edit')).toBeVisible()
   expect(state.saved.stops[1]).toMatchObject({ start: '24:30', end: '25:00' })
 
   // Reloading the saved plan shows the same stops with no warnings
   await page.reload()
-  await expect(stops.nth(1)).toContainText('00:30–01:00')
+  await expect(stops.nth(1)).toContainText('12:30 am – 1:00 am')
   await expect(page.getByTestId('itinerary-stop-warning')).toHaveCount(0)
 })
 
@@ -567,7 +567,7 @@ test('Plan checks hours after travel and tries the next candidate from the last 
   await page.goto(`/groups/${groupId}/itinerary`)
   await expect(page.getByTestId('itinerary-stop')).toHaveCount(2)
   await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('Fits instead')
-  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('11:15–12:15')
+  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('11:15 am – 12:15 pm')
   await expect(page.getByTestId('itinerary-not-in-plan')).toContainText('Closes early')
   // After these two journeys, the planner also checks the chosen stops in the other order
   expect(journeys.slice(0, 2).map(({ start, end, departure }) => [start.name, end.name, departure])).toEqual([
@@ -619,7 +619,7 @@ for (const failure of ['request', 'no routes']) {
     expect(state.saved).toBeNull()
     expect(state.writes).toHaveLength(1)
     await page.getByTestId('itinerary-retry').click()
-    await expect(page.getByTestId('itinerary-stop')).toContainText('10:00–11:00')
+    await expect(page.getByTestId('itinerary-stop')).toContainText('10:00 am – 11:00 am')
     expect(attempts).toBe(2)
     expect(state.writes).toHaveLength(2)
     expect(state.saved.stops).toHaveLength(1)
@@ -631,20 +631,20 @@ test('confirm and build replaces the saved plan using the latest chosen time and
     hours: week({ Fri: { open24h: true }, Sat: { open24h: true } }),
   })
   await page.goto(`/groups/${groupId}/itinerary`)
-  await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('8:00 pm – 9:00 pm')
   state.votes[0].activity_id = '88888888-8888-4888-8888-888888888888'
   state.votes[0].activities.name = 'New group choice'
   await pickNewTimeAndPlan(page)
-  await expect(page.getByTestId('itinerary-summary')).toContainText('2026-10-31')
+  await expect(page.getByTestId('itinerary-summary')).toContainText('Sat, 31 Oct 2026')
   await expect(page.getByTestId('itinerary-stop')).toContainText('New group choice')
-  await expect(page.getByTestId('itinerary-stop')).toContainText('10:00–11:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('10:00 am – 11:00 am')
   await expect(page).toHaveURL(`/groups/${groupId}/itinerary`)
   expect(state.writes).toHaveLength(2)
   expect(state.saved.stops[0]).toMatchObject({
     activity_id: '88888888-8888-4888-8888-888888888888', start: '10:00', end: '11:00',
   })
   await page.reload()
-  await expect(page.getByTestId('itinerary-stop')).toContainText('10:00–11:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('10:00 am – 11:00 am')
   expect(state.writes).toHaveLength(2)
 })
 
@@ -664,7 +664,7 @@ for (const [failure, message] of [
     await expect(page.getByTestId('itinerary-plan')).toHaveCount(0)
     expect(state.saved).toBeNull()
     await page.getByTestId('itinerary-retry').click()
-    await expect(page.getByTestId('itinerary-stop')).toContainText('10:00–11:00')
+    await expect(page.getByTestId('itinerary-stop')).toContainText('10:00 am – 11:00 am')
     await expect(page).toHaveURL(`/groups/${groupId}/itinerary`)
     expect(state.saved.stops[0]).toMatchObject({ start: '10:00', end: '11:00' })
   })
@@ -677,7 +677,7 @@ test('a failed first save shows an error and retry persists the generated plan',
   await expect(page.getByTestId('itinerary-error')).toContainText("Couldn't save the plan")
   expect(state.saved).toBeNull()
   await page.getByTestId('itinerary-retry').click()
-  await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('8:00 pm – 9:00 pm')
   expect(state.writes).toHaveLength(2)
   expect(state.saved.stops[0]).toMatchObject({ start: '20:00', end: '21:00' })
 })
@@ -786,12 +786,12 @@ test('Save waits for edited travel times and reopening preserves the saved sched
   expect(state.writes).toHaveLength(1)
   release()
   await expect(page.getByTestId('itinerary-save')).toBeEnabled()
-  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('22:00–23:00')
+  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('10:00 pm – 11:00 pm')
   await page.getByTestId('itinerary-save').click()
   await expect(page.getByTestId('itinerary-edit')).toBeVisible()
   expect(state.saved.stops[1]).toMatchObject({ start: '22:00', end: '23:00' })
   await page.reload()
-  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('22:00–23:00')
+  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('10:00 pm – 11:00 pm')
   expect(state.writes).toHaveLength(2)
 })
 
@@ -817,10 +817,10 @@ test('Discard ignores a late travel response and restores the saved start time',
   await page.getByTestId('itinerary-start-time').blur()
   await request
   await page.getByTestId('itinerary-discard').click()
-  await expect(page.getByTestId('itinerary-stop').first()).toContainText('20:00–21:00')
+  await expect(page.getByTestId('itinerary-stop').first()).toContainText('8:00 pm – 9:00 pm')
   release()
   await (await response).finished()
-  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('21:30–22:30')
+  await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('9:30 pm – 10:30 pm')
   await page.getByTestId('itinerary-edit').click()
   await expect(page.getByTestId('itinerary-save')).toBeEnabled()
   expect(state.writes).toHaveLength(1)
@@ -837,7 +837,7 @@ test('Discard after completed travel allows editing and saving again', async ({ 
   await page.getByTestId('itinerary-start-time').fill('20:30')
   await page.getByTestId('itinerary-start-time').blur()
   await expect(page.getByTestId('itinerary-save')).toBeEnabled()
-  await expect(page.getByTestId('itinerary-stop').first()).toContainText('20:30–21:30')
+  await expect(page.getByTestId('itinerary-stop').first()).toContainText('8:30 pm – 9:30 pm')
   await page.getByTestId('itinerary-discard').click()
   await page.getByTestId('itinerary-edit').click()
   await expect(page.getByTestId('itinerary-start-time')).toHaveValue('20:00')
@@ -904,7 +904,7 @@ test('a stale editor keeps its draft and must explicitly load the latest plan', 
   other.once('dialog', (dialog) => dialog.accept())
   await other.getByTestId('itinerary-load-latest').click()
   await expect(other.getByTestId('itinerary-stop')).toHaveCount(1)
-  await expect(other.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
+  await expect(other.getByTestId('itinerary-stop')).toContainText('8:00 pm – 9:00 pm')
   await expect(other.getByTestId('itinerary-edit')).toBeVisible()
 })
 
@@ -913,14 +913,14 @@ test('confirming a new time invalidates the old plan before opening the Itinerar
     hours: week({ Fri: { open24h: true }, Sat: { open24h: true } }),
   })
   await page.goto(`/groups/${groupId}/itinerary`)
-  await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('8:00 pm – 9:00 pm')
   await page.getByTestId('tab-availability').click()
   await page.getByTestId('mode-heatmap').click()
   await page.getByTestId('slot-2026-10-31T15:00').click()
   await page.getByTestId('slot-2026-10-31T16:30').click()
   await page.getByTestId('confirm-time').click()
-  await expect(page.getByTestId('itinerary-summary')).toContainText('2026-10-31')
-  await expect(page.getByTestId('itinerary-stop')).toContainText('15:00–16:00')
+  await expect(page.getByTestId('itinerary-summary')).toContainText('Sat, 31 Oct 2026')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('3:00 pm – 4:00 pm')
 })
 
 test('a saved stop keeps its details after every vote for it is removed', async ({ page }) => {
@@ -930,7 +930,7 @@ test('a saved stop keeps its details after every vote for it is removed', async 
   state.votes = []
   await page.reload()
   await expect(page.getByTestId('itinerary-stop')).toContainText('Night activity')
-  await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('8:00 pm – 9:00 pm')
   await expect(page.getByTestId('itinerary-stop-warning')).toHaveCount(0)
 })
 
@@ -965,7 +965,7 @@ for (const failure of ['request', 'no routes']) {
     fail = false
     await page.getByTestId('itinerary-travel-retry').click()
     await expect(page.getByTestId('itinerary-travel-failed')).toHaveCount(0)
-    await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('21:45–22:45')
+    await expect(page.getByTestId('itinerary-stop').nth(1)).toContainText('9:45 pm – 10:45 pm')
     await page.getByTestId('itinerary-save').click()
     await expect(page.getByTestId('itinerary-edit')).toBeVisible()
     expect(state.saved.stops[1]).toMatchObject({ start: '21:45', end: '22:45' })
@@ -998,13 +998,13 @@ test('an indoor swap uses the replacement duration and moves the later stops', a
   await page.reload()
   await page.getByTestId('itinerary-edit').click()
   await page.getByTestId('itinerary-rainy-toggle').first().check()
-  await expect(page.getByTestId('itinerary-stop').first()).toContainText('10:00–13:00')
+  await expect(page.getByTestId('itinerary-stop').first()).toContainText('10:00 am – 1:00 pm')
   await page.getByTestId('itinerary-swap').click()
   const stops = page.getByTestId('itinerary-stop')
   await expect(stops.first()).toContainText('Long indoor venue')
-  await expect(stops.first()).toContainText('10:00–13:00')
+  await expect(stops.first()).toContainText('10:00 am – 1:00 pm')
   await expect(stops.first().getByTestId('itinerary-stop-warning')).toHaveText('Closes at 12:30')
-  await expect(stops.nth(1)).toContainText('13:30–14:30')
+  await expect(stops.nth(1)).toContainText('1:30 pm – 2:30 pm')
   await page.getByTestId('itinerary-save').click()
   await expect(page.getByTestId('itinerary-edit')).toBeVisible()
   expect(state.saved.stops[0]).toMatchObject({ start: '10:00', end: '13:00' })

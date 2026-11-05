@@ -39,7 +39,7 @@ for (const width of [375, 768, 1280]) {
     })
     await page.getByTestId('confirm-time').click()
     await expect(page.getByTestId('itinerary-saved-status')).toBeVisible()
-    await expect(page.getByTestId('itinerary-stop')).toContainText('10:00–11:00')
+    await expect(page.getByTestId('itinerary-stop')).toContainText('10:00 am – 11:00 am')
     await expect(page.locator('.step').last().locator('.visually-hidden')).toContainText('done')
     expect(state.writes).toHaveLength(1)
     await page.reload()
@@ -91,7 +91,7 @@ test('viewing an existing itinerary never rebuilds it and incomplete picks block
   await page.getByTestId('clear-time-selection').click()
   await expect(page.getByTestId('confirm-time')).toHaveText('View itinerary')
   await page.getByTestId('confirm-time').click()
-  await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('8:00 pm – 9:00 pm')
   expect(state.writes).toHaveLength(1)
 })
 

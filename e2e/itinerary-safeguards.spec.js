@@ -12,9 +12,9 @@ test('an empty itinerary starts at the confirmed time and cannot save past its e
   await page.getByTestId('itinerary-edit').click()
   await expect(page.getByTestId('itinerary-start-time')).toHaveValue('14:00')
   await page.getByTestId('itinerary-add-stop').click()
-  await expect(page.getByTestId('itinerary-stop')).toContainText('14:00–15:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('2:00 pm – 3:00 pm')
   await page.getByTestId('itinerary-save').click()
-  await expect(page.getByTestId('itinerary-save-error')).toContainText('14:00–14:30')
+  await expect(page.getByTestId('itinerary-save-error')).toContainText('2:00 pm – 2:30 pm')
   expect(state.writes).toHaveLength(0)
   await page.getByTestId('itinerary-end-time').fill('14:30')
   await page.getByTestId('itinerary-end-time').blur()
@@ -35,10 +35,10 @@ test('adding a stop cannot save a checked journey beyond the confirmed group tim
   await expect(page.getByTestId('itinerary-stop')).toHaveCount(1)
   await page.getByTestId('itinerary-edit').click()
   await page.getByTestId('itinerary-add-stop').click()
-  await expect(page.getByTestId('itinerary-stop').last()).toContainText('21:30–22:30')
+  await expect(page.getByTestId('itinerary-stop').last()).toContainText('9:30 pm – 10:30 pm')
   await expect(page.getByTestId('itinerary-save')).toBeEnabled()
   await page.getByTestId('itinerary-save').click()
-  await expect(page.getByTestId('itinerary-save-error')).toContainText('20:00–21:00')
+  await expect(page.getByTestId('itinerary-save-error')).toContainText('8:00 pm – 9:00 pm')
   expect(state.writes).toHaveLength(1)
   expect(state.saved.stops).toHaveLength(1)
 })
@@ -50,7 +50,7 @@ for (const table of ['groups', 'votes', 'itineraries', 'activities']) {
       group_id: groupId, total_cost: 10,
       stops: [{ activity_id: state.votes[0].activity_id, start: '20:00', end: '21:00', cost: 10 }],
     }
-    await page.clock.install()
+    await page.clock.install({ time: new Date('2026-10-29T12:00:00+08:00') })
     let releaseRead
     let held = false
     await page.route('**/rest/v1/**', async (route) => {
@@ -71,7 +71,7 @@ for (const table of ['groups', 'votes', 'itineraries', 'activities']) {
     expect(state.writes).toHaveLength(0)
     releaseRead()
     await page.getByTestId('itinerary-retry').click()
-    await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
+    await expect(page.getByTestId('itinerary-stop')).toContainText('8:00 pm – 9:00 pm')
     expect(state.writes).toHaveLength(0)
   })
 }
