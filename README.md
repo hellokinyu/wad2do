@@ -39,22 +39,45 @@ to install the atomic writes and names-only member lookup, then close shared pro
 
 ## Run the tests
 
-The end-to-end tests are in the `e2e/` folder.
+There are two kinds of tests:
+
+| Folder | What they test | Run with |
+| --- | --- | --- |
+| `e2e/` | End-to-end: the app in a real browser, clicking through each feature like a user | `pnpm run test:e2e` |
+| `tests/` | Unit: the planning logic on its own (route order, opening hours, weather, ranking) | `pnpm run test:unit` |
+
+The end-to-end tests need the same `.env.local` as the app (see above), because they start it. They don't touch the real data, though: each test replaces Supabase and the outside APIs (Google Places, OneMap, the weather forecast) with fixed fake responses, so every run gets the same data and the results don't depend on what's in the database. The unit tests need nothing set up.
+
+### End-to-end tests
 
 ```sh
 pnpm exec playwright install   # once, downloads the test browsers
-pnpm run test:e2e              # starts the app and runs every test
+pnpm run test:e2e              # starts the app and runs every test in Chromium
 ```
+
+The tests run headless (no browser windows open). Results print in the terminal; to see each step and screenshots of any failure afterwards, run `pnpm exec playwright show-report`.
 
 Useful variations:
 
 ```sh
-pnpm run test:e2e --project=chromium   # Chromium only (faster)
-pnpm run test:e2e e2e/vue.spec.js      # one test file
+pnpm run test:e2e:all                  # Chromium, Firefox and WebKit (Safari)
+pnpm run test:e2e e2e/auth.spec.js     # one test file
+pnpm run test:e2e -g "login"           # only tests whose name contains "login"
+pnpm run test:e2e --headed             # watch the browser while the tests run
 pnpm run test:e2e --debug              # step through a test
 ```
 
+A test that fails is retried once. If the retry passes, the report lists it as **flaky** instead of failed; this can happen when all three browsers run at once on a busy laptop.
+
 Tests find elements by their `data-testid` attribute, so add one to anything a test clicks or checks.
+
+### Unit tests
+
+```sh
+pnpm run test:unit
+```
+
+These use Node's built-in test runner, so there is nothing to install. Expect 6 of them to show as **skipped**: the `*.database.test.js` files check the SQL in `docs/sql/` against a real PostgreSQL database. They only run with [`psql`](https://www.postgresql.org/download/) installed and `WAD2DO_DISPOSABLE_DATABASE_URL` set to a throwaway database with the SQL from `docs/sql/` applied (see [Group database setup](docs/group-database.md)). Never point it at the shared Supabase project, because the tests change its data.
 
 ## Other commands
 
@@ -77,7 +100,8 @@ src/
   components/          reusable pieces (NavBar, ActivityCard)
     group/             the three tabs inside a group page
   assets/styles.css    shared styles
-e2e/                   Playwright tests
+e2e/                   Playwright end-to-end tests (helpers/ holds the shared fakes)
+tests/                 unit tests for src/lib, run with Node's test runner
 vercel.json            makes page refreshes work after deploying to Vercel
 ```
 
