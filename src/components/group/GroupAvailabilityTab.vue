@@ -380,7 +380,6 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-// Shared Supabase client (handbook: src/lib/supabase.js). If it is a default export, use: import supabase from ...
 import { supabase } from '../../lib/supabase'
 import { requestWithTimeout } from '@/lib/requestWithTimeout'
 import { useAuth } from '@/composables/useAuth'

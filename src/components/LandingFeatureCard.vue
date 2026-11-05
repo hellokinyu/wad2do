@@ -1,5 +1,4 @@
 <script setup>
-// Week 6: the parent supplies each card's content through a prop.
 defineProps({
   feature: { type: Object, required: true },
 })

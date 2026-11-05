@@ -95,7 +95,6 @@ const features = [
 ]
 const activeSlide = ref(0)
 
-// Week 5: computed properties derive display state from reactive refs.
 const currentSlide = computed(() => slides[activeSlide.value])
 
 let timer
@@ -124,7 +123,6 @@ function onFocusOut(event) {
   if (!event.currentTarget.contains(event.relatedTarget)) resume()
 }
 
-// Week 5: start the carousel after mounting and clean up its timer on unmount.
 onMounted(resume)
 onUnmounted(pause)
 </script>
@@ -221,7 +219,6 @@ onUnmounted(pause)
 </template>
 
 <style scoped>
-/* Weeks 2–3: Bootstrap handles common utilities; scoped CSS defines this page's design. */
 .landing {
   --page-gutter: clamp(24px, 5vw, 100px);
   --landing-skyline-height: clamp(100px, 15svh, 160px);

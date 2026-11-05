@@ -29,7 +29,6 @@ function toCents(amount) {
   return Math.round(amount * 100) / 100
 }
 
-// Add up the cost of every stop
 const totalCost = computed(() => {
   let total = 0
   for (const stop of itinerary.value.stops) {
@@ -92,7 +91,6 @@ const notInPlan = computed(() => {
   return votedActivities.value.filter((a) => !usedIds.includes(a.activity_id))
 })
 
-// A short reason why an activity isn't in the plan
 function whyNotInPlan(activity) {
   if (skippedHours.value[activity.activity_id]) return skippedHours.value[activity.activity_id]
   if (activity.cost === null) return 'Price unknown; cannot check the budget'

@@ -257,12 +257,7 @@ function getCardPlaces() {
   return places
 }
 
-// The reorder: every card glides straight from its old place to its new one, across and
-// down the grid (FLIP: measure, re-sort, then animate from the old spot). Two layers move:
-// - the card's slot slides, setting off quickly and easing out (exponential), so it settles;
-// - the card itself rises toward you if it's climbing (a little larger, deeper shadow,
-//   passing over the others) or sinks back if it's falling (a little smaller and fainter,
-//   passing under), then returns to rest.
+// Measure card positions before reordering so each card can animate from its old position.
 function shuffleCards(before, moves) {
   for (const item of listRef.value?.querySelectorAll('.list-item') ?? []) {
     const id = item.dataset.id

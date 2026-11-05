@@ -1,13 +1,11 @@
 <script setup>
 import { ref } from 'vue'
 
-// Week 6: props configure the link; the slot supplies its label.
 defineProps({
   to: { type: String, required: true },
   primary: Boolean,
 })
 
-// Weeks 4–5: each component instance owns its hover state and class binding.
 const isHovered = ref(false)
 </script>
 

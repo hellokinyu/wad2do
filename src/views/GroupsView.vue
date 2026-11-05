@@ -62,7 +62,6 @@ const createSubmitButton = ref(null)
 const joinCodeInput = ref(null)
 const inviteHeading = ref(null)
 
-// Get the logged-in user from Supabase Auth (null if nobody is logged in)
 async function getUser() {
   const { data } = await supabase.auth.getUser()
   return data.user

@@ -316,7 +316,6 @@ const sortSummary = computed(() => {
   return 'Sorted by ' + option.label
 })
 
-// Search logic
 function searchText(value) {
   return String(value ?? '')
     .normalize('NFD')
@@ -653,7 +652,6 @@ async function loadActivities() {
   }
 }
 
-// Load the records when this page opens.
 onMounted(loadActivities)
 </script>
 
