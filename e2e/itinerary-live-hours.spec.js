@@ -44,7 +44,7 @@ test('live hours override empty saved hours, check arrival plus duration, and fe
   const stops = page.getByTestId('itinerary-stop')
   await expect(stops).toHaveCount(2)
   await expect(stops.nth(1)).toContainText('Later option')
-  await expect(stops.nth(1)).toContainText('21:27–22:27')
+  await expect(stops.nth(1)).toContainText('9:27 pm – 10:27 pm')
   await expect(page.getByTestId('itinerary-not-in-plan')).toContainText('Closes at 22:00')
   expect(state.hoursLookups).toEqual([activityId, secondId, thirdId])
   expect(state.saved.stops.map((stop) => stop.activity_id)).toEqual([activityId, thirdId])
@@ -76,7 +76,7 @@ test('reopening fetches fresh hours and adds warnings without changing or saving
   }
   await page.reload()
   await expect(page.getByTestId('itinerary-stop-warning')).toHaveText('Closes at 20:00')
-  await expect(page.getByTestId('itinerary-stop')).toContainText('20:00–21:00')
+  await expect(page.getByTestId('itinerary-stop')).toContainText('8:00 pm – 9:00 pm')
   await expect(page.getByRole('link', { name: 'Venue hours provider' })).toHaveAttribute(
     'href',
     'https://example.com/hours',
@@ -115,7 +115,7 @@ test('route ordering rejects a faster order that violates live Google hours', as
   const stops = page.getByTestId('itinerary-stop')
   await expect(stops).toHaveCount(2)
   await expect(stops.first()).toContainText('Night activity')
-  await expect(stops.nth(1)).toContainText('21:30–22:30')
+  await expect(stops.nth(1)).toContainText('9:30 pm – 10:30 pm')
   expect(state.saved.stops.map((stop) => stop.activity_id)).toEqual([activityId, secondId])
   expect(state.hoursLookups).toEqual([activityId, secondId])
 })
@@ -163,7 +163,7 @@ test('failed Re-plan refreshes hours for retained stops it did not reach without
   await expect(page.getByTestId('itinerary-save-error')).toContainText("Couldn't rebuild the plan")
   const stops = page.getByTestId('itinerary-stop')
   await expect(stops).toHaveCount(3)
-  await expect(stops.nth(2)).toContainText('21:40–22:00')
+  await expect(stops.nth(2)).toContainText('9:40 pm – 10:00 pm')
   await expect(stops.nth(2).getByTestId('itinerary-stop-warning')).toHaveText('Closes at 21:00')
   expect(state.hoursLookups).toEqual([activityId, secondId, thirdId, activityId, secondId, thirdId])
   expect(state.writes).toHaveLength(0)
